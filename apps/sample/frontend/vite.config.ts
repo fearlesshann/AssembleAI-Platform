@@ -15,6 +15,7 @@ function htmlEntry(): Plugin {
 }
 export default defineConfig({
   base, plugins: [vue(), htmlEntry()],
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   build: {
     target: 'es2022', cssCodeSplit: false,
     lib: { entry: fileURLToPath(new URL('./src/main.ts', import.meta.url)), name: 'AssembleAISample', formats: ['umd'], fileName: () => 'sample.umd.js', cssFileName: 'sample' },

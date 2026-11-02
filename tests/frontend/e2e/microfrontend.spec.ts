@@ -22,7 +22,7 @@ test('V2/V19: one release runs independently and inside qiankun, with cleanup', 
   await expect(page.getByText('独立运行', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '增加计数' }).click();
   await expect(page.getByTestId('sample-count')).toHaveText('1');
-  await page.goto('/');
+  await page.goto('/workspace/integration');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   for (let cycle = 0; cycle < 3; cycle++) {
     await page.getByRole('button', { name: '打开应用', exact: true }).click();
@@ -68,7 +68,7 @@ test('V19: retry reloads the document and clears rejected asset caches', async (
 test('V10/V11: default light, search, compact viewport and reduced motion', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/workspace/integration');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('textbox', { name: '搜索应用' }).fill('不存在');
   await expect(page.getByText('没有匹配的应用')).toBeVisible();

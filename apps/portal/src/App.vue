@@ -45,7 +45,7 @@ function retrySample() {
 
 async function leaveSample() {
   if (loading.value) return;
-  history.pushState({}, '', '/');
+  history.pushState({}, '', '/workspace/integration');
   await syncRoute();
 }
 
@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="shell">
     <aside class="sidebar" aria-label="平台导航">
-      <a class="brand" href="/" @click.prevent="leaveSample"><span class="brand-mark" aria-hidden="true">集</span><strong>集智</strong><span class="brand-en">AssembleAI</span></a>
+      <a class="brand" href="/workspace/integration" @click.prevent="leaveSample"><span class="brand-mark" aria-hidden="true">集</span><strong>集智</strong><span class="brand-en">AssembleAI</span></a>
       <div class="workspace-label">研发工作区</div>
       <button class="nav-item" :aria-current="!active ? 'page' : undefined" @click="leaveSample" :disabled="loading"><span aria-hidden="true">▦</span> 应用接入</button>
       <div class="sidebar-bottom"><span class="environment-dot" aria-hidden="true"></span>本地开发环境<span class="version">v0.1</span></div>

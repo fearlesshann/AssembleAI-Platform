@@ -48,7 +48,15 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 
 ## 前端
 
-Node 24.18.0 / npm 11.16.0。版本固定在 package.json；本轮尚未成功安装，**没有 package-lock.json**，不能宣称全量依赖已锁定或使用 npm ci。
+### 模板入口与接入验证入口
+
+默认首页 `/` 按用户要求恢复为 `references/ui-v1` 原始模板：Vue 直接承载模板标记，复用原始 CSS、经典脚本、品牌素材和截图；模板来源及许可继续保留。模板是运行时构建输入，不应删除。门户不加载 Element Plus 的样式，以免改变模板外观；工程验证壳层仍在 `/workspace/integration`，样例深链仍为 `/workspace/sample`，两套页面通过完整文档导航隔离。
+
+模板登录仍是页面中明确说明的本地演示：任意非空账号、密码进入样例，其浏览器标记不会认证后端请求。工作台、应用和成员数据均保留模板演示内容；真实 OIDC/BFF 与业务 API 的接入状态没有改变。
+
+默认访问 `http://127.0.0.1:5173/`，构建预览访问 `http://127.0.0.1:4173/`。`tests/frontend/e2e/template-portal.spec.ts` 验证模板交互，原有微前端测试从 `/workspace/integration` 进入。
+
+Node 24.18.0 / npm 11.16.0。版本固定在 package.json。2026-11-02 本机更新已安装依赖并生成根目录 `package-lock.json`；统一 Vue 为 3.5.43 后，类型检查、两项构建、3 项 Node 测试和 6 项浏览器测试通过。后续可使用 `npm ci` 复现。
 
 在可访问 npm registry 的环境，从仓库根目录运行：
 
@@ -103,7 +111,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 T3 授权基础已独立推进，见 [身份与权限契约](architecture/t3-authorization.md)。新增的 .NET 测试验证双租户 / 双工厂隔离、完整授权范围匹配、主体 issuer 隔离、伪造身份拒绝、撤权后重新读取、取消传播及错误响应。身份和仓储替身只在测试工程使用；正常运行的两个受保护租户接口在接通登录前返回 401。实际数据库迁移、Keycloak 登录、BFF 会话与签名上下文仍待完成，T3 未标记验收通过。
 
-## 本轮验证结果
+## 初始工程验证记录（模板恢复前）
 
 | 检查 | 结果 / 边界 |
 | --- | --- |
