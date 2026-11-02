@@ -1,0 +1,25 @@
+# Installed dependency snapshot: Windows, CPython 3.13.13; verified by pytest.
+# This is not a universal uv.lock. No distribution hashes or Linux resolution were verified.
+# Generated from installed package metadata because PyPI connections were denied.
+annotated-doc==0.0.4
+annotated-types==0.6.0
+anyio==4.12.1
+certifi==2026.4.22
+click==8.2.1
+colorama==0.4.6
+fastapi==0.140.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.19
+iniconfig==2.3.0
+packaging==26.0
+pluggy==1.6.0
+pydantic==2.13.2
+pydantic-core==2.46.2
+pygments==2.20.0
+pytest==8.4.2
+starlette==1.3.1
+typing-extensions==4.15.0
+typing-inspection==0.4.2
+uvicorn==0.51.0

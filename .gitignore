@@ -1,0 +1,32 @@
+# Local secrets and machine state
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+*.user
+*.suo
+.vs/
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+.vite/
+
+# .NET
+bin/
+obj/
+TestResults/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Generated local data
+.artifacts/
+.local-data/
+*.log

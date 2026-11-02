@@ -1,0 +1,254 @@
+/* Ported from clean-template-front/src/motion/inertialWheelScroll.js */
+(function (global) {
+  var DOM_DELTA_PIXEL = 0;
+  var DOM_DELTA_LINE = 1;
+  var DOM_DELTA_PAGE = 2;
+  var LINE_HEIGHT = 16;
+  var PAGE_FACTOR = 0.85;
+  var COARSE_PIXEL_THRESHOLD = 40;
+  var DEFAULT_IMPULSE = 0.0025;
+  var DEFAULT_MAX_VELOCITY = 1.8;
+  var DEFAULT_DAMPING_MS = 150;
+  var DEFAULT_STOP_VELOCITY = 0.015;
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function normalizeWheelDelta(event, viewportHeight) {
+    if (event.deltaMode === DOM_DELTA_LINE) return event.deltaY * LINE_HEIGHT;
+    if (event.deltaMode === DOM_DELTA_PAGE) return event.deltaY * viewportHeight * PAGE_FACTOR;
+    return event.deltaY;
+  }
+
+  function isCoarseWheelInput(event) {
+    if (event.deltaMode === DOM_DELTA_LINE || event.deltaMode === DOM_DELTA_PAGE) return true;
+    if (event.deltaMode !== DOM_DELTA_PIXEL) return false;
+    // Mouse notches are large per tick. Under browser zoom Chromium scales deltaY,
+    // so values like 100 become ~90.91 and Number.isInteger fails — inertia would die.
+    // Trackpad / precision-touchpad frames stay below the threshold.
+    return Math.abs(event.deltaY) >= COARSE_PIXEL_THRESHOLD;
+  }
+
+  function canScrollInDirection(element, delta) {
+    var maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    if (maxScrollTop <= 1) return false;
+    if (delta < 0) return element.scrollTop > 1;
+    return element.scrollTop < maxScrollTop - 1;
+  }
+
+  function findScrollableTarget(start, delta, rootDoc) {
+    var root = rootDoc || document;
+    var view = root.defaultView || window;
+    var element = start instanceof Element ? start : (start && start.parentElement);
+    while (element) {
+      // DateTime hour/minute columns own their scroll; never hijack with page inertia.
+      if (element.hasAttribute && element.hasAttribute("data-wheel-scroll")) {
+        return null;
+      }
+      var style = view.getComputedStyle(element);
+      var overflowY = style.overflowY || style.overflow;
+      var scrollable = /^(auto|scroll|overlay)$/.test(overflowY);
+      if (scrollable && canScrollInDirection(element, delta)) return element;
+      var overscrollY = style.overscrollBehaviorY || style.overscrollBehavior;
+      if (scrollable && /^(contain|none)$/.test(overscrollY)) return null;
+      element = element.parentElement;
+    }
+
+    var documentScroller = root.scrollingElement;
+    return documentScroller && canScrollInDirection(documentScroller, delta)
+      ? documentScroller
+      : null;
+  }
+
+  function createInertialWheelScroller(element, options) {
+    options = options || {};
+    var requestFrame = options.requestFrame || window.requestAnimationFrame.bind(window);
+    var cancelFrame = options.cancelFrame || window.cancelAnimationFrame.bind(window);
+    var shouldAnimate = options.shouldAnimate || function () { return true; };
+    var impulse = options.impulse != null ? options.impulse : DEFAULT_IMPULSE;
+    var maxVelocity = options.maxVelocity != null ? options.maxVelocity : DEFAULT_MAX_VELOCITY;
+    var dampingMs = options.dampingMs != null ? options.dampingMs : DEFAULT_DAMPING_MS;
+    var stopVelocity = options.stopVelocity != null ? options.stopVelocity : DEFAULT_STOP_VELOCITY;
+    var onStart = options.onStart || function () {};
+    var onStop = options.onStop || function () {};
+    var listen = options.listen !== false;
+    var velocity = 0;
+    var frameId = null;
+    var previousTime = null;
+    var scrolling = false;
+
+    function start() {
+      if (scrolling) return;
+      scrolling = true;
+      onStart();
+    }
+
+    function stop() {
+      if (frameId !== null) cancelFrame(frameId);
+      frameId = null;
+      previousTime = null;
+      velocity = 0;
+      if (scrolling) {
+        scrolling = false;
+        onStop();
+      }
+    }
+
+    function schedule() {
+      if (frameId === null) frameId = requestFrame(step);
+    }
+
+    function step(time) {
+      frameId = null;
+      if (!shouldAnimate()) {
+        stop();
+        return;
+      }
+      if (previousTime === null) {
+        previousTime = time;
+        schedule();
+        return;
+      }
+
+      var elapsed = clamp(time - previousTime, 1, 32);
+      previousTime = time;
+      var maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+      var nextScrollTop = clamp(element.scrollTop + velocity * elapsed, 0, maxScrollTop);
+      element.scrollTop = nextScrollTop;
+      velocity *= Math.exp(-elapsed / dampingMs);
+
+      var atStart = nextScrollTop <= 0 && velocity < 0;
+      var atEnd = nextScrollTop >= maxScrollTop && velocity > 0;
+      if (atStart || atEnd || Math.abs(velocity) < stopVelocity) {
+        stop();
+        return;
+      }
+      schedule();
+    }
+
+    function handleWheel(event) {
+      if (
+        event.ctrlKey
+        || Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        || !shouldAnimate()
+        || !isCoarseWheelInput(event)
+      ) return;
+
+      var maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+      var delta = normalizeWheelDelta(event, element.clientHeight);
+      if (maxScrollTop <= 0 || (delta < 0 && element.scrollTop <= 0) || (delta > 0 && element.scrollTop >= maxScrollTop)) {
+        stop();
+        return;
+      }
+
+      event.preventDefault();
+      if (velocity !== 0 && Math.sign(velocity) !== Math.sign(delta)) velocity *= 0.22;
+      velocity = clamp(velocity + delta * impulse, -maxVelocity, maxVelocity);
+      start();
+      schedule();
+    }
+
+    function destroy() {
+      stop();
+      if (listen) {
+        element.removeEventListener("wheel", handleWheel);
+        element.removeEventListener("pointerdown", stop);
+        element.removeEventListener("touchstart", stop);
+        element.removeEventListener("keydown", stop);
+      }
+    }
+
+    if (listen) {
+      element.addEventListener("wheel", handleWheel, { passive: false });
+      element.addEventListener("pointerdown", stop, { passive: true });
+      element.addEventListener("touchstart", stop, { passive: true });
+      element.addEventListener("keydown", stop);
+    }
+
+    return { destroy: destroy, handleWheel: handleWheel, stop: stop };
+  }
+
+  function installGlobalInertialWheelScroll(root, options) {
+    root = root || document;
+    options = options || {};
+    var shouldAnimate = options.shouldAnimate || function () { return true; };
+    var stateElement = root.documentElement;
+    var activeElement = null;
+    var activeScroller = null;
+    var scrollingMarked = false;
+
+    function markScrolling() {
+      if (scrollingMarked) return;
+      scrollingMarked = true;
+      if (stateElement) stateElement.dataset.wheelScrolling = "true";
+      if (options.onStart) options.onStart();
+    }
+
+    function clearScrolling() {
+      if (!scrollingMarked) return;
+      scrollingMarked = false;
+      if (stateElement) delete stateElement.dataset.wheelScrolling;
+      if (options.onStop) options.onStop();
+    }
+
+    function stop() {
+      if (activeScroller) activeScroller.stop();
+    }
+
+    function switchTarget(element) {
+      if (activeElement === element) return;
+      if (activeScroller) activeScroller.destroy();
+      activeElement = element;
+      activeScroller = createInertialWheelScroller(element, {
+        impulse: options.impulse,
+        maxVelocity: options.maxVelocity,
+        dampingMs: options.dampingMs,
+        stopVelocity: options.stopVelocity,
+        requestFrame: options.requestFrame,
+        cancelFrame: options.cancelFrame,
+        listen: false,
+        shouldAnimate: shouldAnimate,
+        onStart: markScrolling,
+        onStop: clearScrolling
+      });
+    }
+
+    function handleWheel(event) {
+      if (
+        event.ctrlKey
+        || Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        || !shouldAnimate()
+        || !isCoarseWheelInput(event)
+      ) return;
+      var target = findScrollableTarget(event.target, event.deltaY, root);
+      if (!target) {
+        stop();
+        return;
+      }
+      switchTarget(target);
+      activeScroller.handleWheel(event);
+    }
+
+    function destroy() {
+      if (activeScroller) activeScroller.destroy();
+      clearScrolling();
+      activeScroller = null;
+      activeElement = null;
+      root.removeEventListener("wheel", handleWheel, true);
+      root.removeEventListener("pointerdown", stop, true);
+      root.removeEventListener("touchstart", stop, true);
+      root.removeEventListener("keydown", stop, true);
+    }
+
+    root.addEventListener("wheel", handleWheel, { passive: false, capture: true });
+    root.addEventListener("pointerdown", stop, { passive: true, capture: true });
+    root.addEventListener("touchstart", stop, { passive: true, capture: true });
+    root.addEventListener("keydown", stop, true);
+
+    return { destroy: destroy, stop: stop };
+  }
+
+  global.installGlobalInertialWheelScroll = installGlobalInertialWheelScroll;
+  global.createInertialWheelScroller = createInertialWheelScroller;
+})(typeof window !== "undefined" ? window : this);

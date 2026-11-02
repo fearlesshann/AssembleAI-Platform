@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>集智 · UI 样例</title>
+  <link rel="icon" href="favicon.ico?v=20261102t" sizes="any" />
+  <link rel="icon" type="image/png" href="favicon.png?v=20261102t" sizes="32x32" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=20261102t" />
+  <script>
+    (function () {
+      try {
+        var KEY = "mfg-ai-theme";
+        var saved = localStorage.getItem(KEY);
+        var theme = (saved === "light" || saved === "dark")
+          ? saved
+          : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+      try {
+        var authed = localStorage.getItem("mfg-ai-auth") === "1" || sessionStorage.getItem("mfg-ai-auth-session") === "1";
+        document.documentElement.setAttribute("data-auth", authed ? "in" : "out");
+      } catch (e) {
+        document.documentElement.setAttribute("data-auth", "out");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="login-screen" id="loginScreen">
+    <button class="theme-toggle login-theme-toggle" id="loginThemeToggle" type="button" aria-label="切换主题" title="切换主题">
+      <svg class="theme-icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="3.25" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.05 3.05l.99.99M11.96 11.96l.99.99M12.95 3.05l-.99.99M4.04 11.96l-.99.99" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      <svg class="theme-icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M12.6 9.35A5.25 5.25 0 0 1 6.65 3.4 5.5 5.5 0 1 0 12.6 9.35z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <aside class="login-hero" aria-label="产品介绍">
+      <div class="login-waves" id="loginWaves" aria-hidden="true">
+        <canvas class="login-waves-canvas" id="loginWavesCanvas"></canvas>
+      </div>
+      <div class="login-hero-glow" aria-hidden="true"></div>
+
+      <div class="login-hero-inner">
+        <div class="login-brand">
+          <img class="login-brand-mark" src="logo.png" width="44" height="44" alt="" />
+          <p class="login-brand-text">集智</p>
+        </div>
+
+        <div class="login-hero-copy">
+          <h1 class="login-hero-title">让 AI 服务工厂的<em>每个</em>角落</h1>
+          <p class="login-hero-sub">企业的唯一 AI 应用管理平台</p>
+        </div>
+
+        <div class="login-proof" aria-hidden="true">
+          <div class="login-shot-deck">
+            <figure class="login-shot is-back">
+              <img src="preview-shots/login-shot-admin.png" srcset="preview-shots/login-shot-admin.png 2x" alt="" width="1000" height="680" decoding="async" draggable="false" />
+            </figure>
+            <figure class="login-shot is-mid">
+              <img src="preview-shots/login-shot-issues.png" srcset="preview-shots/login-shot-issues.png 2x" alt="" width="1000" height="680" decoding="async" draggable="false" />
+            </figure>
+            <figure class="login-shot is-front">
+              <img src="preview-shots/login-shot-apps.png" srcset="preview-shots/login-shot-apps.png 2x" alt="" width="1000" height="680" decoding="async" draggable="false" />
+            </figure>
+          </div>
+        </div>
+
+        <p class="login-hero-foot"><strong>12</strong> 应用在线 · <strong>3</strong> 厂区 Hybrid · RBAC</p>
+      </div>
+    </aside>
+
+    <form class="login-card" id="loginForm" novalidate>
+      <canvas class="login-ether" id="loginEther" aria-hidden="true"></canvas>
+      <div class="login-card-inner">
+        <header class="login-form-heading">
+          <p class="form-kicker">SECURE ENTRY</p>
+          <h2 class="login-form-title"><span class="shiny-text" id="loginShinyTitle" style="--shiny-base:#b5b5b5;">登录工作台</span></h2>
+          <p class="login-form-desc">使用平台账号继续。演示样例填写任意非空账号与密码即可进入。</p>
+        </header>
+
+        <label class="login-field" for="loginAccount">
+          <span class="login-label">账号 / 邮箱</span>
+          <input class="login-input" id="loginAccount" name="account" type="text" autocomplete="username" placeholder="name@factory.com" spellcheck="false" />
+          <span class="login-field-error" data-error-for="account" hidden>请输入账号或邮箱</span>
+        </label>
+
+        <label class="login-field" for="loginPassword">
+          <span class="login-label">密码</span>
+          <input class="login-input" id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="输入密码" />
+          <span class="login-field-error" data-error-for="password" hidden>请输入密码</span>
+        </label>
+
+        <div class="login-row">
+          <label class="login-check">
+            <input type="checkbox" id="loginRemember" name="remember" />
+            <span>记住我</span>
+          </label>
+          <a class="login-link" href="#" id="loginForgot" tabindex="0">忘记密码</a>
+        </div>
+
+        <p class="login-form-error" id="loginFormError" hidden role="alert"></p>
+
+        <button
+          class="login-submit specular-button specular-button--lg"
+          id="loginSubmit"
+          type="submit"
+          style="--sb-radius:12px;--sb-tint:var(--text-frame);--sb-tint-opacity:1;--sb-blur:0px;--sb-text-color:var(--frame-bg);"
+        >
+          <span class="specular-button__effect" id="loginSubmitEffect" aria-hidden="true"></span>
+          <span class="specular-button__label">进入工作台</span>
+        </button>
+
+        <p class="login-security-note">加密会话 · 权限范围访问</p>
+      </div>
+    </form>
+  </div>
+
+  <div class="page" id="appShell">
+    <div class="frame" id="app">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <button class="workspace" type="button" aria-label="集智工作区">
+          <img class="workspace-mark" src="logo.png" width="22" height="22" alt="" aria-hidden="true" />
+          <span class="workspace-name">集智</span>
+          <span class="workspace-chevron" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </button>
+
+        <div class="sidebar-scroll">
+          <div class="scroll-content">
+          
+          <div class="nav-section">
+            <nav class="nav-list" aria-label="主导航">
+              <button class="nav-item is-active" data-view="issue" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M3 8h10M3 11.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                </span>
+                <span class="nav-label">工作台</span>
+              </button>
+              <button class="nav-item" data-view="apps" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="1.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/></svg>
+                </span>
+                <span class="nav-label">应用中心</span>
+              </button>
+              <button class="nav-item" data-view="admin" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.4" stroke="currentColor" stroke-width="1.3"/><path d="M3 13.2c.7-2.2 2.5-3.5 5-3.5s4.3 1.3 5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                </span>
+                <span class="nav-label">管理中心</span>
+              </button>
+            </nav>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-section-label">工作区</div>
+            <nav class="nav-list" aria-label="工作区">
+              <button class="nav-item" data-view="apps" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                </span>
+                <span class="nav-label">产线脉冲</span>
+              </button>
+              <button class="nav-item" data-view="issue" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 7h6M5 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                </span>
+                <span class="nav-label">我的事项</span>
+              </button>
+              <button class="nav-item" data-view="admin" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 11.5l2.5-3 2 2 3-4.5 2.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="nav-label">评审</span>
+              </button>
+            </nav>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-section-label">收藏</div>
+            <nav class="nav-list" aria-label="收藏">
+              <button class="nav-item is-active" data-view="issue" type="button">
+                <span class="fav-dot" style="--c:#f0bf00"></span>
+                <span class="nav-label">A2 回流焊温漂</span>
+              </button>
+              <button class="nav-item" data-view="apps" type="button">
+                <span class="fav-dot" style="--c:#5e6ad2"></span>
+                <span class="nav-label">视觉质检助手</span>
+              </button>
+              <button class="nav-item" data-view="apps" type="button">
+                <span class="fav-dot" style="--c:#00b8cc"></span>
+                <span class="nav-label">全厂 OEE 查询</span>
+              </button>
+              <button class="nav-item" data-view="issue" type="button">
+                <span class="fav-dot" style="--c:#27a644"></span>
+                <span class="nav-label">良率异常复盘</span>
+              </button>
+            </nav>
+          </div>
+          
+        </div>
+          </div>
+
+        <div class="sidebar-footer">
+          <button class="sidebar-collapse" id="sidebarCollapseBtn" type="button" aria-expanded="true" aria-controls="sidebar" title="收起侧边栏">
+            <span class="sidebar-collapse-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9.5 3.5L6 8l3.5 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 2.5v11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </span>
+            <span class="sidebar-collapse-label">收起</span>
+          </button>
+          <div class="user-menu" id="userMenu">
+            <button class="user-row" id="userMenuBtn" type="button" title="叶寒" aria-haspopup="menu" aria-expanded="false" aria-controls="userMenuPop">
+              <span class="avatar">叶</span>
+              <span class="user-name">叶寒</span>
+            </button>
+            <div class="user-menu-pop" id="userMenuPop" role="menu" hidden>
+              <button class="user-menu-item" type="button" role="menuitem" id="logoutBtn">退出登录</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main surface -->
+      <div class="surface">
+        <header class="topbar">
+          <div class="breadcrumb" id="breadcrumb">
+            <span class="crumb-status" aria-hidden="true"></span>
+            <span class="crumb-id">MFG-2048</span>
+            <span class="crumb-title">A2 回流焊温漂排查</span>
+          </div>
+          <div class="topbar-counter"><span class="cur">1</span> / 84</div>
+          <div class="topbar-actions">
+            <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题" title="切换主题">
+              <svg class="theme-icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="3.25" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.05 3.05l.99.99M11.96 11.96l.99.99M12.95 3.05l-.99.99M4.04 11.96l-.99.99" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              <svg class="theme-icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M12.6 9.35A5.25 5.25 0 0 1 6.65 3.4 5.5 5.5 0 1 0 12.6 9.35z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="pill-btn" type="button" title="收藏" data-toast="已加入收藏" data-toast-type="success">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.8l1.4 2.9 3.2.5-2.3 2.2.5 3.2L7 9.3 4.2 10.6l.5-3.2L2.4 5.2l3.2-.5L7 1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn" type="button" aria-label="更多" data-open="drawer-issue">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Default: issue workbench -->
+        <section class="view is-active" id="view-issue" data-view="issue">
+          <div class="issue-layout">
+            <div class="issue-main">
+          <div class="scroll-content">
+          
+              <div class="issue-title-block">
+                <h1 class="issue-title">A2 回流焊温漂排查</h1>
+                <p class="issue-desc">
+                  过去 72 小时 A2 线回流焊峰值温度漂移超出工艺窗 ±3℃。请对照
+                  <span class="code-chip">oven_profile</span>
+                  与 SPC 告警，定位加热区与传送链速异常，并给出可回滚的工艺参数建议。
+                </p>
+              </div>
+
+              <h2 class="activity-heading">Activity</h2>
+              <div class="activity-list">
+                <div class="activity-row">
+                  <span class="activity-dot">智</span>
+                  <span><span class="actor">集智</span> 创建了此事项 · 2 小时前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">T</span>
+                  <span><span class="actor">Triage</span> 添加了标签 温漂、SPC · 1 小时前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">测</span>
+                  <span><span class="actor">工艺工程师</span> 补充了 8 区热电偶读数 · 55 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">质</span>
+                  <span><span class="actor">质量</span> 关联了 SPC 告警 #4821 · 50 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">叶</span>
+                  <span><span class="actor">叶寒</span> 将状态改为进行中 · 48 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">维</span>
+                  <span><span class="actor">设备</span> 检查传送链张紧与润滑 · 42 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">智</span>
+                  <span><span class="actor">集智</span> 给出可回滚参数包 v3 · 35 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">叶</span>
+                  <span><span class="actor">叶寒</span> 确认先在 A2-2 腔体小流量验证 · 28 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">A</span>
+                  <span><span class="actor">Agent</span> 关联了设备日志 oven-a2-zone3 · 22 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">产</span>
+                  <span><span class="actor">产线长</span> 安排换班交接注意事项 · 20 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">智</span>
+                  <span><span class="actor">集智</span> 更新了风险评级为中 · 12 分钟前</span>
+                </div>
+                <div class="activity-row">
+                  <span class="activity-dot">测</span>
+                  <span><span class="actor">工艺工程师</span> 上传了炉温曲线对比图 · 8 分钟前</span>
+                </div>
+              </div>
+
+              <article class="comment-card">
+                <div class="comment-head">
+                  <span class="comment-avatar">陈</span>
+                  <span class="comment-name">陈工</span>
+                  <span class="comment-time">· 35 分钟前</span>
+                </div>
+                <p class="comment-body">Zone3 热电偶读数跳变与链速波动同步出现。建议先冻结当前配方，对比昨夜 02:00 基线后再调 PID。</p>
+                <hr class="comment-divider" />
+                <div class="comment-head">
+                  <span class="comment-avatar">王</span>
+                  <span class="comment-name">王工</span>
+                  <span class="comment-time">· 18 分钟前</span>
+                </div>
+                <p class="comment-body">已拉取过去 7 天 <span class="code-chip">oven_profile</span> 差分。Zone3 设定值未变，实测均值偏高 2.4℃，怀疑风扇滤网堵塞。</p>
+              </article>
+
+              <article class="comment-card">
+                <div class="comment-head">
+                  <span class="comment-avatar">智</span>
+                  <span class="comment-name">集智助手</span>
+                  <span class="comment-time">· 6 分钟前</span>
+                </div>
+                <p class="comment-body">已生成排查清单：① 检查 Zone3 滤网压差 ② 校验传送编码器 ③ 对比同型号 B 线曲线。需要我起草工单吗？</p>
+              </article>
+
+              <div class="composer-wrap">
+                <div class="composer">
+                  <textarea placeholder="留言…" rows="2" id="composerInput"></textarea>
+                  <div class="composer-bar">
+                    <button class="skills-label" type="button">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                      技能
+                    </button>
+                    <button class="icon-btn" type="button" aria-label="附件" style="width:24px;height:24px">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M6 4.5v4.2a1.8 1.8 0 003.6 0V4.2a2.7 2.7 0 00-5.4 0v4.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                    </button>
+                    <button class="send-btn" type="button" aria-label="发送">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7h9M7.5 3.5L11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+          
+        </div>
+          </div>
+
+            <aside class="props" aria-label="属性">
+          <div class="scroll-content">
+          
+              <div class="props-block">
+                <div class="props-label">Properties</div>
+                <div class="prop-row">
+                  <span class="status-dot"></span>
+                  <span class="prop-value">进行中</span>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-value">优先级 · 高</span>
+                </div>
+                <div class="prop-row">
+                  <span class="avatar" style="width:16px;height:16px;font-size:9px">叶</span>
+                  <span class="prop-value">叶寒</span>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-value">产线 A2</span>
+                </div>
+              </div>
+              <div class="props-block">
+                <div class="props-label">Labels</div>
+                <div class="prop-row">
+                  <span class="label-chip"><span class="dot" style="--c:#f0bf00"></span>温漂</span>
+                </div>
+                <div class="prop-row">
+                  <span class="label-chip"><span class="dot" style="--c:#5e6ad2"></span>SPC</span>
+                </div>
+                <div class="prop-row">
+                  <span class="label-chip"><span class="dot" style="--c:#eb5757"></span>回流焊</span>
+                </div>
+              </div>
+              <div class="props-block">
+                <div class="props-label">Reviews</div>
+                <div class="prop-row">
+                  <span class="prop-value">待工艺确认</span>
+                </div>
+              </div>
+          
+        </div>
+          </aside>
+          </div>
+        </section>
+
+        <!-- Apps list -->
+        <section class="view" id="view-apps" data-view="apps">
+          <div class="list-view">
+            <div class="list-toolbar">
+              <h1 class="list-title">应用中心</h1>
+              <span class="list-meta">12 个应用</span>
+              <div class="list-search">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                <input type="search" placeholder="搜索应用…" id="appSearch" />
+              </div>
+              <button class="pill-btn" type="button" data-refresh="apps">刷新</button>
+              <button class="pill-btn" type="button" data-open="dialog-invite">新建应用</button>
+            </div>
+            <div class="filter-row">
+              <button class="filter-chip is-active" type="button" data-filter="全部">全部</button>
+              <button class="filter-chip" type="button" data-filter="running">运行中</button>
+              <button class="filter-chip" type="button" data-filter="trial">试运行</button>
+              <button class="filter-chip" type="button" data-filter="draft">草稿</button>
+            </div>
+            <div class="app-list" id="appList">
+              
+              <div class="skeleton-list" id="appSkeleton" hidden aria-hidden="true">
+                <div class="skeleton-row"><span class="sk sk-avatar"></span><span class="sk sk-line grow"></span><span class="sk sk-line short"></span></div>
+                <div class="skeleton-row"><span class="sk sk-avatar"></span><span class="sk sk-line grow"></span><span class="sk sk-line short"></span></div>
+                <div class="skeleton-row"><span class="sk sk-avatar"></span><span class="sk sk-line grow"></span><span class="sk sk-line short"></span></div>
+                <div class="skeleton-row"><span class="sk sk-avatar"></span><span class="sk sk-line grow"></span><span class="sk sk-line short"></span></div>
+                <div class="skeleton-row"><span class="sk sk-avatar"></span><span class="sk sk-line grow"></span><span class="sk sk-line short"></span></div>
+                <div class="skeleton-row"><span class="sk sk-avatar"></span><span class="sk sk-line grow"></span><span class="sk sk-line short"></span></div>
+              </div>
+              <div class="empty-state" id="appEmpty" hidden>
+                <div class="empty-icon" aria-hidden="true">∅</div>
+                <div class="empty-title">没有匹配的应用</div>
+                <div class="empty-desc">试试清除筛选，或调整关键词。</div>
+                <button class="pill-btn" type="button" id="clearAppFilters">清除筛选</button>
+              </div>
+          <div class="scroll-content">
+          
+              <div class="app-row" data-name="视觉质检助手" data-status="running">
+                <span class="app-icon" style="--ic:#5e6ad2">检</span>
+                <span class="app-row-title">视觉质检助手</span>
+                <span class="app-row-meta">APP-1024 · 产线 A2</span>
+                <span class="status-pill"><i class="sdot"></i>运行中</span>
+              </div>
+              <div class="app-row" data-name="设备预测性维护" data-status="running">
+                <span class="app-icon" style="--ic:#00b8cc">维</span>
+                <span class="app-row-title">设备预测性维护</span>
+                <span class="app-row-meta">APP-1088 · 数控车间</span>
+                <span class="status-pill"><i class="sdot"></i>运行中</span>
+              </div>
+              <div class="app-row" data-name="全厂 OEE 看板" data-status="running">
+                <span class="app-icon" style="--ic:#27a644">O</span>
+                <span class="app-row-title">全厂 OEE 看板</span>
+                <span class="app-row-meta">APP-1102 · 全厂</span>
+                <span class="status-pill"><i class="sdot"></i>运行中</span>
+              </div>
+              <div class="app-row" data-name="回流焊工艺助手" data-status="trial">
+                <span class="app-icon" style="--ic:#f0bf00">焊</span>
+                <span class="app-row-title">回流焊工艺助手</span>
+                <span class="app-row-meta">APP-1140 · 产线 A2</span>
+                <span class="status-pill trial"><i class="sdot"></i>试运行</span>
+              </div>
+              <div class="app-row" data-name="物料齐套预测" data-status="trial">
+                <span class="app-icon" style="--ic:#fc7840">料</span>
+                <span class="app-row-title">物料齐套预测</span>
+                <span class="app-row-meta">APP-1166 · 仓储</span>
+                <span class="status-pill trial"><i class="sdot"></i>试运行</span>
+              </div>
+              <div class="app-row" data-name="能耗异常侦测" data-status="draft">
+                <span class="app-icon" style="--ic:#62666d">能</span>
+                <span class="app-row-title">能耗异常侦测</span>
+                <span class="app-row-meta">APP-1201 · 草稿</span>
+                <span class="status-pill draft"><i class="sdot"></i>草稿</span>
+              </div>
+              <div class="app-row" data-name="工单智能派工" data-status="running">
+                <span class="app-icon" style="--ic:#7170ff">派</span>
+                <span class="app-row-title">工单智能派工</span>
+                <span class="app-row-meta">APP-1210 · MES</span>
+                <span class="status-pill"><i class="sdot"></i>运行中</span>
+              </div>
+              <div class="app-row" data-name="良率根因分析" data-status="running">
+                <span class="app-icon" style="--ic:#eb5757">析</span>
+                <span class="app-row-title">良率根因分析</span>
+                <span class="app-row-meta">APP-1222 · 质量</span>
+                <span class="status-pill"><i class="sdot"></i>运行中</span>
+              </div>
+          
+        </div>
+          </div>
+          </div>
+        </section>
+
+        <!-- Admin: generic data-grid template -->
+        <section class="view" id="view-admin" data-view="admin">
+          <div class="list-view">
+            <div class="list-toolbar">
+              <h1 class="list-title">管理中心</h1>
+              <span class="list-meta">成员与权限 · 通用表格模板</span>
+              <button class="pill-btn" type="button" style="margin-left:auto" data-refresh="admin">刷新</button>
+              <button class="pill-btn" type="button" data-toast="这是一条提示" data-toast-type="info" title="演示 Info Toast">Info</button>
+              <button class="pill-btn" type="button" data-toast="操作已完成" data-toast-type="success" title="演示 Success Toast">成功</button>
+              <button class="pill-btn" type="button" data-toast="请注意该项变更" data-toast-type="warning" title="演示 Warning Toast">警告</button>
+              <button class="pill-btn" type="button" data-toast="保存失败，请重试" data-toast-type="error" title="演示 Error Toast">错误</button>
+              <button class="pill-btn" type="button" data-open="dialog-invite">邀请成员</button>
+            </div>
+
+            <div class="data-grid" id="memberGrid">
+              <div class="data-grid__toolbar">
+                <label class="data-grid__search">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.2" stroke="currentColor" stroke-width="1.2"/><path d="M9.2 9.2L12 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                  <input id="memberSearch" type="search" placeholder="搜索成员、角色、产线" autocomplete="off" />
+                </label>
+                <div class="filter-row data-grid__filters" style="padding:0">
+                  <button class="filter-chip is-active" type="button" data-member-filter="全部">全部</button>
+                  <button class="filter-chip" type="button" data-member-filter="启用">启用</button>
+                  <button class="filter-chip" type="button" data-member-filter="停用">停用</button>
+                </div>
+                <div class="data-grid__bulk" id="memberBulk" hidden>
+                  <span class="data-grid__bulk-count" id="memberBulkCount">已选 0</span>
+                  <button class="pill-btn" type="button" data-bulk="enable">批量启用</button>
+                  <button class="pill-btn is-danger" type="button" data-bulk="disable">批量停用</button>
+                </div>
+              </div>
+
+              <div class="admin-table-wrap data-grid__body" id="adminTableWrap">
+                <div class="skeleton-table" id="adminSkeleton" hidden aria-hidden="true">
+                  <div class="skeleton-table-head">
+                    <span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span>
+                  </div>
+                  <div class="skeleton-table-row"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span></div>
+                  <div class="skeleton-table-row"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span></div>
+                  <div class="skeleton-table-row"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span></div>
+                  <div class="skeleton-table-row"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span></div>
+                  <div class="skeleton-table-row"><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span><span class="sk sk-line"></span></div>
+                </div>
+
+                <div class="scroll-content data-grid__scroll" id="adminTableContent">
+                  <table class="data-grid__table" id="memberTable">
+                    <thead>
+                      <tr>
+                        <th class="data-grid__selection" data-column="selection">
+                          <input type="checkbox" id="memberSelectAll" aria-label="全选" />
+                        </th>
+                        <th data-sort="name">
+                          <button class="data-grid__sort" type="button" data-sort-key="name">
+                            <span>成员</span>
+                            <span class="data-grid__sort-icons" aria-hidden="true"><i class="up"></i><i class="down"></i></span>
+                          </button>
+                        </th>
+                        <th data-sort="role">
+                          <button class="data-grid__sort" type="button" data-sort-key="role">
+                            <span>角色</span>
+                            <span class="data-grid__sort-icons" aria-hidden="true"><i class="up"></i><i class="down"></i></span>
+                          </button>
+                        </th>
+                        <th data-sort="scope">
+                          <button class="data-grid__sort" type="button" data-sort-key="scope">
+                            <span>产线范围</span>
+                            <span class="data-grid__sort-icons" aria-hidden="true"><i class="up"></i><i class="down"></i></span>
+                          </button>
+                        </th>
+                        <th data-sort="status">
+                          <button class="data-grid__sort" type="button" data-sort-key="status">
+                            <span>状态</span>
+                            <span class="data-grid__sort-icons" aria-hidden="true"><i class="up"></i><i class="down"></i></span>
+                          </button>
+                        </th>
+                        <th data-sort="active">
+                          <button class="data-grid__sort" type="button" data-sort-key="active">
+                            <span>最近活跃</span>
+                            <span class="data-grid__sort-icons" aria-hidden="true"><i class="up"></i><i class="down"></i></span>
+                          </button>
+                        </th>
+                        <th class="data-grid__actions">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="memberTbody">
+                      <tr data-name="叶寒" data-role="平台管理员" data-scope="全厂" data-status="启用" data-active="0" data-active-label="刚刚">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 叶寒" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">叶</span><span>叶寒</span></div></td>
+                        <td class="muted">平台管理员</td>
+                        <td class="muted">全厂</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">刚刚</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="陈工" data-role="工艺工程师" data-scope="A1–A3" data-status="启用" data-active="35" data-active-label="35 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 陈工" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">陈</span><span>陈工</span></div></td>
+                        <td class="muted">工艺工程师</td>
+                        <td class="muted">A1–A3</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">35 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="王工" data-role="设备工程师" data-scope="回流焊 / SMT" data-status="启用" data-active="18" data-active-label="18 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 王工" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">王</span><span>王工</span></div></td>
+                        <td class="muted">设备工程师</td>
+                        <td class="muted">回流焊 / SMT</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">18 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="李娜" data-role="质量主管" data-scope="全厂质量" data-status="启用" data-active="1440" data-active-label="昨天">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 李娜" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">李</span><span>李娜</span></div></td>
+                        <td class="muted">质量主管</td>
+                        <td class="muted">全厂质量</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">昨天</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="赵强" data-role="只读观察者" data-scope="B 线" data-status="停用" data-active="10080" data-active-label="7 天前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 赵强" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">赵</span><span>赵强</span></div></td>
+                        <td class="muted">只读观察者</td>
+                        <td class="muted">B 线</td>
+                        <td><span class="status-pill draft"><i class="sdot"></i>停用</span></td>
+                        <td class="muted tabular">7 天前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="周敏" data-role="计划员" data-scope="A/B 线" data-status="启用" data-active="90" data-active-label="1.5 小时前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 周敏" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">周</span><span>周敏</span></div></td>
+                        <td class="muted">计划员</td>
+                        <td class="muted">A/B 线</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">1.5 小时前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="孙凯" data-role="IT 运维" data-scope="平台" data-status="启用" data-active="240" data-active-label="4 小时前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 孙凯" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">孙</span><span>孙凯</span></div></td>
+                        <td class="muted">IT 运维</td>
+                        <td class="muted">平台</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">4 小时前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="吴倩" data-role="安全审计" data-scope="全厂" data-status="停用" data-active="4320" data-active-label="3 天前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 吴倩" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">吴</span><span>吴倩</span></div></td>
+                        <td class="muted">安全审计</td>
+                        <td class="muted">全厂</td>
+                        <td><span class="status-pill draft"><i class="sdot"></i>停用</span></td>
+                        <td class="muted tabular">3 天前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+
+                      <tr data-name="郑磊" data-role="工艺工程师" data-scope="A2" data-status="启用" data-active="55" data-active-label="55 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 郑磊" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">郑</span><span>郑磊</span></div></td>
+                        <td class="muted">工艺工程师</td>
+                        <td class="muted">A2</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">55 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="冯雪" data-role="质量主管" data-scope="来料检验" data-status="启用" data-active="120" data-active-label="2 小时前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 冯雪" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">冯</span><span>冯雪</span></div></td>
+                        <td class="muted">质量主管</td>
+                        <td class="muted">来料检验</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">2 小时前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="韩冬" data-role="设备工程师" data-scope="贴片线" data-status="停用" data-active="2880" data-active-label="2 天前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 韩冬" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">韩</span><span>韩冬</span></div></td>
+                        <td class="muted">设备工程师</td>
+                        <td class="muted">贴片线</td>
+                        <td><span class="status-pill draft"><i class="sdot"></i>停用</span></td>
+                        <td class="muted tabular">2 天前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="曹阳" data-role="计划员" data-scope="全厂排产" data-status="启用" data-active="10" data-active-label="10 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 曹阳" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">曹</span><span>曹阳</span></div></td>
+                        <td class="muted">计划员</td>
+                        <td class="muted">全厂排产</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">10 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="许婷" data-role="只读观察者" data-scope="C 线" data-status="启用" data-active="600" data-active-label="10 小时前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 许婷" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">许</span><span>许婷</span></div></td>
+                        <td class="muted">只读观察者</td>
+                        <td class="muted">C 线</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">10 小时前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="邓凯" data-role="IT 运维" data-scope="边缘节点" data-status="启用" data-active="40" data-active-label="40 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 邓凯" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">邓</span><span>邓凯</span></div></td>
+                        <td class="muted">IT 运维</td>
+                        <td class="muted">边缘节点</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">40 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="蒋悦" data-role="安全审计" data-scope="全厂" data-status="启用" data-active="720" data-active-label="12 小时前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 蒋悦" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">蒋</span><span>蒋悦</span></div></td>
+                        <td class="muted">安全审计</td>
+                        <td class="muted">全厂</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">12 小时前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="沈浩" data-role="工艺工程师" data-scope="B1–B2" data-status="停用" data-active="5760" data-active-label="4 天前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 沈浩" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">沈</span><span>沈浩</span></div></td>
+                        <td class="muted">工艺工程师</td>
+                        <td class="muted">B1–B2</td>
+                        <td><span class="status-pill draft"><i class="sdot"></i>停用</span></td>
+                        <td class="muted tabular">4 天前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="姚琳" data-role="设备工程师" data-scope="波峰焊" data-status="启用" data-active="5" data-active-label="5 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 姚琳" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">姚</span><span>姚琳</span></div></td>
+                        <td class="muted">设备工程师</td>
+                        <td class="muted">波峰焊</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">5 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="卢明" data-role="计划员" data-scope="A 线" data-status="启用" data-active="200" data-active-label="3 小时前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 卢明" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">卢</span><span>卢明</span></div></td>
+                        <td class="muted">计划员</td>
+                        <td class="muted">A 线</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">3 小时前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="何静" data-role="只读观察者" data-scope="质量看板" data-status="启用" data-active="1500" data-active-label="昨天">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 何静" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">何</span><span>何静</span></div></td>
+                        <td class="muted">只读观察者</td>
+                        <td class="muted">质量看板</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">昨天</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                      <tr data-name="罗斌" data-role="平台管理员" data-scope="全厂" data-status="启用" data-active="1" data-active-label="1 分钟前">
+                        <td class="data-grid__selection"><input type="checkbox" aria-label="选择 罗斌" /></td>
+                        <td><div class="data-grid__person"><span class="avatar sm">罗</span><span>罗斌</span></div></td>
+                        <td class="muted">平台管理员</td>
+                        <td class="muted">全厂</td>
+                        <td><span class="status-pill"><i class="sdot"></i>启用</span></td>
+                        <td class="muted tabular">1 分钟前</td>
+                        <td class="data-grid__actions"><div class="data-grid__action-content"><button class="link-btn" type="button" data-member-edit>编辑</button></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="empty-state data-grid__empty" id="memberEmpty" hidden>
+                    <div class="empty-icon" aria-hidden="true">∅</div>
+                    <div class="empty-title">没有匹配的成员</div>
+                    <div class="empty-desc">试试清除筛选，或调整关键词。</div>
+                    <button class="pill-btn" type="button" id="clearMemberFilters">清除筛选</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="data-grid__footer">
+                <span class="data-grid__count" id="memberCount">共 20 人</span>
+                <div class="data-grid__pager">
+                  <div class="data-grid__page-size">
+                    <span>每页</span>
+                    <div class="ui-select ui-select--sm" id="memberPageSize" data-ui-select data-value="10" data-placement="top">
+                      <button type="button" class="ui-select__trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="每页条数">
+                        <span class="ui-select__value">10</span>
+                        <svg class="ui-select__chev" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </button>
+                      <div class="ui-select__menu" role="listbox" hidden>
+                        <button type="button" class="ui-select__option is-selected" role="option" data-value="10" aria-selected="true">10</button>
+                        <button type="button" class="ui-select__option" role="option" data-value="25" aria-selected="false">25</button>
+                        <button type="button" class="ui-select__option" role="option" data-value="50" aria-selected="false">50</button>
+                      </div>
+                    </div>
+                  </div>
+                  <button class="icon-btn" type="button" id="memberPrev" aria-label="上一页" disabled>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.5 3L5 7l3.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <span class="data-grid__page" id="memberPageLabel">1 / 1</span>
+                  <button class="icon-btn" type="button" id="memberNext" aria-label="下一页" disabled>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5.5 3L9 7l-3.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlays: CSS transition only -->
+  <div class="overlay" id="drawer-issue" hidden>
+    <div class="overlay-backdrop" data-close></div>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-issue-title">
+      <header class="drawer-head">
+        <div>
+          <div class="drawer-kicker">MFG-2048</div>
+          <h2 class="drawer-title" id="drawer-issue-title">事项操作</h2>
+        </div>
+        <button class="icon-btn" type="button" aria-label="关闭" data-close>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="drawer-body">
+        <button class="drawer-action" type="button" data-toast="链接已复制" data-toast-type="success" data-close>复制链接</button>
+        <button class="drawer-action" type="button" data-toast="已订阅更新" data-toast-type="success" data-close>订阅更新</button>
+        <button class="drawer-action" type="button">移到项目…</button>
+        <button class="drawer-action is-danger" type="button" data-open="dialog-archive" data-close>归档事项</button>
+      </div>
+    </aside>
+  </div>
+
+
+  <!-- Generic subwindow (form drawer) template — driven by admin grid -->
+  <div class="overlay" id="drawer-member" hidden>
+    <div class="overlay-backdrop" data-close></div>
+    <aside class="drawer subwindow" role="dialog" aria-modal="true" aria-labelledby="drawer-member-title">
+      <header class="drawer-head">
+        <div class="subwindow-identity">
+          <span class="avatar" id="memberDrawerAvatar">叶</span>
+          <div>
+            <div class="drawer-kicker" id="memberDrawerKicker">成员 · 权限</div>
+            <h2 class="drawer-title" id="drawer-member-title">编辑成员</h2>
+          </div>
+        </div>
+        <button class="icon-btn" type="button" aria-label="关闭" data-close>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4L4 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <div class="subwindow-body">
+        <section class="subwindow-section">
+          <h3 class="subwindow-section-title">基本信息</h3>
+          <label class="subwindow-field">
+            <span>姓名</span>
+            <input id="memberFieldName" type="text" autocomplete="off" />
+          </label>
+          <div class="subwindow-field">
+            <span>角色</span>
+            <div class="ui-select ui-select--block" id="memberFieldRole" data-ui-select data-value="平台管理员">
+              <button type="button" class="ui-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                <span class="ui-select__value">平台管理员</span>
+                <svg class="ui-select__chev" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="ui-select__menu" role="listbox" hidden>
+                <button type="button" class="ui-select__option is-selected" role="option" data-value="平台管理员" aria-selected="true">平台管理员</button>
+                <button type="button" class="ui-select__option" role="option" data-value="工艺工程师" aria-selected="false">工艺工程师</button>
+                <button type="button" class="ui-select__option" role="option" data-value="设备工程师" aria-selected="false">设备工程师</button>
+                <button type="button" class="ui-select__option" role="option" data-value="质量主管" aria-selected="false">质量主管</button>
+                <button type="button" class="ui-select__option" role="option" data-value="计划员" aria-selected="false">计划员</button>
+                <button type="button" class="ui-select__option" role="option" data-value="IT 运维" aria-selected="false">IT 运维</button>
+                <button type="button" class="ui-select__option" role="option" data-value="安全审计" aria-selected="false">安全审计</button>
+                <button type="button" class="ui-select__option" role="option" data-value="只读观察者" aria-selected="false">只读观察者</button>
+              </div>
+            </div>
+          </div>
+          <label class="subwindow-field">
+            <span>产线范围</span>
+            <input id="memberFieldScope" type="text" placeholder="如 A1–A3 / 全厂" autocomplete="off" />
+          </label>
+          <div class="subwindow-field">
+            <span>状态</span>
+            <div class="ui-select ui-select--block" id="memberFieldStatus" data-ui-select data-value="启用">
+              <button type="button" class="ui-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                <span class="ui-select__value">启用</span>
+                <svg class="ui-select__chev" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="ui-select__menu" role="listbox" hidden>
+                <button type="button" class="ui-select__option is-selected" role="option" data-value="启用" aria-selected="true">启用</button>
+                <button type="button" class="ui-select__option" role="option" data-value="停用" aria-selected="false">停用</button>
+              </div>
+            </div>
+          </div>
+          <div class="subwindow-field">
+            <span>最近活跃</span>
+            <div class="ui-datetime ui-datetime--block" id="memberFieldActiveAt" data-ui-datetime data-value="2026-11-02T11:03">
+              <button type="button" class="ui-datetime__trigger" aria-haspopup="dialog" aria-expanded="false">
+                <span class="ui-datetime__value">2026-11-02 11:03</span>
+                <svg class="ui-datetime__icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M5 2v2.5M11 2v2.5M2.5 7h11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              </button>
+              <div class="ui-datetime__panel" role="dialog" aria-label="选择日期与时间" hidden></div>
+            </div>
+          </div>
+          <div class="subwindow-field">
+            <span>权限有效期</span>
+            <div class="ui-daterange ui-daterange--block" id="memberFieldValidRange" data-ui-daterange data-start="2026-10-03" data-end="2026-11-02">
+              <button type="button" class="ui-daterange__trigger" aria-haspopup="dialog" aria-expanded="false">
+                <span class="ui-daterange__value">2026-10-03 → 2026-11-02</span>
+                <svg class="ui-daterange__icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M5 2v2.5M11 2v2.5M2.5 7h11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              </button>
+              <div class="ui-daterange__panel" role="dialog" aria-label="选择日期范围" hidden></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="subwindow-section">
+          <h3 class="subwindow-section-title">权限范围</h3>
+          <div class="subwindow-checks">
+            <label class="subwindow-check"><input type="checkbox" checked /> 应用中心</label>
+            <label class="subwindow-check"><input type="checkbox" checked /> 管理中心</label>
+            <label class="subwindow-check"><input type="checkbox" /> 模型服务</label>
+            <label class="subwindow-check"><input type="checkbox" /> 审计日志</label>
+          </div>
+          <p class="subwindow-hint">样例仅示意；实际权限走 RBAC + ABAC 策略。</p>
+        </section>
+      </div>
+
+      <footer class="subwindow-foot">
+        <button class="pill-btn" type="button" data-close>取消</button>
+        <button class="pill-btn is-primary" type="button" id="memberDrawerSave">保存</button>
+      </footer>
+    </aside>
+  </div>
+
+  <div class="overlay" id="dialog-invite" hidden>
+    <div class="overlay-backdrop" data-close></div>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-invite-title">
+      <h2 class="dialog-title" id="dialog-invite-title">邀请成员</h2>
+      <p class="dialog-desc">输入邮箱，对方将获得产线只读权限；可稍后在管理中心调整。</p>
+      <label class="dialog-field">
+        <span>邮箱</span>
+        <input type="email" placeholder="name@factory.com" autocomplete="off" />
+      </label>
+      <div class="dialog-actions">
+        <button class="pill-btn" type="button" data-close>取消</button>
+        <button class="pill-btn is-primary" type="button" data-close data-toast="邀请已发送" data-toast-type="success">发送邀请</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="dialog-archive" hidden>
+    <div class="overlay-backdrop" data-close></div>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-archive-title">
+      <h2 class="dialog-title" id="dialog-archive-title">归档此事项？</h2>
+      <p class="dialog-desc">归档后仍可在筛选中找回，不会删除评论与关联日志。</p>
+      <div class="dialog-actions">
+        <button class="pill-btn" type="button" data-close>取消</button>
+        <button class="pill-btn is-danger" type="button" data-close data-toast="事项已归档" data-toast-type="warning">确认归档</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-host" id="toastHost" aria-live="polite" aria-relevant="additions"></div>
+
+  <script src="inertialWheelScroll.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

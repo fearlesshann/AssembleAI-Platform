@@ -1,0 +1,126 @@
+{
+    "repository":  "https://github.com/fearlesshann/AssembleAI",
+    "branch":  "main",
+    "commit":  "f99202e32269ffcb411b36077ed329ea3b9d6f7e",
+    "auditDate":  "2026-11-02",
+    "fileCount":  29,
+    "snapshot":  "ui-v1",
+    "files":  [
+                  {
+                      "path":  "LICENSE",
+                      "sha256":  "38123187c6abcfbc8cb92126f99af361f32ace86b87c465e5d74feade9fd1d56"
+                  },
+                  {
+                      "path":  "README.md",
+                      "sha256":  "6d89dc7927038279f737ebbab2728aa51226ec86cfeac4529f2190438dc32864"
+                  },
+                  {
+                      "path":  "app.css",
+                      "sha256":  "a39fc4deb435b99c026919c75f737a0eba91ed8025ebe1716cd3ad650cc69fdb"
+                  },
+                  {
+                      "path":  "app.js",
+                      "sha256":  "7941c361f4d975fddc54ce9af7bb641af569418131b361648d596e7a0dd779a4"
+                  },
+                  {
+                      "path":  "apple-touch-icon.png",
+                      "sha256":  "d6aa220a9c8fd168101733c770780f2a74918eb18e68b0578c3eb6fda75ebd8c"
+                  },
+                  {
+                      "path":  "favicon-48.png",
+                      "sha256":  "c14ec0b3987ce3ab2ecf669c73f3d958eaa9df6e7dc831bad0bab7cca030041a"
+                  },
+                  {
+                      "path":  "favicon.ico",
+                      "sha256":  "5519d077321cec2a64fc39c349bb7f43aaaf6a9677a8d3588ef113a474d23995"
+                  },
+                  {
+                      "path":  "favicon.png",
+                      "sha256":  "0f1d85a8bc4704f9931d42051c26422351c9a267697d28dda70c68c8a9631029"
+                  },
+                  {
+                      "path":  "index.html",
+                      "sha256":  "675dd3c0a7e275269d61dc1e7419b3f2157a3f13fa55fbd2277d7a43d3ff85a0"
+                  },
+                  {
+                      "path":  "inertialWheelScroll.js",
+                      "sha256":  "f3631208c5110a8bda91da7453f59187bb10dcb592bab59ca2c5096029fda8b3"
+                  },
+                  {
+                      "path":  "logo-flow-a.png",
+                      "sha256":  "fc4da0e35896c4ef84bc797ac76637516c5a450d646a535c804b39d42f263e5d"
+                  },
+                  {
+                      "path":  "logo-flow-b.png",
+                      "sha256":  "686304406119cb3311856f5dccd533bc5500a7af53e0c7621d96e5a8ede32253"
+                  },
+                  {
+                      "path":  "logo-flow-c.png",
+                      "sha256":  "2d7cbc32226604fce3c43417450bac9c617f05cb2127c7984b1e9d177ad459bc"
+                  },
+                  {
+                      "path":  "logo-jizhi.png",
+                      "sha256":  "18a93f259a1754bf5c5436941c8892126f9d61c7946816994c892c87ccdd5892"
+                  },
+                  {
+                      "path":  "logo-net-a.png",
+                      "sha256":  "574b1be0979ae912dd8d49bc3a9479adf70830b12ea2c294625da85c86bc3a96"
+                  },
+                  {
+                      "path":  "logo-net-b.png",
+                      "sha256":  "380777a73983958db6e64061778c266ef3b36310d47be1a85fe0132e09775d49"
+                  },
+                  {
+                      "path":  "logo-net-c.png",
+                      "sha256":  "269569b0d767104ec481a52c399ff2444eaf8900afa7670d478ead41d1830aa0"
+                  },
+                  {
+                      "path":  "logo-tool-a.png",
+                      "sha256":  "53cffe498a99900560090ae92ecf145a5429f0476716e831248d6c23e988eefc"
+                  },
+                  {
+                      "path":  "logo-tool-b.png",
+                      "sha256":  "4415deb4a02957b9ed268dda826edd1bed0c460209e429dfb81fd3f7313f856e"
+                  },
+                  {
+                      "path":  "logo-tool-c.png",
+                      "sha256":  "5ab05d64a739197cfe665b821a1f58717def8bc91dde5f4890e6587cb71c3751"
+                  },
+                  {
+                      "path":  "logo-v2-a.png",
+                      "sha256":  "c2c6860085816047897740d4845ff1dfa2873bb8004a66d0406449ee79c752fe"
+                  },
+                  {
+                      "path":  "logo-v2-b.png",
+                      "sha256":  "280f5a637f7323239eb7f16b6b4c1ecc3b54114caeb96b9200e0d3f1bd860e88"
+                  },
+                  {
+                      "path":  "logo-v2-c.png",
+                      "sha256":  "06a359115364563fda0345c34355c85b5402be5b5c07ebbaad98363016cc3e22"
+                  },
+                  {
+                      "path":  "logo.png",
+                      "sha256":  "fc4da0e35896c4ef84bc797ac76637516c5a450d646a535c804b39d42f263e5d"
+                  },
+                  {
+                      "path":  "package-lock.json",
+                      "sha256":  "620da98cec65068c431e00982242b1f1c3e59f8d61036836fd59d586e0630901"
+                  },
+                  {
+                      "path":  "package.json",
+                      "sha256":  "091fca6f5c13f4d6e683e39cbcf8f588e9675e994abcc77a45c9b7de944672d6"
+                  },
+                  {
+                      "path":  "preview-shots/login-shot-admin.png",
+                      "sha256":  "a4ce40acbe17bcfbf2dc1ad07068b3c2f77aad395d77a8f17c410527b73be2e8"
+                  },
+                  {
+                      "path":  "preview-shots/login-shot-apps.png",
+                      "sha256":  "3af37c053388b1c556e607cdcc0233386e0ce8dee30c26ee18d19f1ceea360d5"
+                  },
+                  {
+                      "path":  "preview-shots/login-shot-issues.png",
+                      "sha256":  "3affb60bc0ce9126fbbd731840978e11bd5f137b6c37844e962df8a3c01bef67"
+                  }
+              ]
+}

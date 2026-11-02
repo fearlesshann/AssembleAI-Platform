@@ -1,0 +1,120 @@
+# 本地后端与基础设施
+
+本页对应 T2。样例后端用于验证接入和流式传输，没有模型调用或业务数据；正式认证与租户授权在 T3 接入。
+
+当前开发采用本机 .NET / FastAPI 进程，不要求 Docker。可用 `tools/dev-backend.py` 统一启动；后续 PostgreSQL、Redis、RabbitMQ、MinIO、Keycloak 可分别使用本机安装或已有服务，通过下方配置键接入。本文 Compose 部分仅是可选启动方案。
+
+## 样例 FastAPI
+
+工作目录：`apps/sample/backend`。目标 Python 3.13；入口 `sample_backend.main:app`。已在本机 Python 3.13.13、FastAPI 0.140.0、Uvicorn 0.51.0 上通过测试。
+
+联网环境完成锁定与隔离安装：
+
+```powershell
+cd apps/sample/backend
+uv lock --python 3.13
+uv sync --locked --python 3.13
+$env:ASSEMBLEAI_ENVIRONMENT = 'Development'
+uv run --locked uvicorn sample_backend.main:app --host 127.0.0.1 --port 8101
+```
+
+本轮 `uv lock` 被系统阻止连接 PyPI（OS 10013），**尚无可用的跨平台 uv.lock**。`requirements.windows.lock` 是已测试 Windows / Python 3.13 环境的 22 个精确版本及传递依赖快照；各安装版本满足声明的依赖约束，但未记录分发文件哈希，未在 Linux 或全新环境重装验证。它不替代待生成的 uv.lock。
+
+本机预装环境的复核命令（不安装或修改该环境）：
+
+```powershell
+cd apps/sample/backend
+& 'E:\Users\Mryeh\miniconda3\python.exe' -m pytest -q
+$env:ASSEMBLEAI_ENVIRONMENT = 'Development'
+& 'E:\Users\Mryeh\miniconda3\python.exe' -m uvicorn sample_backend.main:app --host 127.0.0.1 --port 8101
+```
+
+| 路径 | 行为 |
+| --- | --- |
+| `/health/live` | 进程存活；不代表平台依赖已就绪 |
+| `/health/ready` | 样例 lifespan 已启动；明确声明该样例无外部依赖 |
+| `/stream?count=5&delay_ms=150` | 仅 `ASSEMBLEAI_ENVIRONMENT=Development` 时注册；其他环境为 404 |
+| `/docs`、`/openapi.json` | 仅 Development 可用 |
+
+SSE 协议：`delta` 数据 `{index,text,requestId}`；成功以 `complete` 数据 `{count,requestId}` 结束；失败以 `error` 数据 `{code,requestId}` 结束。`count` 限 1–20，`delay_ms` 限 10–1000；首段立即发送，随后按间隔发送。客户端断开或任务取消会释放流状态，不吞掉取消异常；服务端错误不返回内部异常信息。
+
+可通过 .NET 开发网关访问 `/dev/sample/health`、`/dev/sample/stream`；平台开发端口为 5100。该代理与本样例均不构成正式认证路径，不用于生产业务。
+
+## 原生 PostgreSQL 迁移
+
+原生迁移入口默认不使用 Docker：
+
+```powershell
+powershell -NoProfile -File deploy/postgres/migrate.ps1 -Psql 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -DatabaseHost 127.0.0.1 -Port 5432 -Username postgres
+```
+
+将示例路径与地址换成实际环境。迁移前需已有 `assembleai_platform` 数据库及同名角色，服务器具备 pgvector 0.8.7 扩展文件；迁移账号需有安装扩展及 `SET ROLE assembleai_platform` 的权限。密码使用 PostgreSQL 密码文件或进程环境 `PGPASSWORD`，不放入命令行。脚本限定目标数据库，SQL 会再次检查数据库名，使用事务及 advisory lock；当前没有连接真实 PostgreSQL 执行迁移。
+
+开发核心启动和流式样例不依赖该数据库；T3 / T4 引入实际身份、授权和注册持久化时再完成真实连接及迁移验证。
+
+## Compose 开发依赖（可选）
+
+需要可用的 Docker Engine 与 Compose v2。本轮没有发现 Docker，以下流程尚未实际启动或拉取镜像。
+
+从仓库根目录：
+
+```powershell
+powershell -NoProfile -File deploy/compose/initialize-env.ps1
+docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml config --quiet
+docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml up -d --build --wait
+powershell -NoProfile -File deploy/postgres/migrate.ps1 -UseCompose
+docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml ps
+```
+
+初始化脚本为每个开发凭据生成独立的 32 字节随机值，仅写入忽略的 `.env`，不输出密钥；文件已存在时拒绝覆盖。`.env.example` 的空值会使 Compose 失败，避免意外沿用共享默认密码。不要把 `compose config` 的完整输出保存进版本库，因为它包含环境插值后的凭据。
+
+所有宿主机映射只绑定 `127.0.0.1`；此文件只适用于本地开发，不包含生产 TLS、备份、HA 或密钥管理。
+
+| 服务 | 固定标签 / 来源 | 本机地址 |
+| --- | --- | --- |
+| PostgreSQL + pgvector | `pgvector/pgvector:0.8.7-pg17-bookworm`；[官方支持标签](https://github.com/pgvector/pgvector#docker) | `127.0.0.1:5432` |
+| Redis | `redis:8.2.11-bookworm`；[官方镜像清单](https://raw.githubusercontent.com/docker-library/official-images/master/library/redis) | `127.0.0.1:6379` |
+| RabbitMQ | `rabbitmq:4.4.0-management`；[官方镜像清单](https://raw.githubusercontent.com/docker-library/official-images/master/library/rabbitmq) | AMQP `5672`；管理 `15672` |
+| Keycloak | `quay.io/keycloak/keycloak:26.8.1`；[官方下载](https://www.keycloak.org/downloads) | `http://localhost:8080` |
+| MinIO | 本地构建 `assembleai/minio:RELEASE.2025-10-15T17-29-55Z-local`；[官方安全发布](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z) | API `9000`；控制台 `9001` |
+
+上述标签有官方来源；尚未拉取验证、锁定镜像 digest 或验证整套兼容性。pgvector 标签固定扩展版本与 PostgreSQL 主版本，实际 PostgreSQL 补丁版本需拉取后记录。
+
+MinIO 官方仓库于 2026-04-25 归档，最后的安全发布说明要求从源码构建容器。本项目保留已定 MinIO 选型，提供该安全 tag 的多阶段构建，未引用不存在的新官方二进制标签。构建使用 [官方列出的](https://raw.githubusercontent.com/docker-library/official-images/master/library/golang) `golang:1.26.10-bookworm`；成品使用无 shell 的 scratch 镜像、非 root 用户与独立健康检查程序。**该构建尚未在 Docker 中验证**；生产维护与后续替代评估留待 D7，不把归档项目当成仍有上游维护承诺。
+
+## 数据库与迁移
+
+- 首次初始化创建 `assembleai_platform` 与 `keycloak` 两个数据库和独立账号；撤销 PUBLIC 的跨库连接权限。
+- `assembleai_platform` 账号无 SUPERUSER / CREATEDB / CREATEROLE / BYPASSRLS；当前是本地开发数据库所有者，生产迁移账号与运行账号分离在交付阶段落实。
+- Compose 数据库初次创建时运行 `/migrations/apply.sql`；重复执行 `migrate.ps1 -UseCompose` 只重放可幂等的已列迁移。原生 psql 入口执行同一套 SQL。
+- `0001_bootstrap.sql` 在事务和 advisory lock 下验证目标数据库名，初始化 pgvector 并要求版本 0.8.7，写入 `public.platform_schema_migrations` 的 `version=1`。误连其他数据库会失败。
+- `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`；平台 readiness 要求该版本。迁移不预置账号或权限，尚待真实数据库执行验证。
+- 平台 readiness 可检查该迁移标记；T3 / T4 再添加租户、权限与注册数据表。当前没有预建业务租户或制造业演示数据。
+- 迁移入口没有隐含重置数据或 `down -v`；初始化脚本只在空数据卷执行，修改 `.env` 不会自动轮换已有数据库角色密码。
+
+## Keycloak 开发接入
+
+Realm：`assembleai`；confidential client：`assembleai-platform`；Authorization Code + PKCE S256；关闭 implicit、密码直授与 service account 登录。客户端 secret 由环境占位符在导入时解析，realm 文件无默认业务用户。[Keycloak 导入文档](https://www.keycloak.org/server/importExport#_using_environment_variables_within_the_realm_configuration_files)
+
+Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configuration`。回调固定为 `http://localhost:5100/signin-oidc` 和 `http://127.0.0.1:5100/signin-oidc`；其他域名需明确登记。使用 `localhost:8080` 作为 issuer，避免在 localhost 与 IP 之间随意切换身份中心地址。
+
+首次启动按 `.env` 中的独立 bootstrap 管理员密码进入管理界面；没有在代码中预置租户成员、业务账号或默认密码。`--import-realm` 不覆盖已存在 realm；后续配置变更需显式迁移或管理 API 更新。
+
+## 平台连接配置
+
+开发凭据从 `deploy/compose/.env` 获取，不能直接提交进 appsettings：
+
+| 配置键 | 非敏感部分 / 对应凭据 |
+| --- | --- |
+| `ConnectionStrings__Platform` | `Host=127.0.0.1;Port=5432;Database=assembleai_platform;Username=assembleai_platform;Password=` 后接 `PLATFORM_DB_PASSWORD` |
+| `Readiness__RedisHost` / `RedisPort` / `RedisPassword` | `127.0.0.1` / `6379` / `REDIS_PASSWORD` |
+| `Readiness__MinioEndpoint` | `http://127.0.0.1:9000/minio/health/ready` |
+| `Readiness__RabbitMqEndpoint` / `User` / `Password` | `http://127.0.0.1:15672/api/health/checks/ready-to-serve-clients` / `assembleai` / `RABBITMQ_PASSWORD` |
+| `Readiness__OidcDiscoveryEndpoint` | `http://localhost:8080/realms/assembleai/.well-known/openid-configuration` |
+
+## 本轮验证记录
+
+- FastAPI pytest：9 项通过，覆盖生产禁用开发接口、就绪生命周期、SSE 格式、输入边界、取消 / 断开清理与错误事件。
+- 真实 HTTP 烟测：启动临时 Uvicorn，配置每段间隔 1000ms，首段实测 18.3ms；主动断开后健康端点仍可访问。临时进程已停止。
+- 本地依赖快照：22 个已安装版本，传递依赖声明全部满足。
+- 未验证：全新隔离安装、跨平台 uv.lock、Docker 镜像构建 / 拉取、Compose 运行、PostgreSQL 实际迁移、Keycloak 真实登录。环境限制不能作为这些步骤通过的证据。

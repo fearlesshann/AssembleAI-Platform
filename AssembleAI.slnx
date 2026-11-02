@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/services/">
+    <Project Path="services/platform/AssembleAI.Platform.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/platform/AssembleAI.Platform.SmokeTests.csproj" />
+  </Folder>
+</Solution>
