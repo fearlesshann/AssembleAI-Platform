@@ -89,13 +89,16 @@ MinIO 官方仓库于 2026-04-25 归档，最后的安全发布说明要求从�
 - `assembleai_platform` 账号无 SUPERUSER / CREATEDB / CREATEROLE / BYPASSRLS；当前是本地开发数据库所有者，生产迁移账号与运行账号分离在交付阶段落实。
 - Compose 数据库初次创建时运行 `/migrations/apply.sql`；重复执行 `migrate.ps1 -UseCompose` 只重放可幂等的已列迁移。原生 psql 入口执行同一套 SQL。
 - `0001_bootstrap.sql` 在事务和 advisory lock 下验证目标数据库名，初始化 pgvector 并要求版本 0.8.7，写入 `public.platform_schema_migrations` 的 `version=1`。误连其他数据库会失败。
-- `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`；平台 readiness 要求该版本。迁移不预置账号或权限，尚待真实数据库执行验证。
-- 平台 readiness 检查迁移 2 标记；T3 授权表已包含在迁移 2，应用注册表在 T4 添加。当前没有预建业务租户或制造业演示数据。
+- `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`。迁移不预置账号或权限，尚待真实数据库执行验证。
+- `0003_bff_sessions.sql` 增加服务端加密 ticket、随机会话引用与绝对到期时间，记录 `version=3`；不包含保护密钥或预置会话。
+- 平台 readiness 在 BFF 开启时检查迁移 3，否则检查迁移 2。应用注册表在 T4 添加；当前没有预建业务租户或制造业演示数据。
 - 迁移入口没有隐含重置数据或 `down -v`；初始化脚本只在空数据卷执行，修改 `.env` 不会自动轮换已有数据库角色密码。
 
 ## Keycloak 开发接入
 
 Realm：`assembleai`；confidential client：`assembleai-platform`；Authorization Code + PKCE S256；关闭 implicit、密码直授与 service account 登录。客户端 secret 由环境占位符在导入时解析，realm 文件无默认业务用户。[Keycloak 导入文档](https://www.keycloak.org/server/importExport#_using_environment_variables_within_the_realm_configuration_files)
+
+BFF 服务端接口已实现，原生启动配置和会话约束见 [T3 BFF](architecture/t3-bff.md)。默认关闭；启用后可直接访问 `/bff/login?returnUrl=/bff/session` 核验后端，不依赖首页模板演示登录。
 
 Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configuration`。回调固定为 `http://localhost:5100/signin-oidc` 和 `http://127.0.0.1:5100/signin-oidc`；其他域名需明确登记。使用 `localhost:8080` 作为 issuer，避免在 localhost 与 IP 之间随意切换身份中心地址。
 

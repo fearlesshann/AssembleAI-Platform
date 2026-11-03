@@ -1,12 +1,12 @@
 # T3 · 身份与授权基础
 
-本阶段实现平台成员关系与授权读取、RBAC / 组织范围判断，以及受保护的本人租户接口。OIDC 登录、BFF 会话存储、CSRF、内部签名调用上下文尚未接通，T3 保持进行中。测试工程的身份处理器只用于测试，不会注册到平台服务。
+本阶段实现平台成员关系与授权读取、RBAC / 组织范围判断，以及受保护的本人租户接口。[OIDC / BFF 会话与 CSRF](t3-bff.md) 已接入服务端；真实 Keycloak / PostgreSQL 联调和内部签名调用上下文待完成，T3 保持进行中。测试工程的身份处理器只用于测试，不会注册到平台服务。
 
 ## 身份边界
 
-平台只从一个已认证的 `ClaimsIdentity` 读取唯一的 `iss` 和 `sub`，按原值匹配数据库；不使用 email、显示名称或浏览器请求头作为身份主键。重复 claim、多个已认证 identity、缺少 issuer / subject 都拒绝。后续 OIDC 适配器需验证签名、issuer、audience、有效期，并保留原始 claim 名称（`MapInboundClaims = false`），再建立 BFF 会话。
+平台只从一个已认证的 `ClaimsIdentity` 读取唯一的 `iss` 和 `sub`，按原值匹配数据库；不使用 email、显示名称或浏览器请求头作为身份主键。重复 claim、多个已认证 identity、缺少 issuer / subject 都拒绝。OIDC 适配器验证签名、issuer、audience、有效期及协议状态，并保留原始 claim 名称（`MapInboundClaims = false`），再建立 BFF 会话。
 
-平台当前未注册可登录的认证方案。因此直接请求受保护接口返回 401，包括携带任意 Bearer Token、Cookie 或 `X-Internal-*` 的请求；这些材料不会被本阶段代码解释为登录凭据。健康检查和现有开发流演示维持原有用途。
+平台默认关闭登录。显式配置 BFF 后只接受经过 OIDC 回调建立且仍有效的会话；任意 Bearer Token、伪造 Cookie 或 `X-Internal-*` 均不能建立身份。健康检查和现有开发流演示维持原有用途。
 
 ## 读取接口
 
@@ -37,7 +37,7 @@
 
 `deploy/postgres/migrations/0002_authorization.sql` 建立身份、租户、成员、组织、角色与授权关系。租户内关联使用复合外键，禁止把其他租户的组织、角色或成员关联到本租户。授权相关变化递增租户策略版本；用户身份与启用状态变化会更新受影响租户版本。
 
-没有预置管理员、自动授权或固定账号。迁移仍通过项目原生 `psql` 脚本执行，数据库名 / 账号与连接配置沿用 [开发服务说明](../development-services.md)。`apply.sql` 顺序执行迁移 1 和 2；平台 readiness 现在要求迁移 2 的记录。
+没有预置管理员、自动授权或固定账号。迁移通过项目原生 `psql` 脚本执行，配置沿用 [开发服务说明](../development-services.md)。`apply.sql` 顺序执行迁移 1、2、3；迁移 3 为加密 BFF 会话表。BFF 启用时 readiness 要求迁移 3，未启用时要求迁移 2。
 
 `PostgresAuthorizationStore` 使用现有 Npgsql，参数化查询，并将请求取消传递到数据库操作；连接和读取器及时释放。没有配置连接时进程可以启动，但授权读取报告不可用，不把故障当成空授权的成功结果。
 
@@ -46,9 +46,9 @@
 授权测试接入现有 .NET HTTP smoke，统一命令保持不变：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/verify.ps1 -Scope Core -Python 'E:\Users\Mryeh\miniconda3\python.exe'
+powershell -NoProfile -File tools/verify.ps1 -Scope Core
 ```
 
 测试覆盖双租户、双工厂、授予范围不可拼接、停用组织、同 subject 不同 issuer、匿名 / 伪造请求、撤权后新请求、故障拒绝及响应脱敏。HTTP 测试使用真实临时监听端口，身份和授权仓储由测试工程替换；它不代替 PostgreSQL 迁移执行或 Keycloak 登录联调。
 
-后续 T3 接入 Keycloak 的 OIDC / BFF 会话、迁移后的真实数据库，以及内部签名上下文；再接正式应用网关和管理写接口。
+后续 T3 完成真实 Keycloak 登录、数据库迁移与持久会话联调、租户切换及内部签名上下文；再接正式应用网关和管理写接口。

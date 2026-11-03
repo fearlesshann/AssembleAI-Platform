@@ -44,7 +44,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-T3 租户授权基础已实现；真实登录、应用注册中心和两个 AI 用例尚未接通。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 授权基础与 BFF 服务端登录接口已实现；真实 Keycloak / PostgreSQL 联调、应用注册中心和两个 AI 用例待完成。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
@@ -52,7 +52,7 @@ T3 租户授权基础已实现；真实登录、应用注册中心和两个 AI �
 
 默认首页 `/` 按用户要求恢复为 `references/ui-v1` 原始模板：Vue 直接承载模板标记，复用原始 CSS、经典脚本、品牌素材和截图；模板来源及许可继续保留。模板是运行时构建输入，不应删除。门户不加载 Element Plus 的样式，以免改变模板外观；工程验证壳层仍在 `/workspace/integration`，样例深链仍为 `/workspace/sample`，两套页面通过完整文档导航隔离。
 
-模板登录仍是页面中明确说明的本地演示：任意非空账号、密码进入样例，其浏览器标记不会认证后端请求。工作台、应用和成员数据均保留模板演示内容；真实 OIDC/BFF 与业务 API 的接入状态没有改变。
+模板登录仍是页面中明确说明的本地演示：任意非空账号、密码进入样例，其浏览器标记不会认证后端请求。工作台、应用和成员数据均保留模板演示内容；新 BFF 接口尚未接到这套模板交互。
 
 默认访问 `http://127.0.0.1:5173/`，构建预览访问 `http://127.0.0.1:4173/`。`tests/frontend/e2e/template-portal.spec.ts` 验证模板交互，原有微前端测试从 `/workspace/integration` 进入。
 
@@ -114,7 +114,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 平台运行在 `http://127.0.0.1:5100`；FastAPI 运行在 8101，启动方法见 [后端与基础设施说明](development-services.md)。生产环境不注册 `/dev/sample/*`，开发代理仅允许明确的健康与流路径，且不转发调用者的认证请求头。
 
-`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移 2 标记、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。
+`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（BFF 开启时要求 3，否则 2）、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。
 
 项目独立 Python 环境的复核命令：
 
@@ -125,7 +125,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 跨服务烟测自动启动自己的临时进程和端口，并在结束时清理。这里只验证开发代理与流传输，不宣称已完成 T3 权限或 T5 正式应用网关。
 
-T3 授权基础已独立推进，见 [身份与权限契约](architecture/t3-authorization.md)。新增的 .NET 测试验证双租户 / 双工厂隔离、完整授权范围匹配、主体 issuer 隔离、伪造身份拒绝、撤权后重新读取、取消传播及错误响应。身份和仓储替身只在测试工程使用；正常运行的两个受保护租户接口在接通登录前返回 401。实际数据库迁移、Keycloak 登录、BFF 会话与签名上下文仍待完成，T3 未标记验收通过。
+T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC / BFF 会话](architecture/t3-bff.md)。默认不启用认证；外部配置齐全后提供登录、session、CSRF 和本地退出接口，生产使用数据库加密 ticket。测试验证双租户 / 双工厂隔离、撤权，以及真实 HTTP OIDC code / S256、签名 / 状态校验、浏览器无 token、CSRF / Origin、到期和旧 Cookie 重放。测试身份中心只存在于测试工程；实际 PostgreSQL 迁移与持久化、真实 Keycloak、租户切换和内部签名上下文仍待验收，T3 保持进行中。
 
 ## 最新验证记录（2026-11-03）
 
@@ -136,6 +136,9 @@ T3 授权基础已独立推进，见 [身份与权限契约](architecture/t3-aut
 | .NET HTTP smoke | 通过；生产禁用样例代理、请求头过滤、方法限制、SSE 分段、缺依赖 503 |
 | T3 授权领域 / HTTP / ASP.NET 策略 | 通过；租户与工厂隔离、grant 不交叉拼接、停用组织、issuer 隔离、401 / 403 / 503、响应不泄漏内部组织目录、撤权及取消 |
 | T3 PostgreSQL 迁移 2 | 8 张表、复合外键与策略版本触发器已实现并复核；尚未在真实数据库执行 |
+| T3 BFF / OIDC HTTP | 通过；code + PKCE S256、RSA JWT、issuer / audience / signature / nonce / state / correlation 拒绝、固定回调、无 token Cookie、CSRF / Origin、退出重放与八小时到期 |
+| T3 会话存储 | 内存副本、1024 容量、秒精度到期、撤销 / 续期竞争、取消与安全错误通过；PostgreSQL 迁移 3 和加密 ticket 实现待真实数据库验证 |
+| T3 本轮 Core | 通过；锁定还原、.NET 构建 0 警告 / 0 错误、HTTP smoke、Node 3 项、Python 9 项及真实 FastAPI → YARP |
 | FastAPI pytest | 9 项通过；参数边界、生产关闭演示、取消 / 断开清理、错误事件 |
 | FastAPI → YARP | 真实 HTTP 通过；中文 SSE、参数与 requestId 可传递，首段早于结束 |
 | 原生进程启动器 | `dev-backend.py --check` 通过；本机进程启动、代理连通与退出清理；无 Docker |
@@ -152,7 +155,7 @@ T3 授权基础已独立推进，见 [身份与权限契约](architecture/t3-aut
 
 ## 后续验收边界
 
-1. T3：接通真实 PostgreSQL 迁移与授权仓储、Keycloak / BFF 登录、CSRF、会话及内部签名上下文。
+1. T3：真实 PostgreSQL 迁移 / 授权仓储 / 加密会话、Keycloak 登录、租户切换及内部签名上下文；当前 OIDC 测试服务不代替实库与真实身份服务验收。
 2. T4–T8：注册与正式网关、授权应用清单、门户业务接口与完整子应用接入；模板的本地演示登录不等于真实身份认证。
 3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
 

@@ -1,6 +1,4 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using AssembleAI.Platform.Identity;
 
@@ -14,13 +12,6 @@ public static class PlatformApplication
         // Console logging works in unprivileged containers and Windows developer sessions.
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole();
-        if (builder.Environment.IsDevelopment())
-        {
-            // T2 has no login/session state. Do not read a developer's unrelated DPAPI key ring.
-            // T3 must replace this with explicit shared key persistence for authenticated sessions.
-            builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
-            builder.Services.Configure<KeyManagementOptions>(options => options.XmlRepository = new DevelopmentKeyRepository());
-        }
         builder.Services.AddProblemDetails();
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddHttpClient("readiness", client => client.Timeout = TimeSpan.FromSeconds(3))
@@ -36,11 +27,14 @@ public static class PlatformApplication
         }
 
         configure?.Invoke(builder);
+        builder.AddPlatformBff();
         var app = builder.Build();
         app.UseExceptionHandler();
+        app.UseBffSessionBoundary();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapIdentityEndpoints();
+        app.MapBffEndpoints();
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = _ => false,

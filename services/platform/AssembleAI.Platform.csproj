@@ -2,5 +2,6 @@
   <ItemGroup>
     <PackageReference Include="Yarp.ReverseProxy" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
   </ItemGroup>
 </Project>

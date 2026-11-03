@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-T1、T2 已完成：依赖锁定与独立环境、原生启动、前后端构建、8 项浏览器测试及后端检查均通过。T3 已实现租户 / 组织 / 角色数据模型、服务端授权判断和受保护的本人租户读取接口；真实登录与数据库联调仍在推进。当前使用本机进程开发。
+T1、T2 已完成：依赖锁定与独立环境、原生启动、前后端构建、8 项浏览器测试及后端检查均通过。T3 已实现授权基础和 OIDC / BFF 登录、服务端会话、CSRF 退出，完整 HTTP 协议测试与 Core 检查通过；真实 Keycloak / PostgreSQL 联调及内部签名上下文待完成。当前使用本机进程开发。
 
 - [产品与验收规格](SPEC.md)
 - [T1 实施决策与 T2 开工清单](docs/architecture/t1-decisions.md)
@@ -23,6 +23,6 @@ Vue 3 + TypeScript + Element Plus + Vite + qiankun；ASP.NET Core + YARP；独�
 
 ## 下一里程碑
 
-接通 Keycloak / BFF 登录和真实数据库授权，再推进注册、网关和门户的最小闭环。Docker 是可选部署方式；当前 .NET / FastAPI 可直接本机运行，基础服务按需连接本机或现有环境。
+完成真实 Keycloak / PostgreSQL 联调与内部可信上下文，再推进注册、网关和门户的最小闭环。[BFF 接口与原生配置](docs/architecture/t3-bff.md) 已提供；首页仍为演示登录。Docker 是可选部署方式，开发使用本机进程。
 
 `references/ui-v1` 中的模拟登录、模拟数据和占位测试不属于正式平台实现。该目录保留来源仓库的 LICENSE；源码未改写。

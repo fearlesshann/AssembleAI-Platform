@@ -56,7 +56,8 @@ internal sealed class DependencyReadinessCheck(
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
-            "SELECT EXISTS (SELECT 1 FROM public.platform_schema_migrations WHERE version = 2)", connection);
+            "SELECT EXISTS (SELECT 1 FROM public.platform_schema_migrations WHERE version = $1)", connection);
+        command.Parameters.AddWithValue(configuration.GetValue<bool>("Authentication:Bff:Enabled") ? 3 : 2);
         if (await command.ExecuteScalarAsync(cancellationToken) is not true)
             throw new IOException("Platform migration has not been applied.");
     }

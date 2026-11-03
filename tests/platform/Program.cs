@@ -101,6 +101,8 @@ try
     }
     Console.WriteLine("PASS: liveness, fail-closed readiness, exact sample routes, identity-header removal, incremental SSE and production isolation.");
     await AuthorizationTests.RunAsync();
+    await TicketStoreTests.RunAsync();
+    await BffTests.RunAsync();
 }
 finally
 {
