@@ -1,8 +1,11 @@
 import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { fileURLToPath } from 'node:url';
+import { frontendArtifactEntry } from '../../../tools/frontend-artifacts.mjs';
 
-const base = '/apps/sample/0.1.0/';
+const appId = process.env.ASSEMBLEAI_APP_ID ?? 'sample';
+const version = process.env.ASSEMBLEAI_FRONTEND_VERSION ?? '0.1.0';
+const base = frontendArtifactEntry(appId, version);
 function htmlEntry(): Plugin {
   return {
     name: 'sample-html-entry',
@@ -15,10 +18,12 @@ function htmlEntry(): Plugin {
 }
 export default defineConfig({
   base, plugins: [vue(), htmlEntry()],
-  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  define: { 'process.env.NODE_ENV': JSON.stringify('production'),
+    __ASSEMBLEAI_APP_ID__: JSON.stringify(appId), __ASSEMBLEAI_FRONTEND_VERSION__: JSON.stringify(version) },
   build: {
     target: 'es2022', cssCodeSplit: false,
-    lib: { entry: fileURLToPath(new URL('./src/main.ts', import.meta.url)), name: 'AssembleAISample', formats: ['umd'], fileName: () => 'sample.umd.js', cssFileName: 'sample' },
+    lib: { entry: fileURLToPath(new URL('./src/main.ts', import.meta.url)), name: `AssembleAI_${appId.replaceAll('-', '_')}`,
+      formats: ['umd'], fileName: () => 'sample.umd.js', cssFileName: 'sample' },
     rollupOptions: { output: { inlineDynamicImports: true } },
   },
 });

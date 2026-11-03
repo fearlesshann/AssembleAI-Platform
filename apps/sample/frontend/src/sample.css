@@ -93,6 +93,19 @@
   padding:0 0 28px
 }
 
+.sample-access,.sample-protected {
+  border-bottom:1px solid var(--sample-line);
+  margin-bottom:24px;
+  padding-bottom:24px
+}
+
+.sample-app a { color:var(--sample-ink); text-underline-offset:3px }
+.sample-app select { font:inherit; color:var(--sample-ink); background:var(--sample-panel); border:1px solid var(--sample-line); border-radius:4px; padding:6px; max-width:240px }
+.sample-app button:disabled { cursor:default; opacity:.55 }
+.sample-app .sample-controls { flex-wrap:wrap }
+.sample-result { overflow:auto; max-height:240px; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; background:var(--sample-panel); border:1px solid var(--sample-line) }
+.sample-deltas { padding-left:22px; overflow-wrap:anywhere }
+
 .sample-controls {
   display:flex;
   align-items:center;

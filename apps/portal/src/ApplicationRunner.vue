@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { loadMicroApp, type MicroApp } from 'qiankun';
 import ElButton from 'element-plus/es/components/button/index';
+import { createApplicationClient, type ApplicationClient } from '@assembleai/app-sdk';
 import type { PortalRun, Theme } from './portal-api';
 import { portalRuntimeLifecycle, portalRuntimeNeedsRestart, restartPortalRuntime } from './portal-runtime';
 
@@ -16,9 +17,11 @@ let enteredMount = false;
 let disposed = false;
 let loadTimer: number | undefined;
 let leaseTimer: number | undefined;
+let client: ApplicationClient | undefined;
 const context = () => ({ appId: props.run.appId, releaseVersion: props.run.releaseVersion, theme: props.theme, mode: 'embedded' as const });
 
 async function cleanup() {
+  client?.dispose();
   if (portalRuntimeNeedsRestart()) return;
   const current = parcel;
   parcel = undefined;
@@ -50,15 +53,17 @@ onMounted(() => {
       if (disposed) return;
       failure.value = '本次运行已到期，请返回应用详情重新打开。';
       resources.abort();
+      client?.dispose();
       void portalRuntimeLifecycle.run(cleanup);
     }, remaining);
     loadTimer = window.setTimeout(() => resources.abort(), 15_000);
     try {
       await nextTick();
       if (!host.value || disposed) return;
+      client = createApplicationClient(run);
       parcel = loadMicroApp({
         name: `assembleai-${run.appId}-${run.runId}`, entry, container: host.value,
-        props: { context: context() },
+        props: { context: context(), api: client.api },
       }, {
         sandbox: { experimentalStyleIsolation: true }, singular: false,
         fetch: (input, init) => {
@@ -78,17 +83,24 @@ onMounted(() => {
       window.clearTimeout(loadTimer);
       loading.value = false;
     }
-  }).catch(() => { if (!disposed) { loading.value = false; failure.value = '应用切换失败，请重新加载页面后再试。'; } });
+  }).catch(() => {
+    client?.dispose(); resources.abort();
+    if (!disposed) { loading.value = false; failure.value = '应用切换失败，请重新加载页面后再试。'; }
+  });
 });
 
 watch(() => props.theme, () => {
   void portalRuntimeLifecycle.run(async () => {
-    if (!disposed && parcel?.update) await parcel.update({ context: context() });
-  }).catch(() => { if (!disposed) failure.value = '应用外观更新失败，请返回详情重新打开。'; });
+    if (!disposed && parcel?.update) await parcel.update({ context: context(), api: client?.api });
+  }).catch(() => {
+    client?.dispose(); resources.abort();
+    if (!disposed) failure.value = '应用外观更新失败，请返回详情重新打开。';
+  });
 });
 
 onBeforeUnmount(() => {
   disposed = true;
+  client?.dispose();
   resources.abort();
   window.clearTimeout(loadTimer);
   window.clearTimeout(leaseTimer);

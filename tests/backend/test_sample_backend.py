@@ -10,7 +10,7 @@ def test_production_has_health_but_no_demo_or_docs():
     with TestClient(create_app("Production")) as client:
         assert client.get("/health/live").json()["status"] == "live"
         assert client.get("/health/ready").json() == {
-            "status": "ready", "service": "sample", "dependencies": []
+            "status": "healthy", "service": "sample", "version": "0.1.0", "protocolVersion": 1
         }
         for path in ("/stream", "/docs", "/openapi.json"):
             assert client.get(path).status_code == 404

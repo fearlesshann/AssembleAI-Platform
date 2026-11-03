@@ -242,3 +242,77 @@ test('a rejected unmount resets the document before another application can moun
   await expect(page.getByText('卸载回归应用已挂载', { exact: true })).toBeVisible();
   expect(state.runCalls).toBe(2);
 });
+
+async function retainedApiFixture(page: Page, hangingMount: boolean) {
+  await fixture(page);
+  let gatewayCalls = 0;
+  const reports: { code: string }[] = [];
+  await page.exposeBinding('reportRetainedApi', (_source, result: { code: string }) => { reports.push(result); });
+  await page.addInitScript(() => {
+    document.addEventListener('assembleai:retained-api-result', (event) => {
+      const report = (window as unknown as { reportRetainedApi: (result: { code: string }) => Promise<void> }).reportRetainedApi;
+      void report((event as CustomEvent<{ code: string }>).detail);
+    });
+  });
+  await page.route('**/api/apps/sample/releases/1.0.0/probe', route => { gatewayCalls++; return route.fulfill({ json: { ok: true } }); });
+  await page.route('**/apps/sample/0.1.0/', route => route.fulfill({ contentType: 'text/html', body: '<div id="sample-root"></div><script src="/apps/sample/0.1.0/retained-api.js" entry></script>' }));
+  await page.route('**/apps/sample/0.1.0/retained-api.js', route => route.fulfill({ contentType: 'text/javascript', body: `
+    window.assembleaiRetainedApiFixture={
+      bootstrap:function(){return Promise.resolve()},
+      mount:function(props){
+        var api=props.api;
+        document.addEventListener('assembleai:probe-retained-api',function(){
+          Promise.resolve().then(function(){return api.json('probe')})
+            .then(function(){document.dispatchEvent(new CustomEvent('assembleai:retained-api-result',{detail:{code:'success'}}))})
+            .catch(function(error){document.dispatchEvent(new CustomEvent('assembleai:retained-api-result',{detail:{code:error.code||'unexpected'}}))});
+        });
+        props.container.querySelector('#sample-root').textContent='能力回归应用已挂载';
+        return ${hangingMount ? 'new Promise(function(){})' : 'Promise.resolve()'};
+      },
+      update:function(){return Promise.reject(new Error('fixture update failed'))},
+      unmount:function(){return Promise.resolve()}
+    };` }));
+  await page.goto('/applications/sample');
+  await page.getByRole('button', { name: '打开应用', exact: true }).click();
+  await expect(page.getByText('能力回归应用已挂载', { exact: true })).toBeVisible();
+  const probe = async () => {
+    const before = reports.length;
+    await page.evaluate(() => document.dispatchEvent(new CustomEvent('assembleai:probe-retained-api')));
+    await expect.poll(() => reports.length).toBe(before + 1);
+    return reports.at(-1);
+  };
+  expect(await probe()).toEqual({ code: 'success' });
+  expect(gatewayCalls).toBe(1);
+  return { probe, reports, calls: () => gatewayCalls };
+}
+
+test('T7: rejected theme update disposes the retained API without another gateway request', async ({ page }) => {
+  const capability = await retainedApiFixture(page, false);
+  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await expect(page.getByRole('alert').first()).toContainText('应用外观更新失败');
+  expect(await capability.probe()).toEqual({ code: 'disposed' });
+  expect(capability.calls()).toBe(1);
+});
+
+test('T7: hanging mount disposes the retained API while document replacement is delayed', async ({ page }) => {
+  const capability = await retainedApiFixture(page, true);
+  let navigationStarted = false;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/applications/sample?runError=timeout', async route => {
+    navigationStarted = true; await gate;
+    try { await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Lifecycle test cleanup</title>' }); } catch { /* Test cleanup can close the original document. */ }
+  });
+  try {
+    // Install the trigger before navigation starts; issuing a fresh evaluation
+    // during pending document replacement can itself wait for that navigation.
+    await page.evaluate(() => { window.setTimeout(() => document.dispatchEvent(new CustomEvent('assembleai:probe-retained-api')), 16_000); });
+    await expect.poll(() => navigationStarted, { timeout: 22000 }).toBe(true);
+    await expect.poll(() => capability.reports.length, { timeout: 6000 }).toBe(2);
+    expect(capability.reports.at(-1)).toEqual({ code: 'disposed' });
+    expect(capability.calls()).toBe(1);
+  } finally {
+    const replaced = page.waitForEvent('domcontentloaded', { timeout: 5000 });
+    release(); await replaced;
+  }
+});

@@ -66,6 +66,7 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 - 注册测试使用 OIDC 协议登录和实际 HTTP API，覆盖所有者 / 独立审核、Manifest 负例、租户授权与撤权、状态转换、并发 CAS、版本回滚、发布后不可变及审计失败回滚。
 - 目录测试验证服务端选中租户、全部入口授权、发布启用与可信部署过滤、隐藏分类隔离、5 字段 DTO、实时撤权 / 版本切换、500 项完整成功与 501 项明确 503；目录准入与网关对照。
 - `--portal-browser` 在测试 host 提供真实构建静态页面，通过 Chromium 实际 OIDC 登录、选择租户、读取 PG 清单 / 详情、主题 / 390px 检查与退出，不拦截 API；不指定时明确跳过该浏览器项。原生启动器会解析 Node 绝对路径后再隔离 PATH，仍不下载依赖。
+- `--application-browser` 在本次临时目录从同一模板构建 sample / sample-clone 两个独立发布物，计算真实摘要并经注册 / 独立审核 / 租户启用；启动正式 Node 预览、BFF / YARP 和真实 uvicorn，经平台内部验证查询当前 PG 授权。验证 JSON / SSE 首段 / 取消、消费端撤权 / 启停、独立深链、同文档重挂与刷新不自动创建运行；不拦截 API。可与 portal-browser 同时使用；需已构建门户、锁定 Python 环境及浏览器依赖，可用 ASSEMBLEAI_NODE / ASSEMBLEAI_PYTHON 显式指定可执行文件。
 - 网关仓储验证会话哈希绑定、全部入口权限、租约到期 / 排空、版本来回切换不延长、停用后不复活、并发容量及调用审计故障。
 - `PostgresGatewayFlowTests` 不替换生产网关或 PG 仓储，串联 OIDC 协议服务、开发内存 BFF 会话、真实注册 / 授权 / 租约 / 审计数据库及仅公钥 HTTP 下游；验证签名 JSON、SSE 首段与完成、持久化结果，以及数据库撤权或注册停用取消在途流。
 - readiness 的 PostgreSQL 子检查在 `RequireVector=false` 时为 `ready`、为 true 时为 `unavailable`；由于其他依赖未配置，整体 HTTP 状态在两种情况下都保持 503。

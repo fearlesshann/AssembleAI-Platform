@@ -5,6 +5,7 @@ public sealed class InternalCallOptions
 {
     public const string SectionName = "InternalCalls";
     public bool Enabled { get; set; }
+    public bool ValidationEndpointEnabled { get; set; }
     public string Issuer { get; set; } = "";
     public string SigningCertificatePath { get; set; } = "";
     public string SigningCertificatePassword { get; set; } = "";
@@ -12,7 +13,7 @@ public sealed class InternalCallOptions
 
     public void Validate(bool development)
     {
-        if (!Enabled) return;
+        if (!Enabled) { if (ValidationEndpointEnabled) throw InvalidConfiguration(); return; }
         if (string.IsNullOrWhiteSpace(Issuer) || Issuer != Issuer.Trim() || Issuer.Any(char.IsControl)
             || Issuer.Contains('\\') || !Uri.TryCreate(Issuer, UriKind.Absolute, out var issuer)
             || issuer.UserInfo.Length > 0 || issuer.Query.Length > 0 || issuer.Fragment.Length > 0

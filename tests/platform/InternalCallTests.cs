@@ -229,6 +229,8 @@ public static class InternalCallTests
         try
         {
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+            using (var validation = await client.PostAsync("/internal/calls/validate", null))
+                Assert(validation.StatusCode == HttpStatusCode.NotFound, "Remote application validation must remain opt-in even when signing is enabled.");
             using var response = await client.GetAsync("/.well-known/assembleai-jwks.json");
             Assert(response.StatusCode == HttpStatusCode.OK && response.Headers.CacheControl?.NoStore == true,
                 "The configured public JWKS endpoint must respond with no-store.");

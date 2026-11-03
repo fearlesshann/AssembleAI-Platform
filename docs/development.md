@@ -207,3 +207,17 @@ T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部�
 最终 `tools/verify-postgres.py --portal-browser` 返回 0；记录 `.artifacts/postgres/run-6e31c712c5fc469f89c3251ab8fe7dd3/result.json` 的 passed / cleanupComplete / portalBrowserRequested 均 true。真实目录 HTTP 验证完整权限、隐藏类别、跨租户、停用 / 撤权 / 版本一致性、500 / 501 容量边界；Chromium 实际完成 OIDC → BFF → PG 清单 / 详情、主题、窄屏与退出，不拦截 API。T3–T5 数据库与签名网关组合也全部回归；临时数据库和凭据清理完成。
 
 浅色清单、暗色详情和窄屏截图位于 `.artifacts/portal-postgres/9c8169a2-b6df-4cf4-ae49-9214e6568132/`。已检查信息层级、主题、品牌标识及无水平溢出；独立权限与生命周期复核均无阻塞问题。本轮使用 OidcFixture / 开发内存会话，原生 Keycloak 和 PG 密文会话的独立验收继续保留；完整子应用请求 SDK 在 T7，生产拓扑在 T14，不把参考样例当成制造业 AI 用例完成。
+
+## T7 子应用模板验收 · 2026-11-03
+
+[子应用接入契约](architecture/application-template.md) 已交付：固定运行 SDK、JSON / 有界 SSE、取消 / dispose，独立页面同源 BFF 显式连接，FastAPI 远程复用平台签名 / 最新授权验证，以及按真实 SHA256 启动核验的版本化静态快照。样例使用入口权限与只读探针，实际制造业数据权限继续由后续业务实现。
+
+最终 Core 返回 0：34 项 Node、锁定 .NET 还原、构建 0 警告 / 0 错误、完整身份 / 注册 / 网关 / 目录回归及新增内部验证 HTTP 边界、51 项 Python 和原有真实 FastAPI → YARP。内部验证覆盖签名篡改、目标 / requestId、版本撤销、启停、故障拒绝、默认关闭以及最后状态查询跨过 token 到期；Python 使用真实 loopback 验证服务与 uvicorn 流，覆盖超时、重定向拒绝、严格响应、周期撤权与检查中断连。httpx 通过 uv 正式从开发依赖移到运行依赖，锁定版本与现有哈希保持；uv lock / check / sync --offline 均通过。
+
+最终 Frontend 返回 0：34 项 Node、vue-tsc、两项 Vite 构建、23 项浏览器回归。新增用例先复现主题 update 拒绝与 mount 挂起期间保留 api 仍能请求，再验证失败时立即 dispose，延迟整页恢复期间也不发新网关请求；SDK 还覆盖同 chunk 的 delta 后取消不能输出缓存 complete。最终版本类型防护也经 Node / 类型检查 / 构建 / 浏览器验证。已有 Element Plus 工程分块体积、httpx 弃用及终端颜色提示仍不影响结果。
+
+最终 `tools/verify-postgres.py --portal-browser --application-browser` 返回 0，记录 `.artifacts/postgres/run-97be21fdd868416487cafe7071de438d/result.json` 的 passed / cleanupComplete / portalBrowserRequested / applicationBrowserRequested 均 true。迁移 1–5 与 T3–T6 实库全部回归；本次临时目录从同一模板构建 sample / sample-clone 两份真实发布物，经真实注册 / 独立审核 / 租户启用，前端版本 / 发布组合版本 / 后端版本分别验证。Chromium 经正式 Node 预览 → OIDC / BFF → YARP → uvicorn → 平台验证 → PG，覆盖独立深链 / 嵌入、JSON / SSE 首段 / 完成 / 取消、同文档跨应用重挂、刷新不自动新建运行、退出清理与无浏览器 Bearer；消费端直接使用真实签名凭据验证数据库撤权、租户 / 全局停用。
+
+首轮组合的取消测试曾在短流结束后才完成按钮稳定等待，失败记录 `.artifacts/postgres/run-4beac675c8364e199e5eb49a688554c5`，清理成功。改为真实首段 DOM 更新时同步点击取消，不拦截网络或改变生产流时间，最终组合通过。已看过独立 / 嵌入截图，最终截图位于 `.artifacts/application-postgres/be0d90ff-9bdf-4be1-9d42-20912165f776/`；技术模板以调用结果和明确状态为主。
+
+两个独立复核覆盖 SDK / 生命周期 / 平台验证，以及静态发布物 / Python / 联合夹具，修正与回归见 SPEC B38–B47，无剩余阻塞。组合仍使用 OidcFixture 与开发内存会话；真实 Keycloak、PG 加密会话已有独立验收，未在本轮声称生产 HTTPS / 完整多副本 / Docker 已验证。T7 完成，下一任务为 T8 注册与生命周期管理界面。

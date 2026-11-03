@@ -74,6 +74,11 @@ public static class PostgresIntegrationTests
             await PostgresGatewayStoreTests.RunAsync(connectionString);
             phase = "production gateway PostgreSQL and signed HTTP chain";
             await PostgresGatewayFlowTests.RunAsync(connectionString, runDirectory);
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_APPLICATION_BROWSER_TESTS") == "1")
+            {
+                phase = "application template PostgreSQL/Python/browser chain";
+                await PostgresApplicationTests.RunAsync(connectionString, runDirectory);
+            }
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");
             await VerifyReadiness(connectionString, requireVector: true, "unavailable");

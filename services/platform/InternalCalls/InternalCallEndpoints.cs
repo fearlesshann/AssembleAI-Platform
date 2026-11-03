@@ -15,6 +15,8 @@ public static class InternalCallEndpoints
         builder.Services.AddSingleton(_ => keys);
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<InternalCallTokenService>();
+        if (options.ValidationEndpointEnabled)
+            builder.Services.TryAddSingleton<IApplicationCallStore, PostgresApplicationCallStore>();
         return builder;
     }
 
@@ -27,6 +29,8 @@ public static class InternalCallEndpoints
             context.Response.Headers.CacheControl = "no-store";
             return Results.Text(keys.GetJwksJson(), "application/json");
         }).AllowAnonymous();
+        if (app.Services.GetRequiredService<InternalCallOptions>().ValidationEndpointEnabled)
+            app.MapPost("/internal/calls/validate", ApplicationCallValidation.Handle).AllowAnonymous();
         return app;
     }
 }

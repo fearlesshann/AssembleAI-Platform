@@ -164,3 +164,17 @@ test('T6: browser protocol upgrades never reach the platform', { timeout: 10000 
   assert.equal(status, 400);
   assert.equal(reached, false);
 });
+
+test('T7: preview library ignores inherited deployment config and rejects conflicting explicit sources', () => {
+  const prior = process.env.ASSEMBLEAI_FRONTEND_ARTIFACTS;
+  process.env.ASSEMBLEAI_FRONTEND_ARTIFACTS = 'not-a-file-do-not-use-for-fixed-preview-tests.json';
+  try {
+    assert.doesNotThrow(() => preview());
+    assert.throws(() => previewServer({ portalRoot: 'apps/portal/dist', sampleRoot: 'apps/sample/frontend/dist',
+      frontendArtifactsPath: process.env.ASSEMBLEAI_FRONTEND_ARTIFACTS }), /artifact/i);
+    assert.throws(() => previewServer({ portalRoot: 'apps/portal/dist', frontendArtifacts: {}, frontendArtifactsPath: 'unused' }), /one frontend artifact/i);
+  } finally {
+    if (prior === undefined) delete process.env.ASSEMBLEAI_FRONTEND_ARTIFACTS;
+    else process.env.ASSEMBLEAI_FRONTEND_ARTIFACTS = prior;
+  }
+});
