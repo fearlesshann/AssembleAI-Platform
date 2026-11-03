@@ -1,0 +1,82 @@
+.registry-workspace { font-size: 13px; }
+.registry-layout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 32px; align-items: start; }
+.registry-index { min-width: 0; padding-right: 22px; border-right: 1px solid var(--portal-line); }
+.registry-index-heading, .registry-section-heading, .registry-app-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; }
+.registry-index-heading { align-items: center; margin-bottom: 18px; }
+.registry-index h2 { font-size: 14px; font-weight: 600; }
+.registry-index h2 span { color: var(--portal-muted); font-weight: 400; margin-left: 8px; }
+.registry-app-list { list-style: none; padding: 0; margin: 16px 0 0; }
+.registry-app-list a { display: flex; flex-direction: column; gap: 6px; padding: 13px 10px; border-radius: 5px; overflow-wrap: anywhere; }
+.registry-app-list a:hover { background: var(--portal-panel); }
+.registry-app-list a[aria-current=page] { background: var(--portal-raised); }
+.registry-app-list strong { font-size: 13px; font-weight: 550; }
+.registry-app-list span, .registry-app-list small, .registry-index-note, .registry-muted, .registry-help { color: var(--portal-muted); }
+.registry-app-list span { font-size: 12px; }
+.registry-app-list small { font-size: 11px; }
+.registry-index-note { font-size: 11px; line-height: 1.8; margin-top: 22px; }
+.registry-detail { min-width: 0; }
+.registry-intro { max-width: 620px; padding: 40px 12px; }
+.registry-intro h2 { font-size: 19px; margin-bottom: 14px; }
+.registry-intro p { margin: 10px 0; color: var(--portal-muted); line-height: 1.9; }
+.registry-app-heading { padding: 0 0 26px; }
+.registry-app-heading p { color: var(--portal-muted); font-size: 12px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.registry-app-heading h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+.registry-app-heading span { color: var(--portal-muted); font-size: 12px; }
+.registry-section { padding: 24px 0 28px; border-top: 1px solid var(--portal-line); }
+.registry-section-heading { margin-bottom: 21px; }
+.registry-section-heading h3, .registry-form legend { font-size: 14px; font-weight: 600; }
+.registry-section-heading h2 { font-size: 19px; font-weight: 600; }
+.registry-section-heading p { color: var(--portal-muted); font-size: 12px; line-height: 1.8; margin-top: 7px; max-width: 65ch; }
+.registry-version-picker, .registry-tenant-controls label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.registry-version-picker { min-width: 145px; }
+.registry-workspace select, .registry-form input, .registry-form textarea { min-width: 0; width: 100%; border: 1px solid var(--portal-line); color: var(--portal-ink); background: var(--portal-page); border-radius: 6px; padding: 8px 10px; font: inherit; line-height: 1.5; }
+.registry-workspace select { min-height: 35px; }
+.registry-workspace select:disabled, .registry-form input:disabled, .registry-form input:read-only, .registry-form textarea:disabled { background: var(--portal-panel); color: var(--portal-muted); }
+.registry-form textarea { resize: vertical; }
+.registry-workspace textarea:focus-visible, .registry-workspace summary:focus-visible { outline: 2px solid var(--portal-brand); outline-offset: 3px; }
+.registry-release-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; line-height: 1.8; }
+.registry-status { font-size: 11px; padding: 2px 8px; background: var(--portal-raised); border-radius: 4px; }
+.registry-status[data-status=published] { color: var(--portal-brand); background: var(--el-color-primary-light-9); }
+.registry-status[data-status=disabled] { color: var(--portal-error); background: var(--portal-error-bg); }
+.registry-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.registry-actions .el-button + .el-button, .registry-tenant-controls .el-button + .el-button { margin-left: 0; }
+.registry-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; margin: 24px 0; }
+.registry-facts dt, .registry-deployment dt { color: var(--portal-muted); font-size: 12px; margin-bottom: 7px; }
+.registry-facts dd, .registry-deployment dd { margin: 0; overflow-wrap: anywhere; line-height: 1.7; }
+.registry-deployment { font-size: 12px; }
+.registry-deployment summary { cursor: pointer; color: var(--portal-muted); width: fit-content; padding: 5px 0; }
+.registry-deployment dl { margin: 16px 0 0; display: grid; gap: 15px; }
+.registry-workspace code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; }
+.registry-tenant-current { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 20px; }
+.registry-tenant-current strong { font-weight: 550; }
+.registry-tenant-current span { color: var(--portal-muted); }
+.registry-tenant-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.registry-tenant-controls label { min-width: 180px; }
+.registry-help, .registry-empty { font-size: 12px; line-height: 1.8; }
+.registry-empty { color: var(--portal-muted); margin: 22px 0; }
+.registry-audit-scroll { overflow-x: auto; }
+.registry-audit-scroll table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; text-align: left; }
+.registry-audit-scroll th { color: var(--portal-muted); font-weight: 500; padding: 10px 10px 10px 0; border-bottom: 1px solid var(--portal-line); }
+.registry-audit-scroll td { padding: 14px 10px 14px 0; vertical-align: top; border-bottom: 1px solid var(--portal-line); overflow-wrap: anywhere; line-height: 1.7; }
+.registry-audit-scroll small, .registry-audit-scroll td > code { display: block; color: var(--portal-muted); margin-top: 5px; font-size: 11px; }
+.registry-form fieldset { border: 0; padding: 0; margin: 0 0 26px; min-width: 0; }
+.registry-form legend { padding: 0; margin-bottom: 17px; }
+.registry-form fieldset > .registry-help { margin: -8px 0 15px; }
+.registry-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 22px; }
+.registry-field-grid label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.registry-field-wide { grid-column: 1 / -1; }
+.registry-entry { overflow-wrap: anywhere; margin-top: 14px; }
+.registry-form-footer { border-top: 1px solid var(--portal-line); display: flex; gap: 15px; align-items: center; justify-content: space-between; padding: 20px 0; }
+.registry-form-footer span { font-size: 12px; color: var(--portal-muted); }
+.registry-error { display: flex; gap: 15px; align-items: center; justify-content: space-between; color: var(--portal-error); background: var(--portal-error-bg); border: 1px solid currentColor; border-radius: 6px; padding: 12px 14px; line-height: 1.8; margin-bottom: 22px; }
+.registry-notice { color: var(--portal-ink); background: var(--portal-panel); padding: 12px 14px; border-radius: 6px; margin-bottom: 22px; line-height: 1.8; }
+.registry-loading { color: var(--portal-muted); font-size: 12px; padding: 20px 0; }
+.registry-loading i { display: block; height: 42px; margin-top: 14px; border-radius: 4px; background: var(--portal-raised); }
+.registry-confirm { width: min(460px, calc(100vw - 36px)); padding: 26px; color: var(--portal-ink); background: var(--portal-page); border: 1px solid var(--portal-line); border-radius: 8px; }
+.registry-confirm::backdrop { background: rgb(0 0 0 / 45%); }
+.registry-confirm h2 { font-size: 18px; font-weight: 600; margin-bottom: 15px; }
+.registry-confirm p { font-size: 13px; line-height: 1.9; color: var(--portal-muted); }
+.registry-confirm > div { display: flex; justify-content: end; gap: 10px; margin-top: 24px; }
+@media (max-width: 1100px) { .registry-layout { grid-template-columns: 200px minmax(0, 1fr); gap: 24px; } .registry-section-heading { flex-wrap: wrap; } }
+@media (max-width: 760px) { .registry-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; } .registry-index { border-right: 0; border-bottom: 1px solid var(--portal-line); padding: 0 0 20px; } .registry-app-list { max-height: 230px; overflow-y: auto; } .registry-field-grid, .registry-facts { grid-template-columns: minmax(0, 1fr); } .registry-field-wide { grid-column: auto; } .registry-form-footer, .registry-error { flex-direction: column; align-items: stretch; } .registry-audit-scroll table { min-width: 540px; } }
+@media (prefers-reduced-motion: reduce) { .registry-workspace *, .registry-workspace *::before, .registry-workspace *::after { transition: none !important; animation: none !important; } }

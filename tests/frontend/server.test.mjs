@@ -28,6 +28,9 @@ test('V2/V19: release assets, deep links and source isolation', async (t) => {
   assert.match(await (await fetch(`${base}/workspace/sample/details`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/applications/quality`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/applications/quality/run`)).text(), /Portal/);
+  assert.match(await (await fetch(`${base}/manage/applications`)).text(), /Portal/);
+  assert.match(await (await fetch(`${base}/manage/applications/quality`)).text(), /Portal/);
+  assert.equal((await fetch(`${base}/manage/applications/quality/missing.js`)).status, 404);
   assert.match(await (await fetch(`${base}/reference-ui/`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/apps/sample/0.1.0/details`)).text(), /Sample/);
   const css = await fetch(`${base}/apps/sample/0.1.0/sample.css`);

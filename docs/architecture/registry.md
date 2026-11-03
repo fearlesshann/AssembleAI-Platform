@@ -2,7 +2,7 @@
 
 注册控制面保存应用所有者、不可变发布组合、独立租户启用关系和操作审计。管理 API 已接入现有 OIDC / BFF；数据库执行迁移 4 后可用。所有部署配置默认为空，不预置应用、管理员或租户授权。
 
-本阶段提供注册与管理接口。[T6 门户](portal.md) 已提供授权清单和应用入口，管理界面归 T8；应用代理、运行授权、旧版本排空与流取消已在 [T5 网关](gateway.md) 落实。`available` 是当前发布 / 租户启用状态的派生值，不是下游健康状态，也不代表用户已获得业务权限。
+本阶段提供注册与管理接口。[T6 门户](portal.md) 提供授权清单和应用入口，[T8 管理工作区](registry-management.md) 提供注册、审核、租户版本与操作记录；应用代理、运行授权、旧版本排空与流取消已在 [T5 网关](gateway.md) 落实。`available` 是当前发布 / 租户启用状态的派生值，不是下游健康状态，也不代表用户已获得业务权限。
 
 ## 发布记录与受控部署
 
@@ -69,7 +69,7 @@ stateDiagram-v2
 
 | 方法 / 后缀 | 请求 / 响应 |
 | --- | --- |
-| GET 空后缀 | `{items:[release...]}`；按版本字符串 C 顺序返回最多 100 条，不是语义版本排序；已知版本可单独读取 |
+| GET 空后缀 | `{items:[release...]}`；按版本字符串 C 顺序返回完整列表，最多 100 条，超限 503；不是语义版本排序；已知版本可单独读取 |
 | GET `/{version}` | `{manifest,revision,ownerUserId,submittedBy,publishedAt}` |
 | PUT `/{version}` | `{expectedRevision,manifest}`；manifest.appId / version 与路径完全一致 |
 | POST `/{version}/transitions` | `{expectedRevision,action}`；action 为 submit / reject / publish / disable / enable |
@@ -85,7 +85,9 @@ stateDiagram-v2
 
 新建时 expectedRevision=0，返回 revision=1；更新要求精确匹配当前 revision，成功递增 1。状态不允许或 revision 不符返回 409，客户端应重新读取后再决定操作。重放同一命令不会重复提交，不能将冲突响应视为成功。后端通过同一 appId 的事务 advisory lock 串行处理发布和租户指针变更，业务变更与审计在同一个 PostgreSQL 事务提交。
 
-所有接口响应 no-store。未登录 401；权限、Origin / CSRF 或选中租户不符 403；允许读取但记录不存在 404；非法状态 / 版本冲突 409；请求、Manifest 或部署匹配错误 400；正文过大 413；非 JSON 415；存储故障 503。错误只给稳定 code，不返回 SQL、连接串、部署目标或 Token。
+所有接口响应 no-store / nosniff，禁止未声明 query。未登录 401；权限、Origin / CSRF 或选中租户不符 403；允许读取但记录不存在 404；非法状态 / 版本冲突 409；请求、Manifest 或部署匹配错误 400；正文过大 413；非 JSON 415；存储故障或容量超限 503。错误只给稳定 code，不返回 SQL、连接串、部署目标或 Token。
+
+T8 补充 3 秒整体预算和活跃 BFF 会话检查：全局接口允许未选租户；租户接口仍要求当前选择一致。读请求返回前再次复核；写请求读取完正文后、进入仓储前再次复核，操作主体来自同次捕获的会话。不宣称会话存储与注册事务具备跨存储原子性。
 
 ## 审计及数据库约束
 

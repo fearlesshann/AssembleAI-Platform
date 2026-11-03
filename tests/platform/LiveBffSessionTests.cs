@@ -42,6 +42,21 @@ public static class LiveBffSessionTests
         using var unauthenticated = Services(store, clock, new CachedCookieAuthentication(store, "missing"));
         Assert(await LiveBffSession.CaptureAsync(Context(unauthenticated), tenant) is null,
             "A missing stored ticket cannot establish a live BFF session.");
+        Assert(await LiveBffSession.CaptureIdentityAsync(Context(missingFeature)) is null,
+            "Global control-plane access still requires a real session-store reference.");
+        var globalKey = await store.StoreAsync(Ticket(null, expiry));
+        using var globalServices = Services(store, clock, new CachedCookieAuthentication(store, globalKey));
+        var globalContext = Context(globalServices);
+        var global = await LiveBffSession.CaptureIdentityAsync(globalContext);
+        Assert(global is not null && await global.CheckAsync(), "A global actor does not need a selected tenant.");
+        Assert(await LiveBffSession.CaptureAsync(globalContext, tenant) is null
+            && await LiveBffSession.CaptureAsync(globalContext, Guid.Empty) is null,
+            "Global identity does not imply a tenant selection.");
+        await store.RenewAsync(globalKey, Ticket(tenant, expiry));
+        Assert(!await global!.CheckAsync(), "An in-request tenant selection change invalidates the captured global snapshot.");
+        await store.RemoveAsync(globalKey);
+        Assert(await LiveBffSession.CaptureIdentityAsync(globalContext) is null,
+            "Global capture cannot recover a logged-out cached principal.");
 
         using var validServices = Services(store, clock, new CachedCookieAuthentication(store, otherKey));
         var validContext = Context(validServices);
@@ -69,9 +84,9 @@ public static class LiveBffSessionTests
         return services.BuildServiceProvider();
     }
     private static DefaultHttpContext Context(IServiceProvider services) => new() { RequestServices = services };
-    private static AuthenticationTicket Ticket(Guid tenant, DateTimeOffset expires, string subject = "alice") => new(
+    private static AuthenticationTicket Ticket(Guid? tenant, DateTimeOffset expires, string subject = "alice") => new(
         new ClaimsPrincipal(new ClaimsIdentity([new("iss", "https://identity.example.test"), new("sub", subject)], BffAuthentication.CookieScheme)),
-        new AuthenticationProperties(new Dictionary<string, string?> { [".assembleai.tenant"] = tenant.ToString("D") }) { ExpiresUtc = expires },
+        new AuthenticationProperties(new Dictionary<string, string?> { [".assembleai.tenant"] = tenant?.ToString("D") }) { ExpiresUtc = expires },
         BffAuthentication.CookieScheme);
     private static async Task ExpectCancellation(Func<Task> action)
     {

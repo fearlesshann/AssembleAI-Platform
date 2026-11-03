@@ -19,6 +19,9 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 # 另需门户构建产物、已安装的锁定前端依赖与 Chromium：真实浏览器登录 / 目录链
 & '.\apps\sample\backend\.venv\Scripts\python.exe' tools/verify-postgres.py --portal-browser
+
+# 组合门户、真实子应用与三账号注册管理浏览器验收
+& '.\apps\sample\backend\.venv\Scripts\python.exe' tools/verify-postgres.py --portal-browser --application-browser --registry-browser
 ```
 
 运行器仅使用 Python 标准库，可换成已有 Python 3.13 解释器；它不下载依赖。另需 .NET 10 SDK 和已构建的 `tests/platform/bin/Debug/net10.0/AssembleAI.Platform.SmokeTests.dll`。普通 `tools/verify.ps1 -Scope Core` / `All` 不启动数据库，本入口需单独运行。
@@ -64,6 +67,8 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 - 会话仓储覆盖数据库中的真实密文、独立重建的密钥提供器与重新加载 PFX 后恢复、密文篡改拒绝、UTC 到期、删除与续期并发、取消和数据库连接失败。
 - 联合链路使用 OIDC HTTP 协议服务、真实 PG 会话 / 授权、服务端租户选择及仅公钥 HTTP 接收端，验证已签发凭据的策略撤权和退出重放。
 - 注册测试使用 OIDC 协议登录和实际 HTTP API，覆盖所有者 / 独立审核、Manifest 负例、租户授权与撤权、状态转换、并发 CAS、版本回滚、发布后不可变及审计失败回滚。
+- 管理读取测试覆盖无租户全局操作者、租户单独管理员、普通 / 缺失用户、草稿与审计范围、角色 / 成员撤销，以及应用 500 / 501、版本 100 / 101、审计 50 + hasMore 边界。
+- `--registry-browser` 增加三个独立 OIDC 浏览器账号，真实注册 / 修改 / 提交 / 审核、两版本启用 / 切换 / 回滚 / 停用，并验证固定运行、在途流排空与停止、SQL 审计主体及关联编号；检查浅暗 / 390px。需要 Node、已构建门户和 Chromium；使用真实签名 HTTP 下游，Python 消费端由 application-browser 覆盖。可同时启用三个浏览器参数。
 - 目录测试验证服务端选中租户、全部入口授权、发布启用与可信部署过滤、隐藏分类隔离、5 字段 DTO、实时撤权 / 版本切换、500 项完整成功与 501 项明确 503；目录准入与网关对照。
 - `--portal-browser` 在测试 host 提供真实构建静态页面，通过 Chromium 实际 OIDC 登录、选择租户、读取 PG 清单 / 详情、主题 / 390px 检查与退出，不拦截 API；不指定时明确跳过该浏览器项。原生启动器会解析 Node 绝对路径后再隔离 PATH，仍不下载依赖。
 - `--application-browser` 在本次临时目录从同一模板构建 sample / sample-clone 两个独立发布物，计算真实摘要并经注册 / 独立审核 / 租户启用；启动正式 Node 预览、BFF / YARP 和真实 uvicorn，经平台内部验证查询当前 PG 授权。验证 JSON / SSE 首段 / 取消、消费端撤权 / 启停、独立深链、同文档重挂与刷新不自动创建运行；不拦截 API。可与 portal-browser 同时使用；需已构建门户、锁定 Python 环境及浏览器依赖，可用 ASSEMBLEAI_NODE / ASSEMBLEAI_PYTHON 显式指定可执行文件。
@@ -74,6 +79,8 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 基础授权 HTTP 测试使用测试身份认证器，会话测试直接调用真实仓储；`PostgresTrustTests` 进一步通过真实 OIDC 协议交换串联 PG 会话、租户选择和签名 HTTP 下游。它使用 `OidcFixture`，尚未串联真实 Keycloak、生产 HTTPS Cookie 和 PostgreSQL 完整部署，也不证明跨机器故障恢复、pgvector 安装或知识库查询已通过。[原生 Keycloak 浏览器验收](native-identity.md) 独立覆盖兼容性，平台仍使用开发内存会话。
 
 ## 2026-11-03 验收记录
+
+T8 最终组合运行 `--portal-browser --application-browser --registry-browser` 返回 0；`.artifacts/postgres/run-33442f6f67e842ed959eadd401e972e2/result.json` 的 passed / cleanupComplete 与三个 browserRequested 均 true。包含本页全部管理查询与三账号流程、已有门户和真实 Python 应用链路；临时集群与凭据已清理。详细结果见 [T8 开发记录](development.md#t8-应用管理验收--2026-11-03)。
 
 安装和重复运行均返回 0，`postgres --version` / `psql --version` 均输出 PostgreSQL 17.11。
 

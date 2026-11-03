@@ -19,10 +19,10 @@ public sealed class LiveBffSession
 {
     private readonly ITicketStore store;
     private readonly TimeProvider clock;
-    private readonly Guid tenant;
+    private readonly Guid? tenant;
 
     private LiveBffSession(ITicketStore store, TimeProvider clock, string key, ClaimsPrincipal principal,
-        SubjectIdentity subject, Guid tenant, DateTimeOffset expiresAt)
+        SubjectIdentity subject, Guid? tenant, DateTimeOffset expiresAt)
     {
         this.store = store;
         this.clock = clock;
@@ -38,12 +38,21 @@ public sealed class LiveBffSession
     public SubjectIdentity Subject { get; }
     public DateTimeOffset ExpiresAt { get; }
 
-    public static async Task<LiveBffSession?> CaptureAsync(HttpContext context, Guid expectedTenant,
-        CancellationToken token = default)
+    public static Task<LiveBffSession?> CaptureAsync(HttpContext context, Guid expectedTenant,
+        CancellationToken token = default) => Capture(context, expectedTenant, requireTenant: true, token);
+
+    /// <summary>Global control-plane requests still bind a real live session;
+    /// tenant membership is not required, and the current nullable selection is
+    /// captured to detect a concurrent session change during the request.</summary>
+    public static Task<LiveBffSession?> CaptureIdentityAsync(HttpContext context,
+        CancellationToken token = default) => Capture(context, null, requireTenant: false, token);
+
+    private static async Task<LiveBffSession?> Capture(HttpContext context, Guid? expectedTenant, bool requireTenant,
+        CancellationToken token)
     {
         if (!token.CanBeCanceled) token = context.RequestAborted;
         token.ThrowIfCancellationRequested();
-        if (expectedTenant == Guid.Empty) return null;
+        if (requireTenant && (!expectedTenant.HasValue || expectedTenant == Guid.Empty)) return null;
         var options = context.RequestServices.GetService<IOptionsMonitor<CookieAuthenticationOptions>>()?.Get(BffAuthentication.CookieScheme);
         if (options?.SessionStore is not { } store) return null;
         var authenticated = await context.AuthenticateAsync(BffAuthentication.CookieScheme);
@@ -53,9 +62,10 @@ public sealed class LiveBffSession
         if (!authenticated.Succeeded || authenticated.Principal is null || authenticated.Properties is null
             || reference is null || string.IsNullOrEmpty(reference.Key)
             || TrustedSubject.Read(authenticated.Principal) is not { } subject
-            || TenantSession.ReadSelectedTenant(authenticated.Properties) != expectedTenant
+            || requireTenant && TenantSession.ReadSelectedTenant(authenticated.Properties) != expectedTenant
             || authenticated.Properties.ExpiresUtc is not { } expires || expires <= clock.GetUtcNow()) return null;
-        var captured = new LiveBffSession(store, clock, reference.Key, authenticated.Principal, subject, expectedTenant, expires);
+        var captured = new LiveBffSession(store, clock, reference.Key, authenticated.Principal, subject,
+            TenantSession.ReadSelectedTenant(authenticated.Properties), expires);
         // A logout or tenant change may have committed since middleware first
         // authenticated this request. Do not capture an already-stale result.
         return await captured.CheckAsync(token) ? captured : null;

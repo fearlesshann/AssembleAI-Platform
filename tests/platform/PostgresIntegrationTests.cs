@@ -68,6 +68,8 @@ public static class PostgresIntegrationTests
             await PostgresTrustTests.RunAsync(connectionString, runDirectory);
             phase = "application registry and tenant releases";
             await PostgresRegistryTests.RunAsync(connectionString);
+            phase = "registry management queries and scoped audit";
+            await PostgresRegistryManagementTests.RunAsync(connectionString);
             phase = "authorized application catalog";
             await PostgresCatalogTests.RunAsync(connectionString);
             phase = "gateway leases and call records";
@@ -78,6 +80,11 @@ public static class PostgresIntegrationTests
             {
                 phase = "application template PostgreSQL/Python/browser chain";
                 await PostgresApplicationTests.RunAsync(connectionString, runDirectory);
+            }
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_REGISTRY_BROWSER_TESTS") == "1")
+            {
+                phase = "registry lifecycle browser and real gateway";
+                await PostgresRegistryBrowserTests.RunAsync(connectionString, runDirectory);
             }
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");

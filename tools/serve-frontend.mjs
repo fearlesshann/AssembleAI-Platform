@@ -37,6 +37,7 @@ export function previewServer({ portalRoot, sampleRoot, platformOrigin, frontend
       // Only known application routes have an HTML fallback; missing assets are 404.
       if (!extname(relative) && (pathname === '/' || pathname.startsWith('/workspace/')
         || /^\/applications\/[a-z][a-z0-9-]{0,63}(?:\/run)?\/?$/.test(pathname)
+        || /^\/manage\/applications(?:\/[a-z][a-z0-9-]{0,63})?\/?$/.test(pathname)
         || pathname === '/reference-ui' || pathname.startsWith('/reference-ui/'))) filename = resolve(root, 'index.html');
     }
     try {

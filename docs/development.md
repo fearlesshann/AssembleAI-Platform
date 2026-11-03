@@ -44,7 +44,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-T3 身份与授权基础已完成：登录、服务端租户选择、RBAC / ABAC、内部签名凭据及撤权已验证。T4 提供注册管理 API，T5 提供正式网关，T6 已接授权门户；下一步 T7 完整子应用接入，两个 AI 用例按后续任务交付。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 身份与授权基础已完成：登录、服务端租户选择、RBAC / ABAC、内部签名凭据及撤权已验证。T4 提供注册管理 API，T5 提供正式网关，T6 已接授权门户，T7 提供完整子应用接入，T8 提供注册管理工作区；下一步 T9 模型接入，两个 AI 用例按后续任务交付。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
@@ -165,7 +165,7 @@ T3 已完成 [身份与权限契约](architecture/t3-authorization.md)、[OIDC /
 ## 后续验收边界
 
 1. T3 身份与授权基础已验收，不代表全产品所有业务资源已完成 V4–V7 最终验收。Keycloak 浏览器使用 H2 / 内存会话；PG 联合测试使用协议身份服务、真实数据库和测试 host 下游；生产 HTTPS、跨机器和完整部署仍在 T14。
-2. T7–T8：完整子应用 SDK / 受控请求能力和注册管理界面；T6 门户已接真实身份与目录，旧模板的演示登录仍不代表认证。
+2. T9–T12：模型配置、数据连接与两个实际 AI 用例；T6–T8 的门户、子应用模板和注册管理已接真实身份与服务，旧模板的演示登录仍不代表认证。
 3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
 
 向量扩展成功安装与知识库业务验收继续在 T12；本轮核心迁移成功不表示向量检索已就绪。原生数据库成功记录：`.artifacts/postgres/run-0bc82b0de23c456d8d6bc91bb9f0deaf/result.json`；`passed` 与 `cleanupComplete` 均为 true。启动脚本及验收判据修复见 SPEC B17–B19。
@@ -221,3 +221,15 @@ T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部�
 首轮组合的取消测试曾在短流结束后才完成按钮稳定等待，失败记录 `.artifacts/postgres/run-4beac675c8364e199e5eb49a688554c5`，清理成功。改为真实首段 DOM 更新时同步点击取消，不拦截网络或改变生产流时间，最终组合通过。已看过独立 / 嵌入截图，最终截图位于 `.artifacts/application-postgres/be0d90ff-9bdf-4be1-9d42-20912165f776/`；技术模板以调用结果和明确状态为主。
 
 两个独立复核覆盖 SDK / 生命周期 / 平台验证，以及静态发布物 / Python / 联合夹具，修正与回归见 SPEC B38–B47，无剩余阻塞。组合仍使用 OidcFixture 与开发内存会话；真实 Keycloak、PG 加密会话已有独立验收，未在本轮声称生产 HTTPS / 完整多副本 / Docker 已验证。T7 完成，下一任务为 T8 注册与生命周期管理界面。
+
+## T8 应用管理验收 · 2026-11-03
+
+[管理工作区](architecture/registry-management.md) 接入门户侧栏及可刷新的 `/manage/applications/{appId}`。研发保存草稿 / 提交，独立审核员发布 / 驳回 / 全局启停，租户管理员启用 / 切换 / 回滚 / 停用，并查看自己权限范围内的操作记录。全局操作者无租户成员关系也能管理；租户权限不扩展为草稿或其他租户记录访问。完整列表有明确容量边界，写入使用 CSRF / CAS，冲突与未知结果不自动重试。
+
+最终 `tools/verify.ps1 -Scope All` 返回 0，完整日志 `.artifacts/t8-final-all.log`：36 项 Node、锁定 .NET 还原与构建（0 警告 / 0 错误）、完整 HTTP 回归、51 项 Python、真实 FastAPI → YARP、Vue 类型检查、两项构建及 31 项浏览器全部通过。新增 8 项浏览器覆盖无租户管理、自审限制、409 保留输入、焦点刷新后的过期修订号、同路由确认放弃清草稿、租户迟到响应 / 退出、全局不可用时仍可停租户以及浅暗窄屏；实际 HTTP 正文阻塞测试验证退出后拒绝写入与 3 秒整体预算。
+
+前后端交叉复核修正草稿名称泄露、旧版本列表静默截断、会话正文竞争、操作确认与草稿生命周期问题；测试夹具修正与根因见 SPEC B48–B55。已有 Element Plus 体积、httpx 弃用和终端颜色提示不改变通过结果。
+
+最终 `tools/verify-postgres.py --portal-browser --application-browser --registry-browser` 返回 0。`.artifacts/postgres/run-33442f6f67e842ed959eadd401e972e2/result.json` 中 passed、cleanupComplete 以及三个 browserRequested 均 true。迁移 1–5、T3–T7 实库和真实 Python 子应用链路全部回归；新增管理查询验证多身份 / 草稿 / 审计隔离、撤权、500 / 501 应用、100 / 101 版本和 50 + hasMore 审计。三独立浏览器会话实际执行两版本注册 / 编辑 / 提交 / 独立发布、租户切换 / 回滚 / 停用，全局停用 / 恢复；同 BFF 会话中的网关运行验证不可变绑定、旧运行不复活、真实 SSE 排空 / 取消，SQL 检查审计主体、scope 和唯一服务器关联编号。临时集群与凭据均已清理。
+
+浅色、暗色和 390px 界面已人工检查，无全页水平溢出；窄屏审计在独立表格容器横滑。最终截图位于 `.artifacts/registry-postgres/d18a02ca-061d-4cc7-a939-139a3ef7aa36/`。前后端独立交叉复核无剩余阻塞。组合登录使用测试 OidcFixture 的真实 Code / PKCE / JWT 交换及开发内存会话，账号选择页仅存在于测试工程；真实 Keycloak、PG 加密会话仍以此前独立验收为准。T8 完成，下一任务 T9 模型配置与 Model Gateway；两个制造业 AI 用例与生产交付按后续任务推进。

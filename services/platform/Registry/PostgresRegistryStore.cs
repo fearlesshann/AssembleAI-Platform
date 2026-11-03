@@ -87,10 +87,14 @@ public sealed class PostgresRegistryStore(IConfiguration configuration, Registry
         var owner = await Owner(db, tx, appId, cancellationToken);
         if (!CanRead(actor, owner)) return Fail<IReadOnlyList<ApplicationReleaseView>>(RegistryError.Forbidden);
         if (owner is null) return Fail<IReadOnlyList<ApplicationReleaseView>>(RegistryError.NotFound);
-        await using var command = Command(db, tx, "SELECT manifest,status,revision,submitted_by,published_at FROM public.platform_application_releases WHERE app_id=$1 ORDER BY release_version COLLATE \"C\" LIMIT 100", appId);
+        await using var command = Command(db, tx, "SELECT manifest,status,revision,submitted_by,published_at FROM public.platform_application_releases WHERE app_id=$1 ORDER BY release_version COLLATE \"C\" LIMIT 101", appId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var releases = new List<ApplicationReleaseView>();
-        while (await reader.ReadAsync(cancellationToken)) releases.Add(View(reader, owner.Value));
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (releases.Count == 100) throw new RegistryStoreUnavailableException();
+            releases.Add(View(reader, owner.Value));
+        }
         return RegistryResult<IReadOnlyList<ApplicationReleaseView>>.Success(releases);
     }, cancellationToken);
 

@@ -31,6 +31,8 @@ if (args.Contains("--internal-call-tests", StringComparer.Ordinal))
 if (args.Contains("--registry-http-tests", StringComparer.Ordinal))
 {
     await RegistryHttpTests.RunAsync();
+    await RegistryManagementHttpTests.RunAsync();
+    await RegistryBoundaryTests.RunAsync();
     return;
 }
 if (args.Contains("--catalog-tests", StringComparer.Ordinal))
@@ -143,6 +145,8 @@ try
     await InternalCallTests.RunAsync();
     await ApplicationValidationTests.RunAsync();
     await RegistryHttpTests.RunAsync();
+    await RegistryManagementHttpTests.RunAsync();
+    await RegistryBoundaryTests.RunAsync();
     await CatalogHttpTests.RunAsync();
     await GatewayDeadlineTests.RunAsync();
     await GatewayAdmissionTests.RunAsync();

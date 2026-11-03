@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
@@ -41,6 +42,7 @@ public sealed class OidcFixture : IAsyncDisposable
     private int nextFault;
     private string nextSubject = Subject;
     private int successfulTokenRequests;
+    private IReadOnlyDictionary<string, string>? browserAccounts;
 
     private OidcFixture(WebApplication app) => this.app = app;
 
@@ -58,13 +60,14 @@ public sealed class OidcFixture : IAsyncDisposable
         set => Volatile.Write(ref nextFault, (int)value);
     }
 
-    public static async Task<OidcFixture> StartAsync()
+    public static async Task<OidcFixture> StartAsync(IReadOnlyDictionary<string, string>? browserAccounts = null)
     {
         var builder = WebApplication.CreateBuilder(["--environment", "Development"]);
         builder.Logging.ClearProviders();
         var app = builder.Build();
         app.Urls.Add("http://127.0.0.1:0");
         var fixture = new OidcFixture(app);
+        fixture.browserAccounts = browserAccounts is null ? null : new Dictionary<string, string>(browserAccounts, StringComparer.Ordinal);
         app.MapGet("/.well-known/openid-configuration", fixture.Discovery);
         app.MapGet("/jwks", fixture.Jwks);
         app.MapGet("/authorize", fixture.Authorize);
@@ -135,10 +138,25 @@ public sealed class OidcFixture : IAsyncDisposable
             || !(Unique(query["scope"]) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("openid"))
             return ProtocolError("invalid_request");
 
+        string subject;
+        if (browserAccounts is not null)
+        {
+            var selected = Unique(query["__fixture_subject"]);
+            if (selected is null)
+            {
+                var links = browserAccounts.Select(account => "<p><a href=\"" + WebUtility.HtmlEncode(QueryHelpers.AddQueryString(
+                    context.Request.Path + context.Request.QueryString, "__fixture_subject", account.Key)) + "\">" + WebUtility.HtmlEncode(account.Value) + "</a></p>");
+                return Results.Content("<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>OIDC 验收身份</title><h1>选择验收账号</h1>"
+                    + string.Join("", links) + "</html>", "text/html; charset=utf-8");
+            }
+            if (!browserAccounts.ContainsKey(selected)) return ProtocolError("invalid_request");
+            subject = selected;
+        }
+        else subject = Interlocked.Exchange(ref nextSubject, Subject);
         var code = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
         var fault = (OidcFault)Interlocked.Exchange(ref nextFault, (int)OidcFault.None);
         codes[code] = new(redirect!, nonce, challenge!, fault,
-            Interlocked.Exchange(ref nextSubject, Subject), DateTimeOffset.UtcNow.AddMinutes(2));
+            subject, DateTimeOffset.UtcNow.AddMinutes(2));
         return Results.Redirect(QueryHelpers.AddQueryString(redirect!, new Dictionary<string, string?>
         {
             ["code"] = code,
@@ -184,7 +202,7 @@ public sealed class OidcFixture : IAsyncDisposable
             Claims = new Dictionary<string, object>
             {
                 ["sub"] = authorization.SubjectName,
-                ["name"] = "Alice Fixture",
+                ["name"] = browserAccounts is not null && browserAccounts.TryGetValue(authorization.SubjectName, out var displayName) ? displayName : "Alice Fixture",
                 ["nonce"] = authorization.Fault == OidcFault.Nonce ? "incorrect-nonce" : authorization.Nonce
             }
         });

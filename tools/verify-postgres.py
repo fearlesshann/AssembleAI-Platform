@@ -93,6 +93,7 @@ def main() -> int:
     parser.add_argument("--dependencies-root", type=Path, default=ROOT / ".local-data/native-postgres")
     parser.add_argument("--portal-browser", action="store_true", help="Also verify the built portal with real OIDC/BFF and PostgreSQL in Chromium.")
     parser.add_argument("--application-browser", action="store_true", help="Also verify SDK, independently built applications and real FastAPI through OIDC/BFF/YARP in Chromium.")
+    parser.add_argument("--registry-browser", action="store_true", help="Also verify multi-user registry management and in-flight gateway policies through the real browser UI.")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("This launcher currently supports the Windows native distribution.")
@@ -108,6 +109,7 @@ def main() -> int:
     version = "unknown"
     portal_browser = args.portal_browser or os.environ.get("ASSEMBLEAI_PORTAL_BROWSER_TESTS") == "1"
     application_browser = args.application_browser or os.environ.get("ASSEMBLEAI_APPLICATION_BROWSER_TESTS") == "1"
+    registry_browser = args.registry_browser or os.environ.get("ASSEMBLEAI_REGISTRY_BROWSER_TESTS") == "1"
     try:
         package = json.loads((ROOT / "tools/native-postgres.lock.json").read_text(encoding="utf-8-sig"))["package"]
         version = package["version"]
@@ -122,7 +124,7 @@ def main() -> int:
         if not smoke.is_file() or not dotnet:
             raise RuntimeError("Build AssembleAI.slnx before running PostgreSQL acceptance.")
         node = os.environ.get("ASSEMBLEAI_NODE") or shutil.which("node.exe")
-        if (portal_browser or application_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
+        if (portal_browser or application_browser or registry_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
             raise RuntimeError("Build the portal and install its locked browser dependencies before browser acceptance.")
         application_python = Path(os.environ.get("ASSEMBLEAI_PYTHON", ROOT / "apps/sample/backend/.venv/Scripts/python.exe")).resolve()
         if application_browser and not application_python.is_file():
@@ -216,13 +218,14 @@ def main() -> int:
         test_environment["ASSEMBLEAI_POSTGRES_TEST_CONFIG"] = str(config_path)
         test_environment["ASSEMBLEAI_PORTAL_BROWSER_TESTS"] = "1" if portal_browser else "0"
         test_environment["ASSEMBLEAI_APPLICATION_BROWSER_TESTS"] = "1" if application_browser else "0"
+        test_environment["ASSEMBLEAI_REGISTRY_BROWSER_TESTS"] = "1" if registry_browser else "0"
         if application_browser:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
-        if portal_browser or application_browser:
+        if portal_browser or application_browser or registry_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
         print("Running real PostgreSQL authorization, session, registry, gateway and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
-                         artifact_dir / "integration.log", timeout=420 if application_browser else 240 if portal_browser else 120, sensitive=secrets_to_hide)
+                         artifact_dir / "integration.log", timeout=600 if registry_browser else 420 if application_browser else 240 if portal_browser else 120, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
             if line.startswith(("PASS:", "FAIL: PostgreSQL integration")):
                 print(line, flush=True)
@@ -263,6 +266,7 @@ def main() -> int:
                 "cleanupComplete": cleanup_ok, "postgresVersion": version,
                 "portalBrowserRequested": portal_browser,
                 "applicationBrowserRequested": application_browser,
+                "registryBrowserRequested": registry_browser,
                 "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain and authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:

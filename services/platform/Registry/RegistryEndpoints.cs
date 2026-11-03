@@ -9,11 +9,13 @@ namespace AssembleAI.Platform.Registry;
 public static class RegistryEndpoints
 {
     private const int MaximumBodyBytes = 65536;
+    private static readonly object SessionKey = new();
 
     public static WebApplicationBuilder AddPlatformRegistry(this WebApplicationBuilder builder)
     {
         builder.Services.AddSingleton(new RegistryDeploymentCatalog(builder.Configuration));
         builder.Services.TryAddSingleton<IRegistryStore, PostgresRegistryStore>();
+        builder.AddRegistryManagement();
         return builder;
     }
 
@@ -43,6 +45,7 @@ public static class RegistryEndpoints
             if (!ManifestValidator.HasFields(body, "expectedRevision", "manifest") || !Revision(body, out var revision)
                 || !ManifestValidator.TryParse(body.GetProperty("manifest"), out var manifest)
                 || manifest!.AppId != appId || manifest.Version != version) return Error(RegistryError.InvalidManifest);
+            if (!await CurrentSession(context, token)) return Error(RegistryError.Forbidden);
             return Result(await store.SaveDraftAsync(Subject(context), manifest, revision, context.TraceIdentifier, token));
         });
         releases.MapPost("/{version}/transitions", async (string appId, string version, HttpContext context, IRegistryStore store,
@@ -56,6 +59,7 @@ public static class RegistryEndpoints
                 || revision == 0 || body.GetProperty("action").ValueKind != JsonValueKind.String) return Invalid();
             var action = body.GetProperty("action").GetString()!;
             if (action is not ("submit" or "reject" or "publish" or "disable" or "enable")) return Invalid();
+            if (!await CurrentSession(context, token)) return Error(RegistryError.Forbidden);
             return Result(await store.TransitionAsync(Subject(context), appId, version, action, revision, context.TraceIdentifier, token));
         });
 
@@ -81,23 +85,54 @@ public static class RegistryEndpoints
                 || body.GetProperty("releaseVersion").ValueKind != JsonValueKind.String
                 || !ManifestValidator.IsVersion(body.GetProperty("releaseVersion").GetString())
                 || body.GetProperty("enabled").ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return Invalid();
+            if (!await CurrentSession(context, token)) return Error(RegistryError.Forbidden);
             return Result(await store.SetTenantApplicationAsync(Subject(context), tenantId, appId,
                 body.GetProperty("releaseVersion").GetString()!, body.GetProperty("enabled").GetBoolean(),
                 revision, context.TraceIdentifier, token));
         });
-        return app;
+        return app.MapRegistryManagementEndpoints();
     }
 
     private static async ValueTask<object?> Boundary(EndpointFilterInvocationContext invocation, EndpointFilterDelegate next)
     {
-        invocation.HttpContext.Response.Headers.CacheControl = "no-store";
-        try { return await next(invocation); }
+        var context = invocation.HttpContext;
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers.XContentTypeOptions = "nosniff";
+        if (context.Request.Query.Count != 0) return Invalid();
+        var disconnected = context.RequestAborted;
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(disconnected);
+        budget.CancelAfter(TimeSpan.FromSeconds(3));
+        try
+        {
+            var session = context.Request.RouteValues.TryGetValue("tenantId", out var routeTenant)
+                && Guid.TryParse(routeTenant?.ToString(), out var tenant)
+                ? await LiveBffSession.CaptureAsync(context, tenant, budget.Token)
+                : await LiveBffSession.CaptureIdentityAsync(context, budget.Token);
+            if (session is null) return Error(RegistryError.Forbidden);
+            context.Items[SessionKey] = session;
+            // Minimal-API binding happens before filters. Supply the same bounded
+            // token to both the bound handler and its HttpContext consumers.
+            for (var index = 0; index < invocation.Arguments.Count; index++)
+                if (invocation.Arguments[index] is CancellationToken) invocation.Arguments[index] = budget.Token;
+            context.RequestAborted = budget.Token;
+            var result = await next(invocation);
+            if (HttpMethods.IsGet(context.Request.Method) && !await session.CheckAsync(budget.Token))
+                return Error(RegistryError.Forbidden);
+            return result;
+        }
         catch (Exception error) when (error is RegistryStoreUnavailableException or AuthorizationStoreUnavailableException)
         {
             return Problem(503, "Application registry is unavailable.", "registry_unavailable");
         }
+        catch (OperationCanceledException) when (!disconnected.IsCancellationRequested)
+        { return Problem(503, "Application registry is unavailable.", "registry_unavailable"); }
+        finally { context.RequestAborted = disconnected; context.Items.Remove(SessionKey); }
     }
-    private static SubjectIdentity Subject(HttpContext context) => TrustedSubject.Read(context.User)!;
+    private static Task<bool> CurrentSession(HttpContext context, CancellationToken token) =>
+        context.Items.TryGetValue(SessionKey, out var value) && value is LiveBffSession session
+            ? session.CheckAsync(token) : Task.FromResult(false);
+    private static SubjectIdentity Subject(HttpContext context) => context.Items.TryGetValue(SessionKey, out var value)
+        && value is LiveBffSession session ? session.Subject : throw new RegistryStoreUnavailableException();
     private static bool ValidRoute(string appId, string version) => ManifestValidator.IsAppId(appId) && ManifestValidator.IsVersion(version);
     private static bool Revision(JsonElement value, out long revision)
     {
