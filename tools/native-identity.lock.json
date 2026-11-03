@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows-x64",
+  "packages": {
+    "jdk": {
+      "version": "25.0.5+8",
+      "archiveName": "OpenJDK25U-jdk_x64_windows_hotspot_25.0.5_8.zip",
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_windows_hotspot_25.0.5_8.zip",
+      "sha256": "636bdc13dc649ddc7d5921c5c7d23cca6e44fd19d662b45cc9c02135a6c96c42",
+      "size": 141285173,
+      "relativeHome": "jdk/jdk-25.0.5+8",
+      "releaseMetadata": "https://api.github.com/repos/adoptium/temurin25-binaries/releases/tags/jdk-25.0.5%2B8"
+    },
+    "keycloak": {
+      "version": "26.8.1",
+      "archiveName": "keycloak-26.8.1.zip",
+      "url": "https://github.com/keycloak/keycloak/releases/download/26.8.1/keycloak-26.8.1.zip",
+      "sha256": "4cd312c889af358a819a74a6c6f068f9ea159a6959e49924607cec95cfd4c1a4",
+      "size": 174193327,
+      "relativeHome": "keycloak/keycloak-26.8.1",
+      "releaseMetadata": "https://api.github.com/repos/keycloak/keycloak/releases/tags/26.8.1"
+    }
+  }
+}

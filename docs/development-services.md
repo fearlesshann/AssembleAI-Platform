@@ -98,7 +98,7 @@ MinIO 官方仓库于 2026-04-25 归档，最后的安全发布说明要求从�
 
 Realm：`assembleai`；confidential client：`assembleai-platform`；Authorization Code + PKCE S256；关闭 implicit、密码直授与 service account 登录。客户端 secret 由环境占位符在导入时解析，realm 文件无默认业务用户。[Keycloak 导入文档](https://www.keycloak.org/server/importExport#_using_environment_variables_within_the_realm_configuration_files)
 
-BFF 服务端接口已实现，原生启动配置和会话约束见 [T3 BFF](architecture/t3-bff.md)。默认关闭；启用后可直接访问 `/bff/login?returnUrl=/bff/session` 核验后端，不依赖首页模板演示登录。
+BFF 服务端接口已实现，配置和会话约束见 [T3 BFF](architecture/t3-bff.md)。[原生 Keycloak 验收入口](native-identity.md) 已实跑通过，自动准备隔离测试 realm 与浏览器流程。正常平台默认关闭认证；配置后可直接访问 `/bff/login?returnUrl=/bff/session`，不依赖首页模板演示登录。
 
 Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configuration`。回调固定为 `http://localhost:5100/signin-oidc` 和 `http://127.0.0.1:5100/signin-oidc`；其他域名需明确登记。使用 `localhost:8080` 作为 issuer，避免在 localhost 与 IP 之间随意切换身份中心地址。
 
@@ -121,4 +121,5 @@ Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configur
 - FastAPI pytest：9 项通过，覆盖生产禁用开发接口、就绪生命周期、SSE 格式、输入边界、取消 / 断开清理与错误事件。
 - 真实 HTTP 烟测：启动临时 Uvicorn，配置每段间隔 1000ms，首段实测 18.3ms；主动断开后健康端点仍可访问。临时进程已停止。
 - 本地依赖快照：22 个已安装版本，传递依赖声明全部满足。
-- 尚未验证：Linux 隔离安装、Docker 镜像构建 / 拉取、Compose 运行、PostgreSQL 实际迁移、Keycloak 真实登录。这些项目不会由本机代码验证替代。
+- 已验证：官方 JDK / Keycloak ZIP 锁定安装、真实 Keycloak + Chromium 登录 / 退出 / CSRF / Cookie 重放 / SSO，以及测试进程和凭据清理。平台使用开发内存会话，Keycloak 使用 H2。
+- 尚未验证：Linux 隔离安装、Docker 镜像构建 / 拉取、Compose 运行、PostgreSQL 实际迁移与生产持久会话。这些项目不会由本机代码验证替代。

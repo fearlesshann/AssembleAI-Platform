@@ -1,6 +1,6 @@
 # T2 · 本地工程与验证
 
-2026-11-03：T2 工程骨架验收完成。已同步 `cf92c57` 的模板入口与前端锁文件，完成 `npm ci`、真实 `uv.lock`、项目独立 `.venv` 及统一 All 验证。开发采用本机进程；容器运行不是本阶段完成条件。真实登录与数据库联调仍在 T3。
+2026-11-03：T2 工程骨架验收完成，模板、锁定依赖、独立 `.venv` 和 All 验证通过。T3 新增真实原生 Keycloak + Chromium 验收及生产密钥恢复测试，Core 再次通过；数据库联调仍在推进。开发采用本机进程。
 
 ## 不用 Docker 启动
 
@@ -44,7 +44,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-T3 授权基础与 BFF 服务端登录接口已实现；真实 Keycloak / PostgreSQL 联调、应用注册中心和两个 AI 用例待完成。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 授权基础与 BFF 服务端登录接口已实现，真实 Keycloak 登录已验证；PostgreSQL 联调、应用注册中心和两个 AI 用例待完成。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
@@ -125,7 +125,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 跨服务烟测自动启动自己的临时进程和端口，并在结束时清理。这里只验证开发代理与流传输，不宣称已完成 T3 权限或 T5 正式应用网关。
 
-T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC / BFF 会话](architecture/t3-bff.md)。默认不启用认证；外部配置齐全后提供登录、session、CSRF 和本地退出接口，生产使用数据库加密 ticket。测试验证双租户 / 双工厂隔离、撤权，以及真实 HTTP OIDC code / S256、签名 / 状态校验、浏览器无 token、CSRF / Origin、到期和旧 Cookie 重放。测试身份中心只存在于测试工程；实际 PostgreSQL 迁移与持久化、真实 Keycloak、租户切换和内部签名上下文仍待验收，T3 保持进行中。
+T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC / BFF 会话](architecture/t3-bff.md)。默认不启用认证；外部配置齐全后提供登录、session、CSRF 和本地退出接口，生产使用数据库加密 ticket。现有协议测试覆盖双租户 / 双工厂、撤权和伪造令牌；新增 [原生 Keycloak 验收](native-identity.md) 已用真实身份服务与 Chromium 验证登录 / 退出、Cookie / token 边界、CSRF / Origin、旧 Cookie 重放和 SSO 再进入。实际 PostgreSQL、租户切换和内部签名上下文仍待验收，T3 保持进行中。
 
 ## 最新验证记录（2026-11-03）
 
@@ -137,6 +137,9 @@ T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC
 | T3 授权领域 / HTTP / ASP.NET 策略 | 通过；租户与工厂隔离、grant 不交叉拼接、停用组织、issuer 隔离、401 / 403 / 503、响应不泄漏内部组织目录、撤权及取消 |
 | T3 PostgreSQL 迁移 2 | 8 张表、复合外键与策略版本触发器已实现并复核；尚未在真实数据库执行 |
 | T3 BFF / OIDC HTTP | 通过；code + PKCE S256、RSA JWT、issuer / audience / signature / nonce / state / correlation 拒绝、固定回调、无 token Cookie、CSRF / Origin、退出重放与八小时到期 |
+| T3 真实原生 Keycloak / Chromium | 通过；JDK 25.0.5+8、Keycloak 26.8.1，错误密码拒绝、真实登录 / 主体、Cookie / token 隔离、CSRF / Origin、重放拒绝、SSO 再进入；最终运行与凭据清理均返回 0 |
+| T3 生产密钥持久化 | 通过；实际 RSA PFX 加密 keyring，重建应用后恢复，异证书 / 无私钥 / ECDSA / 缺文件拒绝，临时证书与 key 清理 |
+| 原生身份依赖复现 | 官方 ZIP 长度和 SHA256 匹配；安装 / 重复使用 / 版本探针通过；冲突 JAVA、外部 DB、Production 与 Playwright 调试变量未干扰最终验收 |
 | T3 会话存储 | 内存副本、1024 容量、秒精度到期、撤销 / 续期竞争、取消与安全错误通过；PostgreSQL 迁移 3 和加密 ticket 实现待真实数据库验证 |
 | T3 本轮 Core | 通过；锁定还原、.NET 构建 0 警告 / 0 错误、HTTP smoke、Node 3 项、Python 9 项及真实 FastAPI → YARP |
 | FastAPI pytest | 9 项通过；参数边界、生产关闭演示、取消 / 断开清理、错误事件 |
@@ -155,7 +158,7 @@ T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC
 
 ## 后续验收边界
 
-1. T3：真实 PostgreSQL 迁移 / 授权仓储 / 加密会话、Keycloak 登录、租户切换及内部签名上下文；当前 OIDC 测试服务不代替实库与真实身份服务验收。
+1. T3：真实 PostgreSQL 迁移 / 授权仓储 / 加密会话、租户切换及内部签名上下文；已通过的 Keycloak 验收使用开发 H2 和平台内存会话，不代替实库、多实例或生产部署。
 2. T4–T8：注册与正式网关、授权应用清单、门户业务接口与完整子应用接入；模板的本地演示登录不等于真实身份认证。
 3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
 

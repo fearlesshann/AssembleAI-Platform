@@ -2,7 +2,7 @@
 
 平台使用 ASP.NET Core 官方 OIDC handler 执行 confidential client 的 Authorization Code + PKCE S256 流程。浏览器持有受保护的随机会话引用，access / refresh / ID token 保存在服务端 ticket 中。协议处理遵循 [ASP.NET Core OIDC 文档](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-oidc-web-authentication?view=aspnetcore-10.0)，包版本锁定为 10.0.14。
 
-本切片新增服务端认证入口，不改变首页模板的演示登录。真实 Keycloak、PostgreSQL、前端 SSO 接入及内部签名上下文仍是 T3 后续验收项。
+本切片新增服务端认证入口，不改变首页模板的演示登录。2026-11-03 已通过真实原生 Keycloak + Chromium 登录 / 退出验收；PostgreSQL、前端 SSO 接入及内部签名上下文仍是 T3 后续验收项。
 
 ## HTTP 契约
 
@@ -44,7 +44,7 @@ $env:Authentication__Bff__PublicOrigin = 'http://127.0.0.1:5100'
 dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profile development
 ```
 
-访问 `http://127.0.0.1:5100/bff/login?returnUrl=/bff/session` 可独立验证后端登录，无需修改模板。原生 Keycloak 可按 [官方 ZIP 启动说明](https://www.keycloak.org/getting-started/getting-started-zip) 运行，不要求 Docker。当前机器尚未安装 JDK / Keycloak / PostgreSQL，以上真实服务流程尚未执行。
+访问 `http://127.0.0.1:5100/bff/login?returnUrl=/bff/session` 可独立验证后端登录，无需修改模板。原生 Keycloak 可按 [官方 ZIP 启动说明](https://www.keycloak.org/getting-started/getting-started-zip) 运行，不要求 Docker。项目现有 [锁定安装与独立验收入口](../native-identity.md)，已在本机用 JDK 25.0.5+8、Keycloak 26.8.1 完成真实浏览器验证；PostgreSQL 尚未运行。
 
 | 配置键（前缀 `Authentication__Bff__`） | 约束 |
 | --- | --- |
@@ -58,10 +58,12 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 生产还要求 `ConnectionStrings__Platform`，应用外部必须终止可信 HTTPS。默认 `AllowedHosts` 仅 loopback，部署时显式配置实际域名。本切片未配置信任代理头；若在反向代理后部署，需要在交付阶段显式配置可信代理与 HTTPS 转发，不可直接信任任意客户端转发头。
 
-迁移入口顺序执行 1、2、3。BFF 启用时 readiness 要求迁移 3；未启用时仍要求迁移 2。连接、密钥或证书配置不完整时拒绝启动认证，不回退到生产内存会话。密钥 / 证书轮换与备份恢复仍需在真实部署验收。
+迁移入口顺序执行 1、2、3。BFF 启用时 readiness 要求迁移 3；未启用时仍要求迁移 2。连接、密钥或证书配置不完整时拒绝启动认证，不回退到生产内存会话。实际 RSA PFX 加密落盘、重新构建应用后恢复和错误证书拒绝已通过测试；密钥 / 证书轮换、多实例数据库会话与部署备份恢复仍需验收。
 
 ## 验证边界
 
 测试工程的 `OidcFixture` 通过真实 HTTP 提供 discovery、JWKS、授权码和 token endpoint，并使用 RSA 签名 JWT；测试覆盖完整 code / S256、回调与 Cookie、伪造令牌、CSRF 与撤销。测试服务不注册进生产代码、不连接业务账号，也不代替真实 Keycloak 兼容性验收。
 
 `TicketStoreTests` 验证内存会话隔离、容量、期限、删除与续期并发，以及 PostgreSQL 缺配置时的安全错误。SQL 与 PostgreSQL ticket store 已实现，但迁移、持久化密文、多实例共享及真实数据库故障尚待原生数据库验证。不要将本机 HTTP 测试通过理解为 T3 全部完成。
+
+真实 Keycloak 验收由 `tools/verify-keycloak.py` 单独执行：错误密码、真实主体、Cookie / token 边界、CSRF / Origin、退出旧 Cookie 重放与 Keycloak SSO 再进入均通过；最后一次运行同时注入冲突环境变量验证隔离，进程与临时凭据清理成功。它使用开发 H2 和平台内存会话，不代替 PostgreSQL 验收。

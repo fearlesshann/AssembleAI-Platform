@@ -160,7 +160,7 @@ function Write-Summary {
         Write-Host 'Core excludes frontend dependency installation, builds, browser tests and reproducible lockfile/venv acceptance.'
     }
     if ($script:verificationExitCode -eq 0) {
-        Write-Host "Selected $Scope code checks passed. This does not mark T2 complete."
+        Write-Host "Selected $Scope code checks passed. External-service acceptance is recorded separately."
     } else {
         Write-Host "Verification incomplete or failed (exit $script:verificationExitCode). No all-green result."
     }
@@ -169,7 +169,7 @@ function Write-Summary {
 Push-Location $workspaceRoot
 try {
     Write-Host "Workspace: $workspaceRoot"
-    Write-Host "Scope: $Scope. No dependency installation, network probes, Docker startup or credential writes."
+    Write-Host "Scope: $Scope. No dependency installation, network probes or Docker startup. Tests clean up their own temporary data."
     $node = Resolve-Executable 'node'
     $dotnet = Resolve-Executable 'dotnet'
     $pythonPath = $null
