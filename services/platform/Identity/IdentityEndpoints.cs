@@ -83,7 +83,7 @@ public static class IdentityEndpoints
         public async Task HandleAsync(RequestDelegate next, HttpContext context,
             AuthorizationPolicy policy, PolicyAuthorizationResult authorizeResult)
         {
-            if (context.Request.Path.StartsWithSegments("/api/platform"))
+            if (context.Request.Path.StartsWithSegments("/api/platform") || context.Request.Path.StartsWithSegments("/api/apps"))
             {
                 context.Response.Headers.CacheControl = "no-store";
                 if (!authorizeResult.Succeeded)

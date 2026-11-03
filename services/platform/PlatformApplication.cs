@@ -3,6 +3,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using AssembleAI.Platform.Identity;
 using AssembleAI.Platform.InternalCalls;
 using AssembleAI.Platform.Registry;
+using AssembleAI.Platform.Gateway;
 
 namespace AssembleAI.Platform;
 
@@ -32,6 +33,7 @@ public static class PlatformApplication
         builder.AddPlatformBff();
         builder.AddPlatformInternalCalls();
         builder.AddPlatformRegistry();
+        builder.AddPlatformGateway();
         var app = builder.Build();
         app.UseExceptionHandler();
         app.UseBffSessionBoundary();
@@ -41,6 +43,7 @@ public static class PlatformApplication
         app.MapBffEndpoints();
         app.MapInternalCallEndpoints();
         app.MapRegistryEndpoints();
+        app.MapGatewayEndpoints();
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = _ => false,

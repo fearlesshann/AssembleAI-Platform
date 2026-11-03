@@ -32,6 +32,14 @@ if (args.Contains("--registry-http-tests", StringComparer.Ordinal))
     await RegistryHttpTests.RunAsync();
     return;
 }
+if (args.Contains("--gateway-tests", StringComparer.Ordinal))
+{
+    await GatewayDeadlineTests.RunAsync();
+    await GatewayAdmissionTests.RunAsync();
+    await GatewayHttpTests.RunAsync();
+    await GatewayFlowTests.RunAsync();
+    return;
+}
 
 var finishStream = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 var downstreamBuilder = WebApplication.CreateBuilder();
@@ -128,6 +136,10 @@ try
     await TenantSessionTests.RunAsync();
     await InternalCallTests.RunAsync();
     await RegistryHttpTests.RunAsync();
+    await GatewayDeadlineTests.RunAsync();
+    await GatewayAdmissionTests.RunAsync();
+    await GatewayHttpTests.RunAsync();
+    await GatewayFlowTests.RunAsync();
 }
 finally
 {

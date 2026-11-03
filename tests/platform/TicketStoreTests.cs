@@ -13,6 +13,7 @@ public static class TicketStoreTests
 {
     public static async Task RunAsync()
     {
+        await LiveBffSessionTests.RunAsync();
         await VerifyCopiesAndRandomReferences();
         await VerifyExpirationAndRevocation();
         await VerifyRenewalDoesNotExtendLifetime();

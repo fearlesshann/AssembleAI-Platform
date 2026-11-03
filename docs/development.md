@@ -1,6 +1,6 @@
 # T2 · 本地工程与验证
 
-2026-11-03：T1–T3 已验收；T4 注册 / 审核 / 发布 / 租户启停 API 与实库验证已落地。本轮 Core 回归通过，注册故障与并发回归单独记录。开发采用本机进程，不要求 Docker。
+2026-11-03：T1–T5 已验收，正式网关已通过 Core 与真实 PG / HTTP 联合验证。运行租约、单实例限流、SSE、在途撤权和调用审计已落地。开发采用本机进程，不要求 Docker。
 
 ## 不用 Docker 启动
 
@@ -44,7 +44,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-T3 身份与授权基础已完成：登录、服务端租户选择、RBAC / ABAC、内部签名凭据及撤权已验证。T4 已提供注册管理 API，下一步 T5 正式网关；两个 AI 用例按后续任务交付。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 身份与授权基础已完成：登录、服务端租户选择、RBAC / ABAC、内部签名凭据及撤权已验证。T4 提供注册管理 API，T5 已提供正式网关，下一步 T6 授权门户；两个 AI 用例按后续任务交付。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
@@ -114,7 +114,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 平台运行在 `http://127.0.0.1:5100`；FastAPI 运行在 8101，启动方法见 [后端与基础设施说明](development-services.md)。生产环境不注册 `/dev/sample/*`，开发代理仅允许明确的健康与流路径，且不转发调用者的认证请求头。
 
-`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 4）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
+`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 5）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
 
 项目独立 Python 环境的复核命令：
 
@@ -165,7 +165,7 @@ T3 已完成 [身份与权限契约](architecture/t3-authorization.md)、[OIDC /
 ## 后续验收边界
 
 1. T3 身份与授权基础已验收，不代表全产品所有业务资源已完成 V4–V7 最终验收。Keycloak 浏览器使用 H2 / 内存会话；PG 联合测试使用协议身份服务、真实数据库和测试 host 下游；生产 HTTPS、跨机器和完整部署仍在 T14。
-2. T5–T8：正式网关、授权应用清单、门户业务接口、管理界面与完整子应用接入；模板的本地演示登录不等于真实身份认证。
+2. T6–T8：授权应用清单、门户业务接口、管理界面与完整子应用接入；模板的本地演示登录不等于真实身份认证。
 3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
 
 向量扩展成功安装与知识库业务验收继续在 T12；本轮核心迁移成功不表示向量检索已就绪。原生数据库成功记录：`.artifacts/postgres/run-0bc82b0de23c456d8d6bc91bb9f0deaf/result.json`；`passed` 与 `cleanupComplete` 均为 true。启动脚本及验收判据修复见 SPEC B17–B19。
@@ -185,3 +185,13 @@ Compose 镜像构建、digest 固定和容器拓扑验证是可选交付路径�
 Core 回归通过：锁定还原、.NET 构建 0 警告 / 0 错误、原有身份及内部凭据测试、新 Manifest / 匿名读写测试、Node 3 项、Python 9 项与真实 FastAPI → YARP。已有 FastAPI TestClient 的 httpx 弃用提示不影响通过。新增 bug 及回归见 SPEC B23–B25；数据库空 JSON 负测先失败，修正 CHECK 的 NULL 处理后通过。独立助手额度限制由主线程接手复核，未声称取得新的独立复核结论。
 
 T4 为注册控制面 API 结项。资源实际部署 / 健康探测、正式动态路由 / 运行授权、门户清单与管理界面分别按 T5 / T6 / T8 继续；测试未启动 Docker。
+
+## T5 正式网关验收 · 2026-11-03
+
+[正式网关契约](architecture/gateway.md) 已交付。`powershell -NoProfile -File tools/verify.ps1 -Scope Core` 返回 0：锁定还原、.NET 构建 0 警告 / 0 错误、已有身份 / 注册 / 内部签名回归、新增会话实时复核与网关 HTTP 链路、Node 3 项、Python 9 项和真实 FastAPI → YARP 均通过。网关链路覆盖首段 SSE、签名验证、请求 / 响应头及日志隔离、编码负例、客户端断开、撤权 / 停用 / 租户切换 / 退出取消、首头 / 空闲 / 总时限、限流拒绝与恢复。
+
+最终原生 PostgreSQL 运行 `.artifacts/postgres/run-dd8b27ca47c845ca9ce24e6d7702c8c8/result.json` 返回 0，`passed=true`、`cleanupComplete=true`。迁移 1–5 与重放、T3 / T4 实库回归、租约 / 排空 / 永久撤销 / 容量 / 审计故障，以及生产网关 → 真实 PG → 签名 HTTP 下游组合通过。组合测试实际修改数据库权限与注册状态，并确认正在传输的流取消和后续调用拒绝；不是以替身仓储推断实库行为。
+
+独立复核发现并修正了 YARP 原始 URL 日志、错误响应清理后的安全头丢失、编码边界及期限延长问题，见 SPEC B26–B32 / V29。最后追加的延迟开始审计测试经重新构建及 `dotnet tests/platform/bin/Debug/net10.0/AssembleAI.Platform.SmokeTests.dll --gateway-tests` 验证返回 0：耗尽预算后下游请求计数不增加，已创建调用记录仍正常终结。最终独立代码复核未发现阻止提交的问题。
+
+T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部签名、可信服务版本与操作表。此次未改门户 UI，未运行 Docker；真实 Keycloak 浏览器、PG 加密会话各有独立验收，本轮组合使用 OidcFixture 和开发内存会话，完整生产 HTTPS / 多副本部署仍归 T14。下一阶段 T6 接入真实授权应用门户。

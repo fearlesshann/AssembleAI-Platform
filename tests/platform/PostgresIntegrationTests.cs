@@ -53,7 +53,7 @@ public static class PostgresIntegrationTests
                 await using var role = new NpgsqlCommand("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls FROM pg_roles WHERE rolname=current_user", connection);
                 Assert(await role.ExecuteScalarAsync() is false, "The application role must not have elevated cluster privileges.");
                 await using var migrated = new NpgsqlCommand("SELECT array_agg(version ORDER BY version) FROM public.platform_schema_migrations", connection);
-                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4]) == true,
+                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5]) == true,
                     "All real core migrations must have completed exactly once.");
                 await using var empty = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.platform_users)+(SELECT count(*) FROM public.platform_tenants)+(SELECT count(*) FROM public.platform_bff_sessions)+(SELECT count(*) FROM public.platform_registry_operators)+(SELECT count(*) FROM public.platform_applications)", connection);
                 Assert(await empty.ExecuteScalarAsync() is 0L, "Core migrations must not seed accounts, tenants or sessions.");
@@ -68,6 +68,10 @@ public static class PostgresIntegrationTests
             await PostgresTrustTests.RunAsync(connectionString, runDirectory);
             phase = "application registry and tenant releases";
             await PostgresRegistryTests.RunAsync(connectionString);
+            phase = "gateway leases and call records";
+            await PostgresGatewayStoreTests.RunAsync(connectionString);
+            phase = "production gateway PostgreSQL and signed HTTP chain";
+            await PostgresGatewayFlowTests.RunAsync(connectionString, runDirectory);
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");
             await VerifyReadiness(connectionString, requireVector: true, "unavailable");

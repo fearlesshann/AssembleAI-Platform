@@ -81,8 +81,13 @@ public sealed class PostgresTicketStore(
 
     public Task<AuthenticationTicket?> RetrieveAsync(string key) => RetrieveAsync(key, CancellationToken.None);
 
-    public Task<AuthenticationTicket?> RetrieveAsync(string key, HttpContext context, CancellationToken cancellationToken = default) =>
-        RetrieveAsync(key, cancellationToken);
+    public async Task<AuthenticationTicket?> RetrieveAsync(string key, HttpContext context, CancellationToken cancellationToken = default)
+    {
+        context.Features.Set<LiveBffSessionReference>(null);
+        var ticket = await RetrieveAsync(key, cancellationToken);
+        if (ticket is not null) context.Features.Set(new LiveBffSessionReference(key));
+        return ticket;
+    }
 
     public async Task<AuthenticationTicket?> RetrieveAsync(string key, CancellationToken cancellationToken)
     {
