@@ -11,7 +11,11 @@ if (location.pathname.startsWith('/workspace/')) {
   ]);
   document.title = '集智 · 应用接入';
   createApp(App).use(ElementPlus).mount('#portal-root');
-} else {
+} else if (location.pathname.startsWith('/reference-ui/')) {
   const { default: TemplatePortal } = await import('./TemplatePortal');
   createApp(TemplatePortal).mount('#portal-root');
+} else {
+  const [{ default: Portal }] = await Promise.all([import('./Portal.vue'), import('./portal.css')]);
+  document.title = '集智 · 应用中心';
+  createApp(Portal).mount('#portal-root');
 }

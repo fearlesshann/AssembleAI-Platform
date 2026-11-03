@@ -32,6 +32,11 @@ if (args.Contains("--registry-http-tests", StringComparer.Ordinal))
     await RegistryHttpTests.RunAsync();
     return;
 }
+if (args.Contains("--catalog-tests", StringComparer.Ordinal))
+{
+    await CatalogHttpTests.RunAsync();
+    return;
+}
 if (args.Contains("--gateway-tests", StringComparer.Ordinal))
 {
     await GatewayDeadlineTests.RunAsync();
@@ -136,6 +141,7 @@ try
     await TenantSessionTests.RunAsync();
     await InternalCallTests.RunAsync();
     await RegistryHttpTests.RunAsync();
+    await CatalogHttpTests.RunAsync();
     await GatewayDeadlineTests.RunAsync();
     await GatewayAdmissionTests.RunAsync();
     await GatewayHttpTests.RunAsync();

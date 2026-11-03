@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>集智 · UI 样例</title>
+  <title>集智 · 应用中心</title>
   <base href="/" />
   <link rel="icon" href="favicon.ico?v=20261102t" sizes="any" />
   <link rel="icon" type="image/png" href="favicon.png?v=20261102t" sizes="32x32" />
@@ -11,20 +11,21 @@
   <script>
     (function () {
       try {
-        var KEY = "mfg-ai-theme";
+        var reference = location.pathname.indexOf('/reference-ui/') === 0;
+        var KEY = reference ? "mfg-ai-theme" : "assembleai.theme";
         var saved = localStorage.getItem(KEY);
-        var theme = (saved === "light" || saved === "dark")
-          ? saved
-          : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        var theme = saved === "dark" ? "dark" : "light";
         document.documentElement.setAttribute("data-theme", theme);
       } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
+        document.documentElement.setAttribute("data-theme", "light");
       }
-      try {
-        var authed = localStorage.getItem("mfg-ai-auth") === "1" || sessionStorage.getItem("mfg-ai-auth-session") === "1";
-        document.documentElement.setAttribute("data-auth", authed ? "in" : "out");
-      } catch (e) {
-        document.documentElement.setAttribute("data-auth", "out");
+      if (location.pathname.indexOf('/reference-ui/') === 0) {
+        try {
+          var authed = localStorage.getItem("mfg-ai-auth") === "1" || sessionStorage.getItem("mfg-ai-auth-session") === "1";
+          document.documentElement.setAttribute("data-auth", authed ? "in" : "out");
+        } catch (e) {
+          document.documentElement.setAttribute("data-auth", "out");
+        }
       }
     })();
   </script>

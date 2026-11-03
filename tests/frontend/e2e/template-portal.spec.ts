@@ -11,7 +11,7 @@ async function enterDemoPortal(page: Page, remember = false) {
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
-  await page.goto('/?motion=reduced');
+  await page.goto('/reference-ui/?motion=reduced');
 });
 
 test('template portal opens on demo login, validates fields and switches sidebar views', async ({ page }) => {

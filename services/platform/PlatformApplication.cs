@@ -4,6 +4,7 @@ using AssembleAI.Platform.Identity;
 using AssembleAI.Platform.InternalCalls;
 using AssembleAI.Platform.Registry;
 using AssembleAI.Platform.Gateway;
+using AssembleAI.Platform.Catalog;
 
 namespace AssembleAI.Platform;
 
@@ -34,6 +35,7 @@ public static class PlatformApplication
         builder.AddPlatformInternalCalls();
         builder.AddPlatformRegistry();
         builder.AddPlatformGateway();
+        builder.AddPlatformCatalog();
         var app = builder.Build();
         app.UseExceptionHandler();
         app.UseBffSessionBoundary();
@@ -44,6 +46,7 @@ public static class PlatformApplication
         app.MapInternalCallEndpoints();
         app.MapRegistryEndpoints();
         app.MapGatewayEndpoints();
+        app.MapCatalogEndpoints();
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = _ => false,

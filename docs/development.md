@@ -1,6 +1,6 @@
-# T2 · 本地工程与验证
+# 本地工程与验证
 
-2026-11-03：T1–T5 已验收，正式网关已通过 Core 与真实 PG / HTTP 联合验证。运行租约、单实例限流、SSE、在途撤权和调用审计已落地。开发采用本机进程，不要求 Docker。
+2026-11-03：T1–T6 已验收。正式门户默认接 BFF、租户与授权目录，支持分类搜索、详情和运行入口；Core、前端 21 项浏览器回归及真实 PG / OIDC / 浏览器目录联合通过。开发采用本机进程，不要求 Docker。
 
 ## 不用 Docker 启动
 
@@ -44,15 +44,15 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-T3 身份与授权基础已完成：登录、服务端租户选择、RBAC / ABAC、内部签名凭据及撤权已验证。T4 提供注册管理 API，T5 已提供正式网关，下一步 T6 授权门户；两个 AI 用例按后续任务交付。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 身份与授权基础已完成：登录、服务端租户选择、RBAC / ABAC、内部签名凭据及撤权已验证。T4 提供注册管理 API，T5 提供正式网关，T6 已接授权门户；下一步 T7 完整子应用接入，两个 AI 用例按后续任务交付。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
-### 模板入口与接入验证入口
+### 正式门户与参考入口
 
-默认首页 `/` 按用户要求恢复为 `references/ui-v1` 原始模板：Vue 直接承载模板标记，复用原始 CSS、经典脚本、品牌素材和截图；模板来源及许可继续保留。模板是运行时构建输入，不应删除。门户不加载 Element Plus 的样式，以免改变模板外观；工程验证壳层仍在 `/workspace/integration`，样例深链仍为 `/workspace/sample`，两套页面通过完整文档导航隔离。
+默认首页 `/` 已接正式 BFF 授权门户；详情路径 `/applications/{appId}`，包含浅暗主题、租户选择、分类搜索与运行入口。[配置与目录契约](architecture/portal.md) 说明同源代理、PublicOrigin 和实际身份 / 数据前提。只启动静态预览而未配置后端时，会显示服务错误，不模拟登录。
 
-模板登录仍是页面中明确说明的本地演示：任意非空账号、密码进入样例，其浏览器标记不会认证后端请求。工作台、应用和成员数据均保留模板演示内容；新 BFF 接口尚未接到这套模板交互。
+`references/ui-v1` 原始模板保留在 `/reference-ui/`，继续使用其原始 CSS / 经典脚本、品牌素材和许可。模板登录、工作台及成员数据仍是演示，浏览器标记不会认证正式门户。工程验证壳层在 `/workspace/integration`，样例深链在 `/workspace/sample`；各入口通过完整文档导航隔离样式。模板仍是参考入口构建输入，不应删除。
 
 默认访问 `http://127.0.0.1:5173/`，构建预览访问 `http://127.0.0.1:4173/`。`tests/frontend/e2e/template-portal.spec.ts` 验证模板交互，原有微前端测试从 `/workspace/integration` 进入。
 
@@ -165,7 +165,7 @@ T3 已完成 [身份与权限契约](architecture/t3-authorization.md)、[OIDC /
 ## 后续验收边界
 
 1. T3 身份与授权基础已验收，不代表全产品所有业务资源已完成 V4–V7 最终验收。Keycloak 浏览器使用 H2 / 内存会话；PG 联合测试使用协议身份服务、真实数据库和测试 host 下游；生产 HTTPS、跨机器和完整部署仍在 T14。
-2. T6–T8：授权应用清单、门户业务接口、管理界面与完整子应用接入；模板的本地演示登录不等于真实身份认证。
+2. T7–T8：完整子应用 SDK / 受控请求能力和注册管理界面；T6 门户已接真实身份与目录，旧模板的演示登录仍不代表认证。
 3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
 
 向量扩展成功安装与知识库业务验收继续在 T12；本轮核心迁移成功不表示向量检索已就绪。原生数据库成功记录：`.artifacts/postgres/run-0bc82b0de23c456d8d6bc91bb9f0deaf/result.json`；`passed` 与 `cleanupComplete` 均为 true。启动脚本及验收判据修复见 SPEC B17–B19。
@@ -195,3 +195,15 @@ T4 为注册控制面 API 结项。资源实际部署 / 健康探测、正式动
 独立复核发现并修正了 YARP 原始 URL 日志、错误响应清理后的安全头丢失、编码边界及期限延长问题，见 SPEC B26–B32 / V29。最后追加的延迟开始审计测试经重新构建及 `dotnet tests/platform/bin/Debug/net10.0/AssembleAI.Platform.SmokeTests.dll --gateway-tests` 验证返回 0：耗尽预算后下游请求计数不增加，已创建调用记录仍正常终结。最终独立代码复核未发现阻止提交的问题。
 
 T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部签名、可信服务版本与操作表。此次未改门户 UI，未运行 Docker；真实 Keycloak 浏览器、PG 加密会话各有独立验收，本轮组合使用 OidcFixture 和开发内存会话，完整生产 HTTPS / 多副本部署仍归 T14。下一阶段 T6 接入真实授权应用门户。
+
+## T6 授权门户验收 · 2026-11-03
+
+[目录与门户契约](architecture/portal.md) 已交付。默认首页接真实 BFF，支持显式租户选择、授权清单、分类 / 搜索、详情深链、固定版本运行入口、浅暗主题与 390px 布局。旧模板移到 `/reference-ui/`，工程 PoC 路径保持。Vite 和构建预览共用固定 loopback 同源代理；未配置后端时明确失败。
+
+最终 `tools/verify.ps1 -Scope Frontend` 返回 0：Node 8 项、类型检查、两项 Vite 构建、Playwright 21 项通过（13 项正式门户 + 原有 5 项微前端 / 3 项模板）。正式门户用例覆盖 CSRF、运行刷新不自动创建、服务失败 / 撤权、切租户迟到响应、退出失败、同页二次运行、身份恢复故障，以及挂起生命周期 / 卸载失败后的整页恢复。独立复核发现的问题均先浏览器复现，再修复并回归，见 SPEC B33–B37 / V30。恢复前锁住后续挂载，避免以超时假装旧应用已清理。
+
+完整 Core 同轮返回 0：锁定 .NET 还原、构建 0 警告 / 0 错误、身份 / 注册 / 网关 / 目录边界回归、Node 8 项、Python 9 项及真实 FastAPI → YARP。两种 scope 分别执行，未把它们写成一次 `-Scope All` 运行。已有工程 Element Plus 大分块、httpx 弃用及终端颜色提示仍为非失败警告；正式门户按钮 / 输入框已按需导入。
+
+最终 `tools/verify-postgres.py --portal-browser` 返回 0；记录 `.artifacts/postgres/run-6e31c712c5fc469f89c3251ab8fe7dd3/result.json` 的 passed / cleanupComplete / portalBrowserRequested 均 true。真实目录 HTTP 验证完整权限、隐藏类别、跨租户、停用 / 撤权 / 版本一致性、500 / 501 容量边界；Chromium 实际完成 OIDC → BFF → PG 清单 / 详情、主题、窄屏与退出，不拦截 API。T3–T5 数据库与签名网关组合也全部回归；临时数据库和凭据清理完成。
+
+浅色清单、暗色详情和窄屏截图位于 `.artifacts/portal-postgres/9c8169a2-b6df-4cf4-ae49-9214e6568132/`。已检查信息层级、主题、品牌标识及无水平溢出；独立权限与生命周期复核均无阻塞问题。本轮使用 OidcFixture / 开发内存会话，原生 Keycloak 和 PG 密文会话的独立验收继续保留；完整子应用请求 SDK 在 T7，生产拓扑在 T14，不把参考样例当成制造业 AI 用例完成。

@@ -4,13 +4,14 @@
 
 ## 当前进度
 
-T1–T5 已完成，正式网关已通过 Core 与真实 PostgreSQL 组合验收。已具备应用注册发布、固定版本运行租约、签名下游调用、SSE、撤权取消、限流和调用记录。当前使用本机进程开发，下一阶段接授权应用门户。
+T1–T6 已完成。默认首页已接企业登录、租户选择、授权应用列表、分类搜索、详情和固定版本运行入口，支持浅暗主题。Core、21 项浏览器回归及真实 PostgreSQL / OIDC / 门户浏览器组合验收通过。当前使用本机进程开发，下一阶段完善子应用接入模板与受控 API 能力。
 
 - [产品与验收规格](SPEC.md)
 - [T1 实施决策与 T2 开工清单](docs/architecture/t1-decisions.md)
 - [T3 身份与授权基础](docs/architecture/t3-authorization.md)
 - [T4 注册、审核与租户启停](docs/architecture/registry.md)
 - [T5 正式网关与运行契约](docs/architecture/gateway.md)
+- [T6 授权门户与本机登录配置](docs/architecture/portal.md)
 - [内部调用身份与权限契约](docs/architecture/t3-internal-calls.md)
 - [原生 Keycloak 验收入口](docs/native-identity.md)
 - [原生 PostgreSQL 验收入口](docs/native-postgres.md)
@@ -28,6 +29,6 @@ Vue 3 + TypeScript + Element Plus + Vite + qiankun；ASP.NET Core + YARP；独�
 
 ## 下一里程碑
 
-推进 T6 授权应用门户，接真实列表、分类、搜索、详情与运行入口，再完成子应用接入和管理界面。[BFF 接口与原生配置](docs/architecture/t3-bff.md) 已提供；首页仍为演示登录。Docker 是可选部署方式，开发使用本机进程。
+推进 T7 子应用接入模板与受控平台上下文，再接 T8 注册管理界面。正式门户启动需配置真实身份、数据库和应用授权，见 [T6 本机登录配置](docs/architecture/portal.md)；旧演示模板保留在 `/reference-ui/`。Docker 是可选部署方式，开发使用本机进程。
 
 `references/ui-v1` 中的模拟登录、模拟数据和占位测试不属于正式平台实现。该目录保留来源仓库的 LICENSE；源码未改写。

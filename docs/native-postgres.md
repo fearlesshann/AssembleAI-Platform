@@ -16,6 +16,9 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 # 创建独立数据库、执行实库验收、停止集群并删除临时凭据
 & '.\apps\sample\backend\.venv\Scripts\python.exe' tools/verify-postgres.py
+
+# 另需门户构建产物、已安装的锁定前端依赖与 Chromium：真实浏览器登录 / 目录链
+& '.\apps\sample\backend\.venv\Scripts\python.exe' tools/verify-postgres.py --portal-browser
 ```
 
 运行器仅使用 Python 标准库，可换成已有 Python 3.13 解释器；它不下载依赖。另需 .NET 10 SDK 和已构建的 `tests/platform/bin/Debug/net10.0/AssembleAI.Platform.SmokeTests.dll`。普通 `tools/verify.ps1 -Scope Core` / `All` 不启动数据库，本入口需单独运行。
@@ -61,6 +64,8 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 - 会话仓储覆盖数据库中的真实密文、独立重建的密钥提供器与重新加载 PFX 后恢复、密文篡改拒绝、UTC 到期、删除与续期并发、取消和数据库连接失败。
 - 联合链路使用 OIDC HTTP 协议服务、真实 PG 会话 / 授权、服务端租户选择及仅公钥 HTTP 接收端，验证已签发凭据的策略撤权和退出重放。
 - 注册测试使用 OIDC 协议登录和实际 HTTP API，覆盖所有者 / 独立审核、Manifest 负例、租户授权与撤权、状态转换、并发 CAS、版本回滚、发布后不可变及审计失败回滚。
+- 目录测试验证服务端选中租户、全部入口授权、发布启用与可信部署过滤、隐藏分类隔离、5 字段 DTO、实时撤权 / 版本切换、500 项完整成功与 501 项明确 503；目录准入与网关对照。
+- `--portal-browser` 在测试 host 提供真实构建静态页面，通过 Chromium 实际 OIDC 登录、选择租户、读取 PG 清单 / 详情、主题 / 390px 检查与退出，不拦截 API；不指定时明确跳过该浏览器项。原生启动器会解析 Node 绝对路径后再隔离 PATH，仍不下载依赖。
 - 网关仓储验证会话哈希绑定、全部入口权限、租约到期 / 排空、版本来回切换不延长、停用后不复活、并发容量及调用审计故障。
 - `PostgresGatewayFlowTests` 不替换生产网关或 PG 仓储，串联 OIDC 协议服务、开发内存 BFF 会话、真实注册 / 授权 / 租约 / 审计数据库及仅公钥 HTTP 下游；验证签名 JSON、SSE 首段与完成、持久化结果，以及数据库撤权或注册停用取消在途流。
 - readiness 的 PostgreSQL 子检查在 `RequireVector=false` 时为 `ready`、为 true 时为 `unavailable`；由于其他依赖未配置，整体 HTTP 状态在两种情况下都保持 503。
@@ -92,3 +97,9 @@ T4 为注册控制面 API 结项。资源实际部署 / 健康探测、正式动
 该组合直接使用生产 Gateway、PostgresGatewayStore、授权与注册仓储，验证 JSON / SSE 首段与完成、签名下游和持久化调用结果。实际撤销数据库授权、通过注册仓储停用应用后，在途流均被取消；新请求拒绝。租约切换 / 回滚的非延长与停用不复活、容量竞争及审计故障由实库仓储测试覆盖。
 
 身份服务仍为 OidcFixture，本组合使用开发内存会话；独立 PG 密文会话链路继续由 T3 测试覆盖。没有据此声称真实 Keycloak + PG + 生产 HTTPS 整体部署或向量查询完成。完整 Core 与最后期限回归的执行记录见[开发记录](development.md#t5-正式网关验收--2026-11-03)。
+
+## T6 授权目录与浏览器验收 · 2026-11-03
+
+最终执行 `tools/verify-postgres.py --portal-browser` 返回 0，记录 `.artifacts/postgres/run-6e31c712c5fc469f89c3251ab8fe7dd3/result.json` 的 `passed=true`、`cleanupComplete=true`、`portalBrowserRequested=true`。迁移 1–5、既有 T3–T5 实库合同、新目录权限 / 过滤 / 版本 / 容量测试全部通过。
+
+浏览器实际访问测试 host 上的门户构建，完成 OIDC 登录、选择租户、读取授权清单和详情、浅暗主题 / 390px 检查及退出后 401；没有 API mock。此浏览器链使用开发内存会话，单独的 PG 密文会话测试同时继续执行。截图与完整代码回归结果见[开发记录](development.md#t6-授权门户验收--2026-11-03)。运行器清理了本次集群与凭据，截图和脱敏日志留在被 Git 忽略的 `.artifacts`。

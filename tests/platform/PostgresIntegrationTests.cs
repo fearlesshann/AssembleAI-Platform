@@ -68,6 +68,8 @@ public static class PostgresIntegrationTests
             await PostgresTrustTests.RunAsync(connectionString, runDirectory);
             phase = "application registry and tenant releases";
             await PostgresRegistryTests.RunAsync(connectionString);
+            phase = "authorized application catalog";
+            await PostgresCatalogTests.RunAsync(connectionString);
             phase = "gateway leases and call records";
             await PostgresGatewayStoreTests.RunAsync(connectionString);
             phase = "production gateway PostgreSQL and signed HTTP chain";
