@@ -60,6 +60,14 @@ internal sealed class DependencyReadinessCheck(
         command.Parameters.AddWithValue(configuration.GetValue<bool>("Authentication:Bff:Enabled") ? 3 : 2);
         if (await command.ExecuteScalarAsync(cancellationToken) is not true)
             throw new IOException("Platform migration has not been applied.");
+
+        if (configuration.GetValue("Readiness:RequireVector", true))
+        {
+            await using var vector = new NpgsqlCommand(
+                "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector' AND extversion = '0.8.7')", connection);
+            if (await vector.ExecuteScalarAsync(cancellationToken) is not true)
+                throw new IOException("Required knowledge-base extension has not been initialized.");
+        }
     }
 
     private async Task CheckRedis(CancellationToken cancellationToken)

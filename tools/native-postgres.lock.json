@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows-x64",
+  "package": {
+    "version": "17.11",
+    "distributionBuild": "5",
+    "archiveName": "postgresql-17.11-5-windows-x64-binaries.zip",
+    "url": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64-binaries.zip",
+    "sha256": "80379b2c04d51c30225532e0ae04509899141e9957ed096fe749d7fd9df8f82f",
+    "size": 381531864,
+    "relativeHome": "postgresql/pgsql",
+    "checksumSource": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64-binaries.zip.sha256",
+    "checksumKind": "publisher-sha256-over-https",
+    "downloadPage": "https://www.enterprisedb.com/download-postgresql-binaries",
+    "downloadRedirect": "https://sbp.enterprisedb.com/getfile.jsp?fileid=1260616"
+  }
+}

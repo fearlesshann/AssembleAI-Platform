@@ -49,4 +49,6 @@ dotnet build AssembleAI.slnx --no-restore
 
 生产密钥测试及 Core 全部通过：.NET 构建 0 警告 / 0 错误，Node 3 项、Python 9 项、真实 FastAPI → YARP 和扩展后的 .NET smoke。测试脚本修复与回溯见 SPEC B13–B16。
 
-原生 PostgreSQL 调查确认：EDB 17.11 Windows ZIP 包含服务器和头文件，但不含 pgvector；当前迁移 1 要求 vector 0.8.7，本机还没有对应 C++ 编译工具链。后续需补齐构建，或明确拆分控制面迁移与知识库扩展初始化；本次没有跳过扩展或写入虚假迁移记录。
+PostgreSQL 后续工作已完成原生锁定安装，并在真实迁移失败确认缺少 `vector.control` 后，将控制面迁移 1–3 与 pgvector 0.8.7 初始化显式拆分。独立的 [原生 PostgreSQL 验收](native-postgres.md) 已通过真实授权仓储、加密会话和 readiness 边界测试，集群与临时凭据已清理；扩展缺失仍会使 vector 初始化失败。
+
+这些实库结果不改变本页边界：Keycloak 浏览器入口仍使用 H2 和平台开发内存会话，尚未串联真实 Keycloak、生产 HTTPS Cookie 与 PostgreSQL 完整登录链路。

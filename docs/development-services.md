@@ -43,15 +43,19 @@ SSE 协议：`delta` 数据 `{index,text,requestId}`；成功以 `complete` 数�
 
 ## 原生 PostgreSQL 迁移
 
-原生迁移入口默认不使用 Docker：
+Windows 原生安装及一次性实库测试见 [原生 PostgreSQL 验收](native-postgres.md)。已锁定并安装 PostgreSQL 17.11，安装脚本只准备二进制；验收器每次独立创建、测试和清理集群。
+
+对已有数据库执行控制面迁移，默认不使用 Docker：
 
 ```powershell
-powershell -NoProfile -File deploy/postgres/migrate.ps1 -Psql 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -DatabaseHost 127.0.0.1 -Port 5432 -Username postgres
+powershell -NoProfile -File deploy/postgres/migrate.ps1 -Psql '.\.local-data\native-postgres\postgresql\pgsql\bin\psql.exe' -DatabaseHost 127.0.0.1 -Port 5432 -Username postgres
 ```
 
-将示例路径与地址换成实际环境。迁移前需已有 `assembleai_platform` 数据库及同名角色，服务器具备 pgvector 0.8.7 扩展文件；迁移账号需有安装扩展及 `SET ROLE assembleai_platform` 的权限。密码使用 PostgreSQL 密码文件或进程环境 `PGPASSWORD`，不放入命令行。脚本限定目标数据库，SQL 会再次检查数据库名，使用事务及 advisory lock；当前没有连接真实 PostgreSQL 执行迁移。
+将示例路径与地址换成实际环境。迁移前需已有 `assembleai_platform` 数据库及同名角色，迁移账号需有 `SET ROLE assembleai_platform` 和创建对应对象的权限。密码使用 PostgreSQL 密码文件或进程环境 `PGPASSWORD`，不放入命令行。脚本限定目标数据库，SQL 会再次检查数据库名，使用事务及 advisory lock。
 
-开发核心启动和流式样例不依赖该数据库；T3 / T4 引入实际身份、授权和注册持久化时再完成真实连接及迁移验证。
+默认执行 `apply.sql` 的控制面迁移 1–3，不需要 pgvector。需要知识库扩展时加 `-IncludeVector`，执行 `apply-with-vector.sql`：控制面迁移完成后，再由 `enable-vector.sql` 安装并严格核验 pgvector 0.8.7。此时服务器必须已安装扩展文件，迁移账号也需具备安装扩展的权限；缺失或版本不符都会失败。该组合按各迁移事务顺序提交，vector 失败时已提交的控制面迁移仍保留。
+
+平台 `Readiness:RequireVector` 默认 true；仅控制面环境需明确配置 `Readiness__RequireVector=false`。这不会声明知识库已就绪，也不会绕过其他基础设施检查。开发流式样例仍不依赖数据库。
 
 ## Compose 开发依赖（可选）
 
@@ -63,7 +67,7 @@ powershell -NoProfile -File deploy/postgres/migrate.ps1 -Psql 'C:\Program Files\
 powershell -NoProfile -File deploy/compose/initialize-env.ps1
 docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml config --quiet
 docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml up -d --build --wait
-powershell -NoProfile -File deploy/postgres/migrate.ps1 -UseCompose
+powershell -NoProfile -File deploy/postgres/migrate.ps1 -UseCompose -IncludeVector
 docker compose --env-file deploy/compose/.env -f deploy/compose/compose.yaml ps
 ```
 
@@ -87,11 +91,12 @@ MinIO 官方仓库于 2026-04-25 归档，最后的安全发布说明要求从�
 
 - 首次初始化创建 `assembleai_platform` 与 `keycloak` 两个数据库和独立账号；撤销 PUBLIC 的跨库连接权限。
 - `assembleai_platform` 账号无 SUPERUSER / CREATEDB / CREATEROLE / BYPASSRLS；当前是本地开发数据库所有者，生产迁移账号与运行账号分离在交付阶段落实。
-- Compose 数据库初次创建时运行 `/migrations/apply.sql`；重复执行 `migrate.ps1 -UseCompose` 只重放可幂等的已列迁移。原生 psql 入口执行同一套 SQL。
-- `0001_bootstrap.sql` 在事务和 advisory lock 下验证目标数据库名，初始化 pgvector 并要求版本 0.8.7，写入 `public.platform_schema_migrations` 的 `version=1`。误连其他数据库会失败。
-- `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`。迁移不预置账号或权限，尚待真实数据库执行验证。
+- Compose 数据库初次创建时运行 `/migrations/apply-with-vector.sql`，初始化控制面及 pgvector；重复执行 `migrate.ps1 -UseCompose -IncludeVector` 重放同一套可幂等入口。原生模式也使用这些 SQL。
+- `0001_bootstrap.sql` 在事务和 advisory lock 下验证目标数据库名，创建迁移记录表并写入 `public.platform_schema_migrations` 的 `version=1`。误连其他数据库会失败；该迁移不安装 vector。
+- `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`。迁移不预置账号或权限，已通过真实数据库验收。
 - `0003_bff_sessions.sql` 增加服务端加密 ticket、随机会话引用与绝对到期时间，记录 `version=3`；不包含保护密钥或预置会话。
-- 平台 readiness 在 BFF 开启时检查迁移 3，否则检查迁移 2。应用注册表在 T4 添加；当前没有预建业务租户或制造业演示数据。
+- `enable-vector.sql` 独立安装并核验 pgvector 0.8.7；已有其他版本时拒绝自动升级。`apply.sql` 只含控制面 1–3，`apply-with-vector.sql` 在其后执行此扩展步骤。
+- 平台 readiness 在 BFF 开启时检查迁移 3，否则检查迁移 2；`Readiness:RequireVector` 默认 true，只有显式设为 false 才允许无 vector 的控制面数据库。应用注册表在 T4 添加；当前没有预建业务租户或制造业演示数据。
 - 迁移入口没有隐含重置数据或 `down -v`；初始化脚本只在空数据卷执行，修改 `.env` 不会自动轮换已有数据库角色密码。
 
 ## Keycloak 开发接入
@@ -111,6 +116,7 @@ Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configur
 | 配置键 | 非敏感部分 / 对应凭据 |
 | --- | --- |
 | `ConnectionStrings__Platform` | `Host=127.0.0.1;Port=5432;Database=assembleai_platform;Username=assembleai_platform;Password=` 后接 `PLATFORM_DB_PASSWORD` |
+| `Readiness__RequireVector` | 默认 `true`；仅控制面环境可显式设为 `false`，不影响其他依赖检查 |
 | `Readiness__RedisHost` / `RedisPort` / `RedisPassword` | `127.0.0.1` / `6379` / `REDIS_PASSWORD` |
 | `Readiness__MinioEndpoint` | `http://127.0.0.1:9000/minio/health/ready` |
 | `Readiness__RabbitMqEndpoint` / `User` / `Password` | `http://127.0.0.1:15672/api/health/checks/ready-to-serve-clients` / `assembleai` / `RABBITMQ_PASSWORD` |
@@ -122,4 +128,5 @@ Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configur
 - 真实 HTTP 烟测：启动临时 Uvicorn，配置每段间隔 1000ms，首段实测 18.3ms；主动断开后健康端点仍可访问。临时进程已停止。
 - 本地依赖快照：22 个已安装版本，传递依赖声明全部满足。
 - 已验证：官方 JDK / Keycloak ZIP 锁定安装、真实 Keycloak + Chromium 登录 / 退出 / CSRF / Cookie 重放 / SSO，以及测试进程和凭据清理。平台使用开发内存会话，Keycloak 使用 H2。
-- 尚未验证：Linux 隔离安装、Docker 镜像构建 / 拉取、Compose 运行、PostgreSQL 实际迁移与生产持久会话。这些项目不会由本机代码验证替代。
+- 已验证：PostgreSQL 17.11 原生锁定安装、控制面迁移 1–3 重放及错库拒绝、真实授权仓储 / HTTP 边界、真实加密会话存储 / 独立密钥提供器恢复，以及缺少 vector 的 readiness 边界。验收返回 0，临时集群与凭据已清理，详见 [实库验收记录](native-postgres.md#2026-11-03-验收记录)。
+- 尚未验证：Linux 隔离安装、Docker 镜像构建 / 拉取、Compose 运行、pgvector 正向安装、真实 Keycloak + 生产 HTTPS Cookie + PostgreSQL 的完整登录链路、多进程故障恢复及证书轮换。这些项目不会由本机代码验证替代。

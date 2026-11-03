@@ -44,7 +44,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-T3 授权基础与 BFF 服务端登录接口已实现，真实 Keycloak 登录已验证；PostgreSQL 联调、应用注册中心和两个 AI 用例待完成。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 授权基础与 BFF 服务端登录接口已实现，真实 Keycloak 登录与 PostgreSQL 授权 / 会话分别验证通过；租户切换、内部签名上下文、应用注册中心和两个 AI 用例待完成。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
@@ -114,7 +114,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 平台运行在 `http://127.0.0.1:5100`；FastAPI 运行在 8101，启动方法见 [后端与基础设施说明](development-services.md)。生产环境不注册 `/dev/sample/*`，开发代理仅允许明确的健康与流路径，且不转发调用者的认证请求头。
 
-`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（BFF 开启时要求 3，否则 2）、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。
+`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（BFF 开启时要求 3，否则 2）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
 
 项目独立 Python 环境的复核命令：
 
@@ -125,7 +125,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 跨服务烟测自动启动自己的临时进程和端口，并在结束时清理。这里只验证开发代理与流传输，不宣称已完成 T3 权限或 T5 正式应用网关。
 
-T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC / BFF 会话](architecture/t3-bff.md)。默认不启用认证；外部配置齐全后提供登录、session、CSRF 和本地退出接口，生产使用数据库加密 ticket。现有协议测试覆盖双租户 / 双工厂、撤权和伪造令牌；新增 [原生 Keycloak 验收](native-identity.md) 已用真实身份服务与 Chromium 验证登录 / 退出、Cookie / token 边界、CSRF / Origin、旧 Cookie 重放和 SSO 再进入。实际 PostgreSQL、租户切换和内部签名上下文仍待验收，T3 保持进行中。
+T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC / BFF 会话](architecture/t3-bff.md)。默认不启用认证；外部配置齐全后提供登录、session、CSRF 和本地退出接口，生产使用数据库加密 ticket。现有协议测试覆盖双租户 / 双工厂、撤权和伪造令牌；[原生 Keycloak 验收](native-identity.md) 已用真实身份服务与 Chromium 验证登录 / 退出、Cookie / token 边界、CSRF / Origin、旧 Cookie 重放和 SSO 再进入。[原生 PostgreSQL 验收](native-postgres.md) 已验证真实核心迁移、授权与加密会话。租户切换、内部签名上下文和身份 / 授权联合验收仍待完成，T3 保持进行中。
 
 ## 最新验证记录（2026-11-03）
 
@@ -135,12 +135,15 @@ T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC
 | .NET build | 通过；0 警告 / 0 错误 |
 | .NET HTTP smoke | 通过；生产禁用样例代理、请求头过滤、方法限制、SSE 分段、缺依赖 503 |
 | T3 授权领域 / HTTP / ASP.NET 策略 | 通过；租户与工厂隔离、grant 不交叉拼接、停用组织、issuer 隔离、401 / 403 / 503、响应不泄漏内部组织目录、撤权及取消 |
-| T3 PostgreSQL 迁移 2 | 8 张表、复合外键与策略版本触发器已实现并复核；尚未在真实数据库执行 |
+| T3 PostgreSQL 核心迁移 1–3 | 原生 17.11 真实执行与幂等重放通过；无预置账号 / 租户 / 会话；错库拒绝，应用角色非超级用户 |
+| T3 PostgreSQL 授权 | 实际 uuid[] / 参数化查询、双租户 / 双工厂、复合外键、策略版本、事务回滚和提交后撤权通过；HTTP 使用真实仓储验证 401 / 403 / 503 |
+| 控制面 / vector 边界 | 原迁移缺 vector.control 红测后显式拆分；核心完整执行；扩展缺失 0A000；默认 readiness 数据库项 unavailable，显式控制面模式 ready，但缺其他依赖仍 503 |
 | T3 BFF / OIDC HTTP | 通过；code + PKCE S256、RSA JWT、issuer / audience / signature / nonce / state / correlation 拒绝、固定回调、无 token Cookie、CSRF / Origin、退出重放与八小时到期 |
 | T3 真实原生 Keycloak / Chromium | 通过；JDK 25.0.5+8、Keycloak 26.8.1，错误密码拒绝、真实登录 / 主体、Cookie / token 隔离、CSRF / Origin、重放拒绝、SSO 再进入；最终运行与凭据清理均返回 0 |
 | T3 生产密钥持久化 | 通过；实际 RSA PFX 加密 keyring，重建应用后恢复，异证书 / 无私钥 / ECDSA / 缺文件拒绝，临时证书与 key 清理 |
 | 原生身份依赖复现 | 官方 ZIP 长度和 SHA256 匹配；安装 / 重复使用 / 版本探针通过；冲突 JAVA、外部 DB、Production 与 Playwright 调试变量未干扰最终验收 |
-| T3 会话存储 | 内存副本、1024 容量、秒精度到期、撤销 / 续期竞争、取消与安全错误通过；PostgreSQL 迁移 3 和加密 ticket 实现待真实数据库验证 |
+| T3 会话存储 | 内存副本 / 容量通过；真实 PostgreSQL bytea 密文、独立 provider 与存储实例恢复、错误证书 / 篡改 / key 绑定、UTC 秒精度到期、撤销 / 续期竞争、取消和连接失败脱敏通过 |
+| 原生 PostgreSQL 依赖与清理 | 官方 ZIP 长度 / SHA256、17.11 版本与重复安装通过；独立 SCRAM / loopback 实例验收返回 0，临时集群与凭据删除，无残留 postgres 进程 |
 | T3 本轮 Core | 通过；锁定还原、.NET 构建 0 警告 / 0 错误、HTTP smoke、Node 3 项、Python 9 项及真实 FastAPI → YARP |
 | FastAPI pytest | 9 项通过；参数边界、生产关闭演示、取消 / 断开清理、错误事件 |
 | FastAPI → YARP | 真实 HTTP 通过；中文 SSE、参数与 requestId 可传递，首段早于结束 |
@@ -152,15 +155,17 @@ T3 已实现 [身份与权限契约](architecture/t3-authorization.md) 和 [OIDC
 | 截图 | 已检查嵌入暗色和 390px 工程列表；内容可见且无水平溢出，非最终产品视觉验收 |
 | npm 锁定安装 | `npm ci --no-audit --no-fund` 成功，使用入库锁文件；安装脚本所需短 PATH 仅在进程中生效 |
 | Python 隔离安装 / uv.lock | 真实锁含 22 个第三方包及分发哈希；独立 `.venv` 安装、锁一致性和 9 项 pytest 通过 |
-| Compose / realm / 迁移 | 已有配置与脚本；此前静态检查通过，本轮未运行容器或执行真实数据库迁移 |
+| Compose / realm | 已有配置与脚本；Compose 初始化仍执行 core + vector，本轮未运行容器；原生数据库与身份验收分别记录 |
 
 已知提示：Starlette 测试客户端对 httpx 0.28.1 有弃用警告；工程壳层使用完整 Element Plus 时存在大于 500 kB 的构建分块警告；Playwright 有终端颜色环境变量提示。均非测试失败，组件按需加载与依赖升级留待对应实现任务。
 
 ## 后续验收边界
 
-1. T3：真实 PostgreSQL 迁移 / 授权仓储 / 加密会话、租户切换及内部签名上下文；已通过的 Keycloak 验收使用开发 H2 和平台内存会话，不代替实库、多实例或生产部署。
+1. T3：租户切换、内部签名上下文及身份 / 授权联合验收。Keycloak 浏览器测试使用开发 H2 / 平台内存会话；PostgreSQL 测试验证真实数据库与同机独立存储实例，二者不代表联合生产部署、跨机器或 TLS 验收。
 2. T4–T8：注册与正式网关、授权应用清单、门户业务接口与完整子应用接入；模板的本地演示登录不等于真实身份认证。
 3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
+
+向量扩展成功安装与知识库业务验收继续在 T12；本轮核心迁移成功不表示向量检索已就绪。原生数据库成功记录：`.artifacts/postgres/run-0bc82b0de23c456d8d6bc91bb9f0deaf/result.json`；`passed` 与 `cleanupComplete` 均为 true。启动脚本及验收判据修复见 SPEC B17–B19。
 
 Compose 镜像构建、digest 固定和容器拓扑验证是可选交付路径，选用时再执行。生产 SaaS / 私有化交付验收仍在 T14，不因本机开发检查通过而视作完成。
 

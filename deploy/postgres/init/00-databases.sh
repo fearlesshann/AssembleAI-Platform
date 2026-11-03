@@ -14,4 +14,4 @@ REVOKE CONNECT ON DATABASE keycloak FROM PUBLIC;
 GRANT CONNECT ON DATABASE assembleai_platform TO assembleai_platform;
 GRANT CONNECT ON DATABASE keycloak TO keycloak;
 SQL
-psql --username "$POSTGRES_USER" --dbname assembleai_platform --set ON_ERROR_STOP=1 --file /migrations/apply.sql
+psql --username "$POSTGRES_USER" --dbname assembleai_platform --set ON_ERROR_STOP=1 --file /migrations/apply-with-vector.sql
