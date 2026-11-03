@@ -2,7 +2,7 @@
 
 Target: .NET 10. SDK and dependencies are pinned by the root global.json / Directory.Packages.props and project lockfiles.
 
-T3 identity and authorization foundations are complete; T4 application registration is next. See [SPEC](../../SPEC.md) and [current verification records](../../docs/development.md).
+Identity / authorization and T4 application registry APIs are implemented. The registry includes immutable releases, independent review, tenant activation, revision checks and transactional audit. See [registry configuration and contracts](../../docs/architecture/registry.md), [SPEC](../../SPEC.md) and [current verification records](../../docs/development.md). Dynamic gateway / runtime work is next (T5).
 
 From repository root:
 
@@ -29,6 +29,10 @@ The development profile listens on `http://127.0.0.1:5100`. BFF authentication i
 | GET /bff/tenant; POST /bff/tenant | Read or update server-side tenant selection; writes require Origin / CSRF and current membership |
 | GET /api/platform/v1/tenants | Authenticated subject's enabled memberships |
 | GET /api/platform/v1/tenants/{tenantId}/access | Subject's own grants; non-member and unknown tenants both return 403 after authentication |
+| GET /api/platform/v1/registry/apps/{appId}/releases; GET /{version} | Owner developer / reviewer reads; bounded release list and exact version |
+| PUT /api/platform/v1/registry/apps/{appId}/releases/{version} | Create / edit owned draft with expectedRevision; Origin / CSRF protected |
+| POST /api/platform/v1/registry/apps/{appId}/releases/{version}/transitions | Submit, reject, publish, disable or enable; independent approval and revision checks |
+| GET /api/platform/v1/tenants/{tenantId}/applications/{appId}; PUT same | Read / update tenant release pointer; selected tenant and fresh application-specific registry:manage grant |
 | GET /.well-known/assembleai-jwks.json | Public keys only, when InternalCalls:Enabled is true; no browser mint / token-issuance endpoint |
 | GET /dev/sample/health | Development + DevelopmentSample:Enabled only; forwards to sample /health/live |
 | GET /dev/sample/stream | Development + DevelopmentSample:Enabled only; forwards sample /stream SSE incrementally |
@@ -39,7 +43,7 @@ Sample proxy routes do not exist in Production, even if the enable flag is true.
 
 Set environment variables before starting the platform; do not commit credentials:
 
-- `ConnectionStrings__Platform`: PostgreSQL connection string. Readiness opens a real connection and requires migration 3 when BFF is enabled, otherwise migration 2. `apply.sql` executes core migrations 1–3.
+- `ConnectionStrings__Platform`: PostgreSQL connection string. Readiness opens a real connection and requires migration 4 regardless of the BFF switch. `apply.sql` executes core migrations 1–4, including registry and audit tables.
 - `Readiness__RequireVector`: defaults to true and requires pgvector 0.8.7. Explicit false supports control-plane-only checks; it does not make other dependencies optional. See [core and vector initialization](../../docs/native-postgres.md).
 - `Readiness__RedisHost`, `Readiness__RedisPort`, `Readiness__RedisPassword`: Redis connection; sends AUTH when a password is supplied and then validates PONG. T2's local connection is plain TCP; TLS / ACL user support must be added for deployments that require them.
 - `Readiness__MinioEndpoint`: MinIO `/minio/health/ready`.

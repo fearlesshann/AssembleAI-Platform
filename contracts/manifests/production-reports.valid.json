@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "appId": "production-reports",
+  "name": "生产报表",
+  "version": "1.0.0",
+  "frontendEntry": "/apps/production-reports/1.0.0/",
+  "backendService": "production-api",
+  "permissions": ["production:read"],
+  "status": "draft",
+  "frontendArtifact": {
+    "version": "1.0.0",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "backendVersion": "1.0.0",
+  "category": "生产",
+  "description": "生产指标与报表"
+}

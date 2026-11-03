@@ -27,6 +27,11 @@ if (args.Contains("--internal-call-tests", StringComparer.Ordinal))
     await InternalCallTests.RunAsync();
     return;
 }
+if (args.Contains("--registry-http-tests", StringComparer.Ordinal))
+{
+    await RegistryHttpTests.RunAsync();
+    return;
+}
 
 var finishStream = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 var downstreamBuilder = WebApplication.CreateBuilder();
@@ -122,6 +127,7 @@ try
     await BffTests.RunAsync();
     await TenantSessionTests.RunAsync();
     await InternalCallTests.RunAsync();
+    await RegistryHttpTests.RunAsync();
 }
 finally
 {

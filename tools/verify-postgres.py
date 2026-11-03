@@ -204,7 +204,7 @@ def main() -> int:
         test_environment = environment.copy()
         test_environment.pop("PGPASSWORD", None)
         test_environment["ASSEMBLEAI_POSTGRES_TEST_CONFIG"] = str(config_path)
-        print("Running real PostgreSQL authorization and protected-session contracts...", flush=True)
+        print("Running real PostgreSQL authorization, protected-session and registry contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
                          artifact_dir / "integration.log", timeout=120, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
@@ -245,7 +245,7 @@ def main() -> int:
         if artifact_dir is not None and artifact_dir.is_dir():
             (artifact_dir / "result.json").write_text(json.dumps({"passed": passed and cleanup_ok,
                 "cleanupComplete": cleanup_ok, "postgresVersion": version,
-                "scope": "core migrations, authorization and protected tickets; vector absent"}, indent=2), encoding="utf-8")
+                "scope": "core migrations, authorization, protected tickets, trust chain and application registry; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
         print("PASS: native PostgreSQL acceptance; isolated cluster stopped and temporary credentials removed.", flush=True)

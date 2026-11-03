@@ -1,6 +1,6 @@
 # 原生 PostgreSQL 验收
 
-本入口在 Windows x64 上启动一次性 PostgreSQL，验证真实控制面迁移、授权查询和加密 BFF 会话存储，不需要 Docker。数据库仅用于本次测试；已有开发数据库不会被复用或停止。
+本入口在 Windows x64 上启动一次性 PostgreSQL，验证真实控制面迁移、授权查询、加密 BFF 会话与注册发布事务，不需要 Docker。数据库仅用于本次测试；已有开发数据库不会被复用或停止。
 
 ## 准备与运行
 
@@ -42,7 +42,7 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 | 入口 | 行为 |
 | --- | --- |
-| `deploy/postgres/migrations/apply.sql` | 执行真实控制面迁移 1–3：迁移记录、授权关系、BFF 会话；不安装 vector |
+| `deploy/postgres/migrations/apply.sql` | 执行真实控制面迁移 1–4：迁移记录、授权关系、BFF 会话、注册与审计；不安装 vector |
 | `deploy/postgres/migrations/enable-vector.sql` | 独立安装并核验 pgvector **0.8.7**；缺少扩展文件或已有版本不符都会失败 |
 | `deploy/postgres/migrations/apply-with-vector.sql` | 先执行控制面迁移，再执行 vector 初始化 |
 | `deploy/postgres/migrate.ps1` | 默认执行控制面；加 `-IncludeVector` 执行两者；`-UseCompose` 仅切换执行环境 |
@@ -51,15 +51,16 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 操作已有数据库时，需先准备数据库和角色，并为迁移账号配置对应权限；这些准备由本验收器自动完成的范围仅限一次性测试集群。手动迁移示例见 [本地后端与基础设施](development-services.md#原生-postgresql-迁移)。
 
-`Readiness:RequireVector` 默认 **true**（环境变量 `Readiness__RequireVector`），保持完整平台对 vector 0.8.7 的要求。只有明确运行控制面时才配置 `false`；该选项不代表知识库功能已就绪，也不忽略 Redis、MinIO、RabbitMQ 或 OIDC 的健康检查。BFF 开启时还要求迁移 3，否则要求迁移 2。
+`Readiness:RequireVector` 默认 **true**（环境变量 `Readiness__RequireVector`），保持完整平台对 vector 0.8.7 的要求。只有明确运行控制面时才配置 `false`；该选项不代表知识库功能已就绪，也不忽略 Redis、MinIO、RabbitMQ 或 OIDC 的健康检查。无论 BFF 是否开启，当前控制面均要求迁移 4。
 
 ## 验证内容与边界
 
-- 真实迁移 1–3 连续执行两遍，检查迁移记录完整且无重复、没有预置业务数据；误连其他数据库必须失败。
+- 真实迁移 1–4 连续执行两遍，检查迁移记录完整且无重复、没有预置业务数据；误连其他数据库必须失败。
 - 独立 vector 初始化在缺少扩展文件时返回 PostgreSQL `0A000`，不会将缺失扩展报告为成功。
 - 授权仓储覆盖 issuer / subject、租户与工厂组织隔离、租户复合外键、事务内版本一致性、撤权生效、取消，以及连接真实仓储的 HTTP 授权边界。
 - 会话仓储覆盖数据库中的真实密文、独立重建的密钥提供器与重新加载 PFX 后恢复、密文篡改拒绝、UTC 到期、删除与续期并发、取消和数据库连接失败。
 - 联合链路使用 OIDC HTTP 协议服务、真实 PG 会话 / 授权、服务端租户选择及仅公钥 HTTP 接收端，验证已签发凭据的策略撤权和退出重放。
+- 注册测试使用 OIDC 协议登录和实际 HTTP API，覆盖所有者 / 独立审核、Manifest 负例、租户授权与撤权、状态转换、并发 CAS、版本回滚、发布后不可变及审计失败回滚。
 - readiness 的 PostgreSQL 子检查在 `RequireVector=false` 时为 `ready`、为 true 时为 `unavailable`；由于其他依赖未配置，整体 HTTP 状态在两种情况下都保持 503。
 
 基础授权 HTTP 测试使用测试身份认证器，会话测试直接调用真实仓储；`PostgresTrustTests` 进一步通过真实 OIDC 协议交换串联 PG 会话、租户选择和签名 HTTP 下游。它使用 `OidcFixture`，尚未串联真实 Keycloak、生产 HTTPS Cookie 和 PostgreSQL 完整部署，也不证明跨机器故障恢复、pgvector 安装或知识库查询已通过。[原生 Keycloak 浏览器验收](native-identity.md) 独立覆盖兼容性，平台仍使用开发内存会话。
@@ -73,3 +74,11 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 拆分后的完整验收位于 `.artifacts/postgres/run-0bc82b0de23c456d8d6bc91bb9f0deaf`，入口返回 0，`result.json` 中 `passed=true`、`cleanupComplete=true`、`postgresVersion=17.11`。上述控制面、授权、会话及 readiness 边界全部通过；本次集群及临时凭据已清理。pgvector 正向安装与完整基础设施验收仍待后续环境完成。
 
 加入信任链后的完整验收为 `.artifacts/postgres/run-4423450349cc4c1a9ba6da9851c4dbf8`，同样返回 0，passed / cleanupComplete 均 true。撤权测试固定 JWT 时钟，确认旧凭据拒绝源于策略变化，而非恰好自然过期。
+
+## T4 注册控制面验收 · 2026-11-03
+
+[注册与部署契约](architecture/registry.md) 和 [Manifest schema](../contracts/manifests/README.md) 已提供。最终原生 PostgreSQL 运行 `.artifacts/postgres/run-fcdfc3e3870247f8b438919660eb20b1/result.json` 返回 0，passed / cleanupComplete 均 true。迁移 1–4 及重放、严格 HTTP 命令、独立审核 / 自审拒绝、发布后不可变、租户选择 / 授权撤销、并发 CAS、回滚和审计故障回滚全部通过。T4 测试使用 OIDC 协议 fixture、开发内存会话与真实注册数据库，生产部署仍归 T14。
+
+Core 回归通过：锁定还原、.NET 构建 0 警告 / 0 错误、原有身份及内部凭据测试、新 Manifest / 匿名读写测试、Node 3 项、Python 9 项与真实 FastAPI → YARP。已有 FastAPI TestClient 的 httpx 弃用提示不影响通过。新增 bug 及回归见 SPEC B23–B25；数据库空 JSON 负测先失败，修正 CHECK 的 NULL 处理后通过。独立助手额度限制由主线程接手复核，未声称取得新的独立复核结论。
+
+T4 为注册控制面 API 结项。资源实际部署 / 健康探测、正式动态路由 / 运行授权、门户清单与管理界面分别按 T5 / T6 / T8 继续；测试未启动 Docker。

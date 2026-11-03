@@ -6,4 +6,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../services/platform/AssembleAI.Platform.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../contracts/manifests/*.json" Link="contracts/manifests/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
