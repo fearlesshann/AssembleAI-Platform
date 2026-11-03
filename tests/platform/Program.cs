@@ -17,6 +17,16 @@ if (args.Contains("--postgres-integration", StringComparer.Ordinal))
     await PostgresIntegrationTests.RunAsync();
     return;
 }
+if (args.Contains("--tenant-tests", StringComparer.Ordinal))
+{
+    await TenantSessionTests.RunAsync();
+    return;
+}
+if (args.Contains("--internal-call-tests", StringComparer.Ordinal))
+{
+    await InternalCallTests.RunAsync();
+    return;
+}
 
 var finishStream = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 var downstreamBuilder = WebApplication.CreateBuilder();
@@ -110,6 +120,8 @@ try
     await TicketStoreTests.RunAsync();
     await BffKeyPersistenceTests.RunAsync();
     await BffTests.RunAsync();
+    await TenantSessionTests.RunAsync();
+    await InternalCallTests.RunAsync();
 }
 finally
 {

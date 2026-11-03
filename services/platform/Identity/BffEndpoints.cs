@@ -1,4 +1,5 @@
 using AssembleAI.Platform.Identity.Sessions;
+using AssembleAI.Platform.Authorization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 
@@ -28,11 +29,22 @@ public static class BffEndpoints
                 }
             }
             try { await next(context); }
+            catch (BadHttpRequestException exception) when (bffRequest && !context.Response.HasStarted)
+            {
+                context.Response.Clear();
+                await Problem(context, exception.StatusCode, "The request is invalid.", "invalid_request");
+            }
             catch (BffSessionStoreException) when (!context.Response.HasStarted)
             {
                 context.Response.Clear();
                 await Problem(context, StatusCodes.Status503ServiceUnavailable,
                     "Session storage is unavailable.", "session_unavailable");
+            }
+            catch (AuthorizationStoreUnavailableException) when (!context.Response.HasStarted)
+            {
+                context.Response.Clear();
+                await Problem(context, StatusCodes.Status503ServiceUnavailable,
+                    "Authorization data is unavailable.", "authorization_unavailable");
             }
         });
         return app;
@@ -49,6 +61,8 @@ public static class BffEndpoints
             group.MapGet("/csrf", AuthenticationRequired);
             group.MapGet("/session", AuthenticationRequired);
             group.MapPost("/logout", AuthenticationRequired);
+            group.MapGet("/tenant", AuthenticationRequired);
+            group.MapPost("/tenant", AuthenticationRequired);
             return app;
         }
 
@@ -86,10 +100,7 @@ public static class BffEndpoints
 
         group.MapPost("/logout", async (HttpContext context, IAntiforgery antiforgery) =>
         {
-            var origins = context.Request.Headers.Origin;
-            if (origins.Count != 1 || !string.Equals(origins[0], settings.PublicOrigin, StringComparison.Ordinal)
-                || context.Request.Headers[CsrfHeaderName].Count != 1
-                || !await antiforgery.IsRequestValidAsync(context))
+            if (!await IsVerifiedRequest(context, antiforgery, settings))
             {
                 await Problem(context, StatusCodes.Status403Forbidden,
                     "Request verification failed.", "request_verification_failed");
@@ -98,8 +109,15 @@ public static class BffEndpoints
             await context.SignOutAsync(BffAuthentication.CookieScheme);
             context.Response.StatusCode = StatusCodes.Status204NoContent;
         }).RequireAuthorization(IdentityEndpoints.IdentityPolicy);
+        TenantSession.MapEndpoints(group, settings);
         return app;
     }
+
+    internal static async Task<bool> IsVerifiedRequest(HttpContext context, IAntiforgery antiforgery, BffOptions settings) =>
+        context.Request.Headers.Origin.Count == 1
+        && string.Equals(context.Request.Headers.Origin[0], settings.PublicOrigin, StringComparison.Ordinal)
+        && context.Request.Headers[CsrfHeaderName].Count == 1
+        && await antiforgery.IsRequestValidAsync(context);
 
     internal static Task Problem(HttpContext context, int status, string title, string code)
     {

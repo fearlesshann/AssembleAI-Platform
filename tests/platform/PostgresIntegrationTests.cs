@@ -64,6 +64,8 @@ public static class PostgresIntegrationTests
             await PostgresAuthorizationTests.RunAsync(connectionString);
             phase = "session store";
             await PostgresSessionTests.RunAsync(connectionString, runDirectory);
+            phase = "login, tenant and downstream trust chain";
+            await PostgresTrustTests.RunAsync(connectionString, runDirectory);
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");
             await VerifyReadiness(connectionString, requireVector: true, "unavailable");

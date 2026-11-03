@@ -79,14 +79,16 @@ public static class BffAuthentication
                     StatusCodes.Status401Unauthorized, "Authentication required.", "authentication_required"),
                 OnRedirectToAccessDenied = context => BffEndpoints.Problem(context.HttpContext,
                     StatusCodes.Status403Forbidden, "Access denied.", "access_denied"),
-                OnSigningIn = context =>
+                OnSigningIn = async context =>
                 {
                     var now = context.HttpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
-                    context.Properties.IssuedUtc = now;
-                    context.Properties.ExpiresUtc = now.Add(SessionLifetime);
+                    var existing = await context.HttpContext.AuthenticateAsync(CookieScheme);
+                    // A tenant update reuses a validated session reference. Keep its
+                    // original metadata as well as the store's absolute deadline.
+                    context.Properties.IssuedUtc = existing.Succeeded ? existing.Properties!.IssuedUtc : now;
+                    context.Properties.ExpiresUtc = existing.Succeeded ? existing.Properties!.ExpiresUtc : now.Add(SessionLifetime);
                     context.Properties.AllowRefresh = false;
                     context.Properties.IsPersistent = false;
-                    return Task.CompletedTask;
                 }
             };
         })

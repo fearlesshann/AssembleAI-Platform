@@ -1,6 +1,8 @@
-# Platform skeleton
+# AssembleAI platform and BFF
 
 Target: .NET 10. SDK and dependencies are pinned by the root global.json / Directory.Packages.props and project lockfiles.
+
+T3 identity and authorization foundations are complete; T4 application registration is next. See [SPEC](../../SPEC.md) and [current verification records](../../docs/development.md).
 
 From repository root:
 
@@ -13,11 +15,7 @@ dotnet run --project tests/platform/AssembleAI.Platform.SmokeTests.csproj --no-b
 python tests/platform/smoke_fastapi_proxy.py
 ```
 
-The development profile listens on `http://127.0.0.1:5100`. To run Production, omit launch settings and set the environment explicitly:
-
-```powershell
-dotnet run --project services/platform/AssembleAI.Platform.csproj --no-launch-profile -- --environment Production --urls http://127.0.0.1:5100
-```
+The development profile listens on `http://127.0.0.1:5100`. BFF authentication is disabled by default. Production authentication requires trusted HTTPS, PostgreSQL sessions and persistent protected keys; use the [BFF configuration](../../docs/architecture/t3-bff.md). Native processes are supported; Docker is optional.
 
 ## Endpoints
 
@@ -25,8 +23,13 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --no-launch-pr
 | --- | --- |
 | GET /health/live | Process accepts requests; does not claim dependencies or authentication are ready |
 | GET /health/ready | All configured dependency checks pass; otherwise HTTP 503 |
-| GET /api/platform/v1/tenants | Authenticated subject's enabled memberships; no registered login adapter yet, so direct calls return 401 |
+| GET /bff/login; GET /signin-oidc | Explicit OIDC Code + PKCE login and validated callback |
+| GET /bff/session; GET /bff/csrf | Subject display information and antiforgery token; no OIDC credentials |
+| POST /bff/logout | Origin / CSRF protected revocation of the platform session |
+| GET /bff/tenant; POST /bff/tenant | Read or update server-side tenant selection; writes require Origin / CSRF and current membership |
+| GET /api/platform/v1/tenants | Authenticated subject's enabled memberships |
 | GET /api/platform/v1/tenants/{tenantId}/access | Subject's own grants; non-member and unknown tenants both return 403 after authentication |
+| GET /.well-known/assembleai-jwks.json | Public keys only, when InternalCalls:Enabled is true; no browser mint / token-issuance endpoint |
 | GET /dev/sample/health | Development + DevelopmentSample:Enabled only; forwards to sample /health/live |
 | GET /dev/sample/stream | Development + DevelopmentSample:Enabled only; forwards sample /stream SSE incrementally |
 
@@ -36,7 +39,8 @@ Sample proxy routes do not exist in Production, even if the enable flag is true.
 
 Set environment variables before starting the platform; do not commit credentials:
 
-- `ConnectionStrings__Platform`: PostgreSQL connection string. Readiness opens a real connection and checks `public.platform_schema_migrations` contains version 2; apply both deploy migrations first.
+- `ConnectionStrings__Platform`: PostgreSQL connection string. Readiness opens a real connection and requires migration 3 when BFF is enabled, otherwise migration 2. `apply.sql` executes core migrations 1–3.
+- `Readiness__RequireVector`: defaults to true and requires pgvector 0.8.7. Explicit false supports control-plane-only checks; it does not make other dependencies optional. See [core and vector initialization](../../docs/native-postgres.md).
 - `Readiness__RedisHost`, `Readiness__RedisPort`, `Readiness__RedisPassword`: Redis connection; sends AUTH when a password is supplied and then validates PONG. T2's local connection is plain TCP; TLS / ACL user support must be added for deployments that require them.
 - `Readiness__MinioEndpoint`: MinIO `/minio/health/ready`.
 - `Readiness__RabbitMqEndpoint`, `Readiness__RabbitMqUser`, `Readiness__RabbitMqPassword`: management readiness endpoint and dedicated monitoring credentials.
@@ -46,10 +50,14 @@ Every check has a 3-second budget. Response output contains dependency names and
 
 ## Authentication boundary
 
-T3's authorization foundation now reads membership and grants from PostgreSQL and evaluates permission/resource/organization scopes through ASP.NET Core Authorization. It does not cache decisions or trust caller-supplied identity headers. OIDC login, BFF sessions and internal signed contexts remain in progress; without a validated session adapter, protected APIs return 401. See [the contract and verification boundary](../../docs/architecture/t3-authorization.md). Development DataProtection is still ephemeral; persistent/shared key management is required before storing authenticated sessions. Platform logs use console output rather than privileged Windows EventLog.
+T3 reads membership and grants from PostgreSQL and evaluates permission/resource/organization scopes through ASP.NET Core Authorization. It does not cache decisions or trust caller-supplied identity headers. OIDC / BFF login is implemented; browsers hold only an HttpOnly session reference. Development uses bounded memory sessions and ephemeral keys; Production uses encrypted PostgreSQL tickets and a persistent DataProtection keyring protected by an external RSA PFX. Sessions have an absolute eight-hour lifetime. Tenant switching preserves the original subject and deadline; a late renewal cannot revive logout. See [authorization](../../docs/architecture/t3-authorization.md) and [BFF / tenant selection](../../docs/architecture/t3-bff.md).
 
-The dependency-free console smoke suite starts real Kestrel servers on temporary local ports. It verifies liveness, unavailable-dependency readiness, exact route and method restrictions, identity-header removal, first SSE event delivery before completion, and absence of sample routes in Production. Its isolated in-memory key repository does not read or write the machine's DataProtection keys; an unencrypted-key warning refers only to that in-memory repository.
+Internal calls are separately opt-in. Their RS256 credentials bind the target application, resource, permission and request, last at most 30 seconds, and require current authorization and policy version at consumption. Only public JWKS are exposed; there is no browser issuance API. Configuration, public-key-only consumers and rotation are documented in the [internal-call contract](../../docs/architecture/t3-internal-calls.md). Formal dynamic gateway and cross-language integration remain T5 / T7 work.
 
-The authorization smoke tests also use real temporary HTTP listeners, with test-only authentication and an in-memory store fixture. They verify tenant/factory isolation, grant binding, issuer separation, revocation, cancellation, and 401/403/503 responses. Production never registers the test authentication handler. SQL migration execution and real OIDC login are separate integration checks.
+The console smoke suite starts real Kestrel servers on temporary local ports. It verifies liveness, unavailable-dependency readiness, exact route and method restrictions, identity-header removal, first SSE event delivery before completion, and absence of sample routes in Production. Its isolated in-memory key repository does not read or write the machine's DataProtection keys; an unencrypted-key warning refers only to that in-memory repository.
+
+The Core suite also verifies authorization isolation, BFF OIDC / CSRF, persistent key recovery, tenant selection, absolute expiry, logout / renewal races, and internal credential validation / rotation. These checks have passed. Production never registers the test authentication handler or test business routes.
+
+The [native PostgreSQL acceptance](../../docs/native-postgres.md) has passed real migrations, authorization and encrypted-session contracts. Its joint `PostgresTrustTests` chain uses the HTTP `OidcFixture`, BFF, PG tenant selection and an independent HTTP receiver holding only public keys. [Real Keycloak browser acceptance](../../docs/native-identity.md) runs separately. Neither result claims a combined real Keycloak + PostgreSQL + production HTTPS deployment, cross-machine recovery or vector search acceptance.
 
 The Python smoke script starts the actual FastAPI sample and built .NET platform on temporary ports, verifies health and incremental UTF-8 SSE through YARP, and terminates both processes. External dependencies can run natively or on existing development services; their readiness is not implied by either suite.

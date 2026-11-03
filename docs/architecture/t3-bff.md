@@ -2,7 +2,7 @@
 
 平台使用 ASP.NET Core 官方 OIDC handler 执行 confidential client 的 Authorization Code + PKCE S256 流程。浏览器持有受保护的随机会话引用，access / refresh / ID token 保存在服务端 ticket 中。协议处理遵循 [ASP.NET Core OIDC 文档](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-oidc-web-authentication?view=aspnetcore-10.0)，包版本锁定为 10.0.14。
 
-本切片新增服务端认证入口，不改变首页模板的演示登录。2026-11-03 已分别通过真实 Keycloak + Chromium 登录 / 退出及 PostgreSQL 加密会话验收；前端 SSO、租户切换、内部签名上下文与联合验收待完成。
+本切片新增服务端认证与租户选择入口，首页模板仍为演示登录。2026-11-03 真实 Keycloak + Chromium 登录 / 退出、PostgreSQL 加密会话、租户切换与内部签名凭据契约已分别通过；协议测试身份服务与真实数据库 / HTTP 下游的联合链路也已通过。
 
 ## HTTP 契约
 
@@ -13,6 +13,8 @@
 | `GET /bff/session` | 已认证时返回 `{iss,sub,name}`；未认证 401；不返回 Token、权限或整个 ticket |
 | `GET /bff/csrf` | 启用 BFF 时可匿名获取 `{requestToken,headerName}`，同时设置 HttpOnly CSRF Cookie；登录后应重新获取 token |
 | `POST /bff/logout` | 已认证且 Origin 精确匹配 PublicOrigin、`X-CSRF-TOKEN` 有效时删除会话并清 Cookie，返回 204；校验失败 403 |
+| `GET /bff/tenant` | 初次登录返回 `{tenantId:null,authorizationVersion:null}`；已选时重新核验成员并返回当前租户 / 策略版本；已撤权 403，故障 503 |
+| `POST /bff/tenant` | JSON `{tenantId:UUID}`；验证登录、Origin、CSRF 和当前成员后更新服务端选择，返回相同租户结构；非法参数 400，无成员 403 |
 
 认证相关响应均 `Cache-Control: no-store`。受保护 API 返回 401 / 403，不隐式跳转身份中心。会话存储不可用时返回脱敏 503。GET 退出与框架默认的远程退出入口均不注册，避免绕过 POST / CSRF 规则。
 
@@ -27,6 +29,10 @@
 - 开发模式使用最多 1,024 条的内存存储和进程临时保护密钥，进程重启后会话失效。满容量拒绝新会话，不静默挤掉其他用户。
 - 生产模式使用 `platform_bff_sessions`：随机 32 字节 key、DataProtection 加密 ticket、UTC 到期时间。密文与 key 绑定；解密失败拒绝认证。多实例需共享数据库、保护密钥目录及可解密证书。
 - 权限仍按请求读取平台数据库，遵循 [授权契约](t3-authorization.md)。Cookie 中没有租户授权事实；已读取的在途请求不承诺即时撤销。
+
+租户切换沿用同一会话引用，保留原主体、OIDC token、IssuedUtc 和 ExpiresUtc；不会重新获得 8 小时。GET 不改 ticket，也不自动挑选默认租户。并发切换最后写入者生效，旧 Cookie / 多标签页读取同一服务端选择；退出与切换竞争时，迟到的 Renew 不能恢复已删除会话。
+
+服务端业务入口通过 `TenantSession.ReadAccessAsync(context, expectedTenantId, store, cancellationToken)` 核对请求的明确租户与当前选择，并重新读取授权。不能把“当前选中租户”当作隐式写入目标；旧页面的其他租户请求必须拒绝。取消默认继承 RequestAborted。后续调用签名见 [内部凭据契约](t3-internal-calls.md)。
 
 ## 配置与原生运行
 
@@ -66,4 +72,6 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 `TicketStoreTests` 验证内存会话隔离、容量、期限、删除与续期并发，以及 PostgreSQL 缺配置时的安全错误。`PostgresSessionTests` 已在真实 PostgreSQL 17.11 上验证密文 bytea、独立保护密钥 provider 与存储实例恢复、密文绑定 key、错误证书 / 篡改拒绝、UTC / 秒精度期限、撤销与并发续期、取消及连接失败脱敏。这验证了同机共享数据库与密钥的存储契约，未覆盖跨机器、生产 TLS 或完整部署恢复。
 
-真实 Keycloak 验收由 `tools/verify-keycloak.py` 单独执行：错误密码、真实主体、Cookie / token 边界、CSRF / Origin、退出旧 Cookie 重放与 Keycloak SSO 再进入均通过；最后一次运行同时注入冲突环境变量验证隔离，进程与临时凭据清理成功。它使用开发 H2 和平台内存会话，不代替 PostgreSQL 验收。
+真实 Keycloak 验收由 `tools/verify-keycloak.py` 单独执行：错误密码、真实主体、Cookie / token 边界、CSRF / Origin、退出旧 Cookie 重放与 Keycloak SSO 再进入均通过。此前完成冲突环境变量隔离测试，本轮修改后又复跑通过；进程与临时凭据清理成功。它使用开发 H2 和平台内存会话，不代替 PostgreSQL 验收。
+
+`TenantSessionTests` 通过真实 OIDC HTTP 流程验证租户切换、Origin / CSRF、撤权、旧 Cookie、明确目标核对、绝对期限及退出竞争。`PostgresTrustTests` 使用真实 PG ticket / 授权仓储和独立 HTTP 接收端串起登录 → 选租户 → 签名调用 → 撤权 → 退出；身份源为协议测试服务，不是生产 HTTPS Keycloak 联合部署。

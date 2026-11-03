@@ -129,4 +129,5 @@ Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configur
 - 本地依赖快照：22 个已安装版本，传递依赖声明全部满足。
 - 已验证：官方 JDK / Keycloak ZIP 锁定安装、真实 Keycloak + Chromium 登录 / 退出 / CSRF / Cookie 重放 / SSO，以及测试进程和凭据清理。平台使用开发内存会话，Keycloak 使用 H2。
 - 已验证：PostgreSQL 17.11 原生锁定安装、控制面迁移 1–3 重放及错库拒绝、真实授权仓储 / HTTP 边界、真实加密会话存储 / 独立密钥提供器恢复，以及缺少 vector 的 readiness 边界。验收返回 0，临时集群与凭据已清理，详见 [实库验收记录](native-postgres.md#2026-11-03-验收记录)。
+- 已验证：受保护租户切换、原期限与退出竞争、RS256 内部凭据 / 仅公钥消费 / 静态密钥轮换；协议身份服务 + PG 会话 / 授权 + HTTP 下游联合链路及提交后撤权通过。具体边界见 [内部调用契约](architecture/t3-internal-calls.md)。
 - 尚未验证：Linux 隔离安装、Docker 镜像构建 / 拉取、Compose 运行、pgvector 正向安装、真实 Keycloak + 生产 HTTPS Cookie + PostgreSQL 的完整登录链路、多进程故障恢复及证书轮换。这些项目不会由本机代码验证替代。

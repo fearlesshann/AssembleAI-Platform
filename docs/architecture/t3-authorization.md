@@ -1,6 +1,6 @@
 # T3 · 身份与授权基础
 
-本阶段实现平台成员关系与授权读取、RBAC / 组织范围判断，以及受保护的本人租户接口。[OIDC / BFF 会话与 CSRF](t3-bff.md) 已接入；真实 Keycloak 浏览器登录和 PostgreSQL 授权 / 加密会话分别验收通过。租户切换、内部签名调用上下文及联合验收待完成，T3 保持进行中。测试工程的身份处理器只用于测试，不会注册到平台服务。
+本阶段实现平台成员关系与授权读取、RBAC / 组织范围判断，以及受保护的本人租户接口。[OIDC / BFF 会话与租户切换](t3-bff.md)、[内部调用凭据](t3-internal-calls.md) 已接入；真实 Keycloak 浏览器、PostgreSQL 授权 / 加密会话及协议身份服务与 PG / HTTP 下游联合验收通过。测试工程的身份处理器只用于测试，不会注册到平台服务。
 
 ## 身份边界
 
@@ -21,7 +21,7 @@
 
 错误响应使用 Problem Details，包含 HTTP 状态与稳定 `code`：`authentication_required`、`access_denied`、`tenant_access_denied`、`authorization_unavailable`。数据库连接串、凭据、SQL 和异常详情不进入这些响应。
 
-本阶段没有修改权限、选定持久会话租户、授予角色或管理租户的写接口；后续写接口需同时具备管理授权、CSRF 与审计。
+`POST /bff/tenant` 已提供经成员关系、Origin 与 CSRF 验证的会话租户选择；选择不授予权限。本阶段没有授予角色、修改权限或管理租户的写接口；后续管理写接口需同时具备管理授权、CSRF 与审计。
 
 ## 授权语义
 
@@ -31,7 +31,7 @@
 4. `tenantWide = true` 仅放宽这条 grant 的组织范围，仍受资源匹配、租户匹配和组织有效性限制。租户级资源没有组织归属，只能由显式的 tenant-wide grant 授权。
 5. 组织授权集合为空、组织停用、未知组织或跨租户资源一律拒绝。不能从角色 A 取操作权限，再从角色 B 取工厂范围组合授权。
 
-授权读取不缓存。撤权提交后开始的新查询读取新的已提交状态；PostgreSQL 的 [Read Committed 语义](https://www.postgresql.org/docs/current/transaction-iso.html) 不会追溯改变已取得的查询快照。策略版本用于标记租户授权变化，本阶段不生成内部 Token，也不宣称在途请求即时撤销。流式请求、签名上下文、密钥轮换和撤销窗口继续在 T3 / T5 落实。
+授权读取不缓存。撤权提交后开始的新查询读取新的已提交状态；PostgreSQL 的 [Read Committed 语义](https://www.postgresql.org/docs/current/transaction-iso.html) 不会追溯改变已取得的查询快照。内部凭据签发与消费均重新查询，消费时必须匹配策略版本及精确资源授权；30 秒有效期、静态密钥轮换和退出窗口见 [内部凭据契约](t3-internal-calls.md)。流式在途请求的撤销继续在 T5 落实。
 
 ## 数据与迁移
 
@@ -55,4 +55,4 @@ powershell -NoProfile -File tools/verify.ps1 -Scope Core
 
 [原生 PostgreSQL 独立验收](../native-postgres.md) 已执行真实迁移、幂等重放、参数化查询、uuid[]、复合外键、事务回滚与版本、各层停用和提交后撤权。其 HTTP 测试只替换身份处理器，授权仓储连接真实数据库，并验证 401 / 403 / 503 与响应脱敏。
 
-后续 T3 完成租户切换、内部签名上下文和真实身份 / 授权联合验收；再接正式应用网关和管理写接口。当前 Keycloak 浏览器测试与 PostgreSQL 实库测试分别运行。
+联合测试已验证协议身份服务 → PG 会话与租户选择 → 签名 HTTP 下游调用，撤权后新调用和有效期内旧凭据均被拒绝。真实 Keycloak 浏览器入口单独运行。正式注册 / 网关、管理写接口、跨语言消费者与生产部署继续按 T4–T7 / T13 / T14 落实。

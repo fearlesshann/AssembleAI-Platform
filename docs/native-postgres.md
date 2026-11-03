@@ -59,9 +59,10 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 - 独立 vector 初始化在缺少扩展文件时返回 PostgreSQL `0A000`，不会将缺失扩展报告为成功。
 - 授权仓储覆盖 issuer / subject、租户与工厂组织隔离、租户复合外键、事务内版本一致性、撤权生效、取消，以及连接真实仓储的 HTTP 授权边界。
 - 会话仓储覆盖数据库中的真实密文、独立重建的密钥提供器与重新加载 PFX 后恢复、密文篡改拒绝、UTC 到期、删除与续期并发、取消和数据库连接失败。
+- 联合链路使用 OIDC HTTP 协议服务、真实 PG 会话 / 授权、服务端租户选择及仅公钥 HTTP 接收端，验证已签发凭据的策略撤权和退出重放。
 - readiness 的 PostgreSQL 子检查在 `RequireVector=false` 时为 `ready`、为 true 时为 `unavailable`；由于其他依赖未配置，整体 HTTP 状态在两种情况下都保持 503。
 
-授权 HTTP 测试使用测试身份认证器，会话测试直接调用真实仓储。它们尚未串联真实 Keycloak、生产 HTTPS Cookie 和 PostgreSQL 完整登录链路，也不证明多进程故障恢复、证书轮换、pgvector 安装或知识库查询已通过。[原生 Keycloak 浏览器验收](native-identity.md) 独立覆盖登录协议，平台仍使用开发内存会话。
+基础授权 HTTP 测试使用测试身份认证器，会话测试直接调用真实仓储；`PostgresTrustTests` 进一步通过真实 OIDC 协议交换串联 PG 会话、租户选择和签名 HTTP 下游。它使用 `OidcFixture`，尚未串联真实 Keycloak、生产 HTTPS Cookie 和 PostgreSQL 完整部署，也不证明跨机器故障恢复、pgvector 安装或知识库查询已通过。[原生 Keycloak 浏览器验收](native-identity.md) 独立覆盖兼容性，平台仍使用开发内存会话。
 
 ## 2026-11-03 验收记录
 
@@ -70,3 +71,5 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 原迁移的实库红测记录在 `.artifacts/postgres/run-15d4adb453d543819d728b362fade72d`：迁移 1 在 `CREATE EXTENSION vector` 处失败，明确报告缺少 `share/extension/vector.control`。随后将控制面迁移与知识库扩展初始化显式拆分，没有跳过控制面 SQL 或补写迁移版本。
 
 拆分后的完整验收位于 `.artifacts/postgres/run-0bc82b0de23c456d8d6bc91bb9f0deaf`，入口返回 0，`result.json` 中 `passed=true`、`cleanupComplete=true`、`postgresVersion=17.11`。上述控制面、授权、会话及 readiness 边界全部通过；本次集群及临时凭据已清理。pgvector 正向安装与完整基础设施验收仍待后续环境完成。
+
+加入信任链后的完整验收为 `.artifacts/postgres/run-4423450349cc4c1a9ba6da9851c4dbf8`，同样返回 0，passed / cleanupComplete 均 true。撤权测试固定 JWT 时钟，确认旧凭据拒绝源于策略变化，而非恰好自然过期。

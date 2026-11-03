@@ -52,3 +52,5 @@ dotnet build AssembleAI.slnx --no-restore
 PostgreSQL 后续工作已完成原生锁定安装，并在真实迁移失败确认缺少 `vector.control` 后，将控制面迁移 1–3 与 pgvector 0.8.7 初始化显式拆分。独立的 [原生 PostgreSQL 验收](native-postgres.md) 已通过真实授权仓储、加密会话和 readiness 边界测试，集群与临时凭据已清理；扩展缺失仍会使 vector 初始化失败。
 
 这些实库结果不改变本页边界：Keycloak 浏览器入口仍使用 H2 和平台开发内存会话，尚未串联真实 Keycloak、生产 HTTPS Cookie 与 PostgreSQL 完整登录链路。
+
+租户选择与内部调用契约完成后，真实 Keycloak 回归再次通过：`.artifacts/keycloak/run-600e263855f044e098199c4447bdf4ae`，入口退出 0，验收与清理成功。新租户 / 内部凭据及 OIDC 协议服务 → PG → HTTP 下游联合验收见 [开发记录](development.md)；T3 身份与授权基础已结项。
