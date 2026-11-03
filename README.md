@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-T1–T8 已完成。门户与子应用模板已接企业登录、授权及受保护 JSON / SSE；应用管理支持注册、独立审核、启停、版本切换 / 回滚和操作记录。All（36 项 Node、51 项 Python、31 项浏览器及 .NET HTTP）与真实 PostgreSQL / OIDC / YARP / FastAPI / Chromium 联合验收通过。当前使用本机进程开发，下一阶段实现模型配置与 Model Gateway。
+T1–T8 已完成。门户与子应用模板已接企业登录、授权及受保护 JSON / SSE；应用管理支持注册、独立审核、启停、版本切换 / 回滚和操作记录。T8 的 All（36 项 Node、51 项 Python、31 项浏览器及 .NET HTTP）与真实 PostgreSQL / OIDC / YARP / FastAPI / Chromium 联合验收通过。当前使用本机进程开发；T9 进行中，首期采用 OpenAI 兼容文本协议，模型网关后端与测试已接入，真实模型联调待配置。
 
 - [产品与验收规格](SPEC.md)
 - [T1 实施决策与 T2 开工清单](docs/architecture/t1-decisions.md)
@@ -14,6 +14,7 @@ T1–T8 已完成。门户与子应用模板已接企业登录、授权及受保
 - [T6 授权门户与本机登录配置](docs/architecture/portal.md)
 - [T7 子应用 SDK、独立接入与发布物部署](docs/architecture/application-template.md)
 - [T8 应用注册与生命周期管理工作区](docs/architecture/registry-management.md)
+- [T9 模型配置、调用协议与验收边界](docs/architecture/model-gateway.md)
 - [内部调用身份与权限契约](docs/architecture/t3-internal-calls.md)
 - [原生 Keycloak 验收入口](docs/native-identity.md)
 - [原生 PostgreSQL 验收入口](docs/native-postgres.md)
@@ -31,6 +32,6 @@ Vue 3 + TypeScript + Element Plus + Vite + qiankun；ASP.NET Core + YARP；独�
 
 ## 下一里程碑
 
-推进 T9 模型配置与 Model Gateway，落实供应商 / 协议、凭据管理、租户授权及额度策略。正式门户启动需配置真实身份、数据库和应用授权，见 [T6 本机登录配置](docs/architecture/portal.md)；子应用按 [T7 接入模板](docs/architecture/application-template.md) 配置。管理工作区入口 `/manage/applications`，旧演示模板保留在 `/reference-ui/`。Docker 是可选部署方式，开发使用本机进程。
+完成 T9 的真实供应商与子应用委托调用验收。当前网关默认关闭；由部署者配置完整接口地址、模型名与环境变量凭据引用，再按租户启用并授权，见 [T9 接入说明](docs/architecture/model-gateway.md)。正式门户启动需配置真实身份、数据库和应用授权，见 [T6 本机登录配置](docs/architecture/portal.md)；子应用按 [T7 接入模板](docs/architecture/application-template.md) 配置。管理工作区入口 `/manage/applications`，旧演示模板保留在 `/reference-ui/`。Docker 是可选部署方式，开发使用本机进程。
 
 `references/ui-v1` 中的模拟登录、模拟数据和占位测试不属于正式平台实现。该目录保留来源仓库的 LICENSE；源码未改写。

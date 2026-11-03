@@ -4,7 +4,7 @@
 整理日期：2026-11-02  
 来源：[制造业 AI 应用平台 · 架构方案 V1.0.docx](<制造业 AI 应用平台 · 架构方案 V1.0.docx>)  
 参考仓库：<https://github.com/fearlesshann/AssembleAI>（T1 已核验提交 `f99202e32269ffcb411b36077ed329ea3b9d6f7e`，静态 UI 样例；[复用评估](docs/architecture/ui-reuse-audit.md)）  
-当前状态：T1–T8 已完成。门户、子应用模板与应用管理工作区已接真实身份、授权、注册及网关；支持独立审核、租户版本切换 / 回滚、在途流策略与可归属操作记录。36 项 Node、51 项 Python、31 项浏览器、.NET HTTP 和真实 PostgreSQL / OIDC / YARP / FastAPI / Chromium 联合验收通过。下一阶段 T9 模型配置与 Model Gateway，生产部署按后续任务交付。详见 [开发记录](docs/development.md)。
+当前状态：T1–T8 已完成。门户、子应用模板与应用管理工作区已接真实身份、授权、注册及网关；支持独立审核、租户版本切换 / 回滚、在途流策略与可归属操作记录。T8 的 36 项 Node、51 项 Python、31 项浏览器、.NET HTTP 和真实 PostgreSQL / OIDC / YARP / FastAPI / Chromium 联合验收通过。T9 进行中，首期采用用户选定的 OpenAI 兼容协议；后端已接入，真实模型与子应用委托调用尚待验收。生产部署按后续任务交付。详见 [开发记录](docs/development.md)。
 
 标记：**[确认]** 原文或用户后续明确确认；**[原文要求]** 原文规定的行为；**[建议]** 原文建议或本规格补充；**[实施决定]** 开发过程中记录的方案选择；**[待定]** 实现前需决策。§V 将原文要求转成验收条件；额外约束单独标为 [建议]，采纳状态见 T1 决策记录。§T 为实施顺序，不表示排期承诺。
 
@@ -335,7 +335,7 @@
 | T6 | x | 依赖 T2,T3,T4；门户壳层、浅暗主题与 Element Plus token、真实 BFF / 租户、授权应用列表 / 分类 / 搜索 / 详情及运行入口已完成。Core、21 项浏览器回归、真实 PG / OIDC / 浏览器目录验收通过。 | I.portal,I.registry,V10,V11,V15,V19,V25,V30 |
 | T7 | x | 依赖 T5,T6；固定运行 SDK、受保护 Python JSON / SSE、平台内部验证、配置化真实摘要发布物及独立 / 嵌入模板完成。Core、34 项 Node / 23 项浏览器和真实 PG / OIDC / YARP / FastAPI / Chromium 联合通过；同模板第二应用无需改门户核心，深链刷新 / 取消 / 撤权 / 生命周期失败释放均覆盖。 | I.portal,I.manifest,I.identity,V1,V2,V6,V19 |
 | T8 | x | 依赖 T4,T5,T6；注册 / 独立审核 / 全局启停、租户启用 / 版本切换 / 回滚及作用域内操作记录完成。无租户全局操作者与租户单独管理员均可使用；冲突、草稿、会话与迟到响应边界覆盖。All 与真实三账号浏览器 / OIDC / PG / 网关联合通过，固定运行 / 在途排空停止和审计主体已验证。 | I.registry,I.gateway,I.audit,I.portal,I.identity,V4,V12,V15,V16,V17,V19,V25,V28 |
-| T9 | . | 依赖 T3,T5；落实 D4；实现模型配置、凭据引用、资源授权、统一调用与流式适配、用量 / 异常记录；选定模型完成真实调用。 | I.models,I.audit,V7,V8,V12,V20 |
+| T9 | . | 进行中：用户选定 OpenAI 兼容文本协议；已接入部署目录 / 环境变量凭据、租户模型配置、资源授权、JSON / SSE 和元数据审计。真实模型与子应用服务端委托调用验收尚未完成，不能将本地协议测试服务作为真实模型。细节见 [T9 契约](docs/architecture/model-gateway.md)。 | I.models,I.audit,V7,V8,V12,V20 |
 | T10 | . | 依赖 T3,T5；落实 D5；实现连接配置、只读测试数据源、组织范围过滤、查询约束与工具授权；验证连接测试和数据访问均受权限约束。 | I.connectors,I.authz,V4,V5,V6,V7,V20,V21 |
 | T11 | . | 依赖 T7,T9,T10；交付 ChatBI 独立前后端；打通提问、查询校验、授权执行、结果与依据展示；按 D5 题集验收正确结果与越权拒绝。 | I.chatbi,I.gateway,V2,V5,V8,V9,V21 |
 | T12 | . | 依赖 T7,T9；落实 D6；交付知识库独立前后端、文档授权、MinIO 存储、RabbitMQ 摄取、pgvector 检索与引用；验证重复消息、失败重试、跨租户与撤权删除。 | I.knowledge,I.jobs,I.authz,V2,V4,V8,V9,V22,V23,V24 |

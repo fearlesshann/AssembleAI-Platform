@@ -12,6 +12,16 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Xml.Linq;
 using AssembleAI.Platform.SmokeTests;
 
+if (args.Contains("--model-provider-tests", StringComparer.Ordinal))
+{
+    await ModelProviderTests.RunAsync();
+    return;
+}
+if (args.Contains("--model-gateway-tests", StringComparer.Ordinal))
+{
+    await ModelGatewayTests.RunAsync();
+    return;
+}
 if (args.Contains("--postgres-integration", StringComparer.Ordinal))
 {
     await PostgresIntegrationTests.RunAsync();
@@ -152,6 +162,8 @@ try
     await GatewayAdmissionTests.RunAsync();
     await GatewayHttpTests.RunAsync();
     await GatewayFlowTests.RunAsync();
+    await ModelProviderTests.RunAsync();
+    await ModelGatewayTests.RunAsync();
 }
 finally
 {

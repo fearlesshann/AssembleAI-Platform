@@ -114,7 +114,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 平台运行在 `http://127.0.0.1:5100`；FastAPI 运行在 8101，启动方法见 [后端与基础设施说明](development-services.md)。生产环境不注册 `/dev/sample/*`，开发代理仅允许明确的健康与流路径，且不转发调用者的认证请求头。
 
-`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 5）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
+`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 6）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
 
 项目独立 Python 环境的复核命令：
 
@@ -233,3 +233,13 @@ T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部�
 最终 `tools/verify-postgres.py --portal-browser --application-browser --registry-browser` 返回 0。`.artifacts/postgres/run-33442f6f67e842ed959eadd401e972e2/result.json` 中 passed、cleanupComplete 以及三个 browserRequested 均 true。迁移 1–5、T3–T7 实库和真实 Python 子应用链路全部回归；新增管理查询验证多身份 / 草稿 / 审计隔离、撤权、500 / 501 应用、100 / 101 版本和 50 + hasMore 审计。三独立浏览器会话实际执行两版本注册 / 编辑 / 提交 / 独立发布、租户切换 / 回滚 / 停用，全局停用 / 恢复；同 BFF 会话中的网关运行验证不可变绑定、旧运行不复活、真实 SSE 排空 / 取消，SQL 检查审计主体、scope 和唯一服务器关联编号。临时集群与凭据均已清理。
 
 浅色、暗色和 390px 界面已人工检查，无全页水平溢出；窄屏审计在独立表格容器横滑。最终截图位于 `.artifacts/registry-postgres/d18a02ca-061d-4cc7-a939-139a3ef7aa36/`。前后端独立交叉复核无剩余阻塞。组合登录使用测试 OidcFixture 的真实 Code / PKCE / JWT 交换及开发内存会话，账号选择页仅存在于测试工程；真实 Keycloak、PG 加密会话仍以此前独立验收为准。T8 完成，下一任务 T9 模型配置与 Model Gateway；两个制造业 AI 用例与生产交付按后续任务推进。
+
+## 2026-11-03 T9 首期后端：OpenAI 兼容模型网关
+
+本机已拉取并继续 `codex/t3-bff` 的 T8 提交 `f68a206`。用户选定 OpenAI 兼容协议；新增部署者控制的供应商 / 模型目录、环境变量凭据引用、租户启停与输出上限、`model:manage` / `model:invoke` 精确资源权限、文本 JSON / SSE 和元数据审计。配置 API 使用修订号避免覆盖并发修改，默认网关关闭且不预置模型或授权。协议和实际配置见 [模型网关契约](architecture/model-gateway.md)。本轮未改门户界面。
+
+完整 `tools/verify.ps1 -Scope Core` 返回 0，日志 `.artifacts/t9-core.log`：锁定还原、.NET 构建 0 警告 / 0 错误、完整身份 / 注册 / 网关及新增模型 HTTP 回归、36 项 Node、51 项 Python、真实 FastAPI → YARP 全部通过。模型测试覆盖增量 UTF-8 SSE、真实 OIDC / CSRF、资源隔离、输入大小 / 重复字段 / 非法字符、用量缺失与精确计数、并发拒绝、总超时、断连、撤权 / 停用 / 退出、会话硬到期、依赖故障及审计失败。审计等待期间发生晚撤权时，不返回生成内容；已持久化的 completed 仅表示上游生成完成。模型 HTTP 的仓储为内存替身，上游为本地协议测试服务。
+
+本机按固定校验值安装原生 PostgreSQL 17.11，`tools/verify-postgres.py` 返回 0。记录 `.artifacts/postgres/run-c925148adf66461a826bc7d895b9fccc/result.json` 中 `passed=true`、`cleanupComplete=true`。迁移 1–6 连续执行与重放、已有真实数据库 / OIDC / 网关合同均通过；新增模型测试覆盖租户隔离、并发创建 / 修改、配置与审计原子提交、调用开始 / 完成持久化、终态不可覆盖、未知 / 零 / 非加和用量、审计故障回滚、最近 50 条历史以及缺少迁移 6 时 readiness 拒绝。临时数据库、测试凭据及进程已清理。
+
+本轮未重跑浏览器验收，未将 PostgreSQL 仓储测试与模型 HTTP 测试声称为同一条联合链路。T9 保持进行中：实际模型端点 / 模型名 / 凭据尚待配置，子应用服务端委托调用仍待接入；模型管理 UI 和审计留存 / 故障对账归 T13。现有 Starlette / httpx 弃用提示仍为非失败警告。

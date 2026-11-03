@@ -223,7 +223,7 @@ def main() -> int:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
         if portal_browser or application_browser or registry_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
-        print("Running real PostgreSQL authorization, session, registry, gateway and authorized-catalog contracts...", flush=True)
+        print("Running real PostgreSQL authorization, session, registry, gateway, model and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
                          artifact_dir / "integration.log", timeout=600 if registry_browser else 420 if application_browser else 240 if portal_browser else 120, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
@@ -267,7 +267,7 @@ def main() -> int:
                 "portalBrowserRequested": portal_browser,
                 "applicationBrowserRequested": application_browser,
                 "registryBrowserRequested": registry_browser,
-                "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain and authorized catalog; vector absent"}, indent=2), encoding="utf-8")
+                "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
         print("PASS: native PostgreSQL acceptance; isolated cluster stopped and temporary credentials removed.", flush=True)

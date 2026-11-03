@@ -4,3 +4,4 @@
 \ir 0003_bff_sessions.sql
 \ir 0004_registry.sql
 \ir 0005_gateway.sql
+\ir 0006_models.sql
