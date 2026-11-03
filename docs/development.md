@@ -1,6 +1,6 @@
 # T2 · 本地工程与验证
 
-当前：工程源码、本机后端启动与核心检查已完成；**T2 尚未验收完成**。剩余项为前端依赖安装 / 完整锁定 / qiankun 浏览器 PoC，以及 Python 干净环境锁定。用户已明确先不用 Docker；容器运行不是本阶段完成条件。
+2026-11-03：T2 工程骨架验收完成。已同步 `cf92c57` 的模板入口与前端锁文件，完成 `npm ci`、真实 `uv.lock`、项目独立 `.venv` 及统一 All 验证。开发采用本机进程；容器运行不是本阶段完成条件。真实登录与数据库联调仍在 T3。
 
 ## 不用 Docker 启动
 
@@ -8,20 +8,20 @@
 
 ```powershell
 dotnet build AssembleAI.slnx --no-restore
-& 'E:\Users\Mryeh\miniconda3\python.exe' tools/dev-backend.py
+& '.\apps\sample\backend\.venv\Scripts\python.exe' tools/dev-backend.py
 ```
 
 启动器运行本机进程：平台 `http://127.0.0.1:5100`，FastAPI 文档 `http://127.0.0.1:8101/docs`；样例流通过 `http://127.0.0.1:5100/dev/sample/stream?count=3&delay_ms=200` 访问。Ctrl+C 结束自己启动的两个进程；端口已占用时拒绝启动，不终止其他服务。
 
-其他机器用已安装依赖的 Python 3.13 解释器替换路径。添加 `--check` 可启动、检查后自动退出；本轮该模式已通过，检查后没有保留服务进程。此启动方式不要求 PostgreSQL、Redis 等已经运行：`/health/live` 可用，而平台 `/health/ready` 会按真实依赖状态返回 503，不能把存活当成所有能力就绪。
+首次使用先按下方命令安装锁定依赖。添加 `--check` 可启动、检查后自动退出。此启动方式不要求 PostgreSQL、Redis 等已经运行：`/health/live` 可用，而平台 `/health/ready` 会按真实依赖状态返回 503，不能把存活当成所有能力就绪。
 
 后续接入真实基础服务时，使用本机安装或现有开发服务地址即可；连接配置见 [后端与基础设施说明](development-services.md)。Compose 是可选交付路径。
 
 ## 统一验证入口
 
 ```powershell
-# 当前机器已通过：Node、.NET、FastAPI 与实际跨服务流
-powershell -NoProfile -File tools/verify.ps1 -Scope Core -Python E:\Users\Mryeh\miniconda3\python.exe
+# Node、.NET、FastAPI 与实际跨服务流，自动选择项目 .venv
+powershell -NoProfile -File tools/verify.ps1 -Scope Core
 
 # 前端依赖安装后：类型检查、两项构建、浏览器测试
 powershell -NoProfile -File tools/verify.ps1 -Scope Frontend
@@ -30,7 +30,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope Frontend
 powershell -NoProfile -File tools/verify.ps1 -Scope All
 ```
 
-验证器不安装依赖、不联网、不自动启动 Docker；以绝对 Node / CLI 路径执行，规避当前会话的 npm 子进程命令查找问题。Core 已返回 0；缺前置条件的 All / Frontend 已验证返回 2；错误解释器的非零退出码也能传递。All 仅表示代码验证，不代表数据库迁移、真实 Keycloak 登录或后续平台验收完成。
+验证器不安装依赖、不联网、不自动启动 Docker；以绝对 Node / CLI 路径执行，避免依赖 shell 命令查找。All 要求项目 `.venv`，不要传入全局 Python。缺前置条件返回非零，不能把跳过视为通过。All 仅表示代码验证，不代表数据库迁移、真实 Keycloak 登录或后续平台验收完成。
 
 ## 工程入口
 
@@ -44,7 +44,7 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 | `deploy` | 原生 psql 迁移、Keycloak 配置，以及可选 Compose 与开发凭据初始化 |
 | `tests` | Node、Playwright、Python 与 .NET 烟测 |
 
-正式身份认证、租户授权、应用注册中心和两个 AI 用例尚未实现。样例路由只用于本地接入验证，不可作为生产业务入口。
+T3 租户授权基础已实现；真实登录、应用注册中心和两个 AI 用例尚未接通。样例路由只用于本地接入验证，不可作为生产业务入口。
 
 ## 前端
 
@@ -58,10 +58,10 @@ powershell -NoProfile -File tools/verify.ps1 -Scope All
 
 Node 24.18.0 / npm 11.16.0。版本固定在 package.json。2026-11-02 本机更新已安装依赖并生成根目录 `package-lock.json`；统一 Vue 为 3.5.43 后，类型检查、两项构建、3 项 Node 测试和 6 项浏览器测试通过。后续可使用 `npm ci` 复现。
 
-在可访问 npm registry 的环境，从仓库根目录运行：
+在普通 PATH 环境，从仓库根目录运行（本机超长 PATH 的处理见下一节；验证优先使用上方统一入口）：
 
 ```powershell
-npm install
+npm ci
 npm run check
 npm run build
 npm run test
@@ -69,13 +69,13 @@ npm run test:e2e
 npm run preview
 ```
 
-安装成功后将生成的 lockfile 纳入工程，再使用 `npm ci` 复现。`npm run test:e2e` 需要匹配版本的 Chromium；缺少时使用 `npx playwright install chromium` 安装。
+根目录 `package-lock.json` 已入库；日常安装使用 `npm ci`，依赖升级时才重新生成锁文件。`npm run test:e2e` 需要匹配版本的 Chromium；缺少时使用 `npx playwright install chromium` 安装。
 
 预览地址：`http://127.0.0.1:4173`；独立子应用：`http://127.0.0.1:4173/apps/sample/0.1.0/`。`npm run dev` 启动 5173 主应用开发服务；子应用使用构建产物，由单独运行的 4173 预览服务提供，变更子应用后需重新构建并刷新。
 
-子应用是 library mode UMD，不是 Vite 开发 ESM 入口。`bootstrap / mount / unmount / update` 采用 qiankun 2 生命周期，版本化路径与宿主运行路由分离。样例 CSS 均限定在应用类名下，宿主启用样式隔离；这些源码选择仍须浏览器 PoC 验证。
+子应用是 library mode UMD，不是 Vite 开发 ESM 入口。`bootstrap / mount / unmount / update` 采用 qiankun 2 生命周期，版本化路径与宿主运行路由分离。样例 CSS 均限定在应用类名下，宿主启用样式隔离。浏览器验收使用相同生产构建产物验证独立 / 嵌入模式。
 
-加载失败后的“重新加载页面”会保留当前路由并创建新文档，清空实例与资源失败缓存。该选择基于 [qiankun 2.10.16 的实例缓存](https://github.com/umijs/qiankun/blob/v2.10.16/src/apis.ts) 和 [import-html-entry 的资源缓存](https://github.com/kuitos/import-html-entry/blob/v1.17.0/src/index.js)：单纯换实例名不能清除同 URL 的失败资源请求。相关浏览器测试会检查文档重新加载和资源重新请求，尚待依赖安装后执行。
+加载失败后的“重新加载页面”会保留当前路由并创建新文档，清空实例与资源失败缓存。该选择基于 [qiankun 2.10.16 的实例缓存](https://github.com/umijs/qiankun/blob/v2.10.16/src/apis.ts) 和 [import-html-entry 的资源缓存](https://github.com/kuitos/import-html-entry/blob/v1.17.0/src/index.js)：单纯换实例名不能清除同 URL 的失败资源请求。浏览器测试会检查文档重新加载和资源重新请求。
 
 不依赖第三方包的检查已可运行：
 
@@ -83,7 +83,23 @@ npm run preview
 node --test tests/frontend/*.test.mjs
 ```
 
-当前受限会话中 npm 脚本子进程无法解析 `node`，但直接执行上述 Node 命令通过；未把 npm 脚本入口报告为成功。静态预览服务只暴露两项应用的构建目录，监听 loopback；缺失资源不回退成 HTML，拒绝路径穿越与写方法。
+静态预览服务只暴露两项应用的构建目录，监听 loopback；缺失资源不回退成 HTML，拒绝路径穿越与写方法。
+
+### Windows PATH 过长时
+
+本机继承 PATH 为 8,802 字符：PowerShell 能找到 Node，但 npm 安装脚本经 `cmd.exe` 运行时找不到 `node`。只缩短子进程的 PATH 后，Node 探针与 `npm ci` 均成功。若出现同一错误，可在当前 PowerShell 执行以下安装命令；结束后恢复 PATH，不修改系统配置：
+
+```powershell
+$nodeExe = (Get-Command node.exe -ErrorAction Stop).Source
+$originalPath = $env:Path
+try {
+    $env:Path = (Split-Path -Parent $nodeExe) + ';' + $env:SystemRoot + '\System32;' + $env:SystemRoot
+    & $nodeExe (Join-Path (Split-Path -Parent $nodeExe) 'node_modules\npm\bin\npm-cli.js') ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+} finally { $env:Path = $originalPath }
+```
+
+当前工程的安装脚本仅需 Node；若以后增加需要编译工具或 Git 的安装脚本，应保留相应工具目录。统一验证入口直接调用可执行文件，并为 Windows 浏览器测试子进程单独设置短 PATH：Playwright 回收预览服务器时需通过 `cmd.exe` 调用 `taskkill`，否则也会因超长 PATH 找不到命令而挂起。该处理不改变调用者或系统 PATH。
 
 ## 后端
 
@@ -100,18 +116,18 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 `/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移 2 标记、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。
 
-本机已安装 Python 环境的实测命令：
+项目独立 Python 环境的复核命令：
 
 ```powershell
-& 'E:\Users\Mryeh\miniconda3\python.exe' -m pytest -q -c apps/sample/backend/pyproject.toml tests/backend
-& 'E:\Users\Mryeh\miniconda3\python.exe' tests/platform/smoke_fastapi_proxy.py
+& '.\apps\sample\backend\.venv\Scripts\python.exe' -m pytest -q -c apps/sample/backend/pyproject.toml tests/backend
+& '.\apps\sample\backend\.venv\Scripts\python.exe' tests/platform/smoke_fastapi_proxy.py
 ```
 
 跨服务烟测自动启动自己的临时进程和端口，并在结束时清理。这里只验证开发代理与流传输，不宣称已完成 T3 权限或 T5 正式应用网关。
 
 T3 授权基础已独立推进，见 [身份与权限契约](architecture/t3-authorization.md)。新增的 .NET 测试验证双租户 / 双工厂隔离、完整授权范围匹配、主体 issuer 隔离、伪造身份拒绝、撤权后重新读取、取消传播及错误响应。身份和仓储替身只在测试工程使用；正常运行的两个受保护租户接口在接通登录前返回 401。实际数据库迁移、Keycloak 登录、BFF 会话与签名上下文仍待完成，T3 未标记验收通过。
 
-## 初始工程验证记录（模板恢复前）
+## 最新验证记录（2026-11-03）
 
 | 检查 | 结果 / 边界 |
 | --- | --- |
@@ -123,20 +139,23 @@ T3 授权基础已独立推进，见 [身份与权限契约](architecture/t3-aut
 | FastAPI pytest | 9 项通过；参数边界、生产关闭演示、取消 / 断开清理、错误事件 |
 | FastAPI → YARP | 真实 HTTP 通过；中文 SSE、参数与 requestId 可传递，首段早于结束 |
 | 原生进程启动器 | `dev-backend.py --check` 通过；本机进程启动、代理连通与退出清理；无 Docker |
-| 统一验证脚本 | Core 返回 0；缺前端依赖 / 锁文件时 Frontend / All 返回 2；错误路径检查通过 |
+| 统一验证脚本 | `-Scope All` 自然退出并返回 0；错误解释器与非零退出码的 tooling 回归通过 |
 | Node 服务与生命周期测试 | 3 项通过；版本资源 / 深链、源文件隔离、串行卸载重挂、错误后重试 |
-| TypeScript 语法 | 使用缓存 TS 5.9.3 的 transpileModule 检查，8 个 TS + 2 个 Vue script 共 10 项通过；不等于类型检查或 Vue 模板编译 |
-| Compose / realm / 脚本 | YAML / JSON / PowerShell 语法与 shell LF 静态检查通过；未运行容器 |
-| 前端完整构建 / vue-tsc / Playwright | 未执行成功；依赖安装受阻 |
-| Python 隔离安装 / uv.lock | 未完成；只有已测试 Windows 环境的精确版本快照 |
+| Vue 类型检查 / 两项 Vite 构建 | 通过；UMD 样例与包含原模板的门户构建均成功 |
+| Playwright | 8 项通过（5 项微前端 + 3 项模板交互）；21.2 秒完成，自动回收自己启动的预览服务 |
+| 截图 | 已检查嵌入暗色和 390px 工程列表；内容可见且无水平溢出，非最终产品视觉验收 |
+| npm 锁定安装 | `npm ci --no-audit --no-fund` 成功，使用入库锁文件；安装脚本所需短 PATH 仅在进程中生效 |
+| Python 隔离安装 / uv.lock | 真实锁含 22 个第三方包及分发哈希；独立 `.venv` 安装、锁一致性和 9 项 pytest 通过 |
+| Compose / realm / 迁移 | 已有配置与脚本；此前静态检查通过，本轮未运行容器或执行真实数据库迁移 |
 
-## 未完成的 T2 验收
+已知提示：Starlette 测试客户端对 httpx 0.28.1 有弃用警告；工程壳层使用完整 Element Plus 时存在大于 500 kB 的构建分块警告；Playwright 有终端颜色环境变量提示。均非测试失败，组件按需加载与依赖升级留待对应实现任务。
 
-1. 恢复 npm 安装条件，生成 lockfile，执行 vue-tsc 与两项前端构建。
-2. 执行 Playwright：独立访问、qiankun 加载、重复卸载重挂、深链刷新、加载失败重试、主题同步及小屏布局；检查截图。
-3. 完成 `uv lock` 与干净隔离环境安装，不用本机预装环境代替可复现验证。
-4. 当前阶段采用已验证的本机进程启动；基础服务可按后续任务需要接本机或现有开发环境。实际数据库迁移、Keycloak discovery 与全依赖 readiness 的集成检查按相应任务完成，不以安装 Docker 为前提。
+## 后续验收边界
+
+1. T3：接通真实 PostgreSQL 迁移与授权仓储、Keycloak / BFF 登录、CSRF、会话及内部签名上下文。
+2. T4–T8：注册与正式网关、授权应用清单、门户业务接口与完整子应用接入；模板的本地演示登录不等于真实身份认证。
+3. T14：Linux / 私有化部署、生产服务拓扑与备份恢复；Windows 可复现检查不代替这些验收。
 
 Compose 镜像构建、digest 固定和容器拓扑验证是可选交付路径，选用时再执行。生产 SaaS / 私有化交付验收仍在 T14，不因本机开发检查通过而视作完成。
 
-环境证据：npm 在线 EACCES；离线缓存存在部分真实 tarball，但缺少 qiankun / single-spa / import-html-entry，部分 packument 也不齐；PyPI OS 10013；uv 缓存没有所需包，真实离线锁定失败于 fastapi==0.140.0。现有 22 包 Windows 快照的 31 条适用依赖约束均满足，但不代替干净安装。Docker 已卸载，当前不需要恢复它。未用替身包或模拟加载代替 qiankun。工作区 `.git` 写入仍受限，本轮未提交。
+历史环境问题见 SPEC B5 / B7 / B9。2026-11-03 已恢复 Git 写入与依赖下载，Node 命令查找及 Playwright 回收问题通过子进程 PATH 处理解决；没有替身依赖或模拟微前端加载。

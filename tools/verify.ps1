@@ -70,7 +70,7 @@ function ConvertTo-NativeArgument {
 }
 
 function Invoke-LocalProcess {
-    param([string]$Executable, [string[]]$Arguments, [string]$WorkingDirectory = $workspaceRoot)
+    param([string]$Executable, [string[]]$Arguments, [string]$WorkingDirectory = $workspaceRoot, [string]$ProcessPath)
     $start = [System.Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $Executable
     $start.Arguments = (($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' ')
@@ -83,6 +83,7 @@ function Invoke-LocalProcess {
     $start.EnvironmentVariables['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
     $start.EnvironmentVariables['UV_OFFLINE'] = 'true'
     $start.EnvironmentVariables['UV_PYTHON_DOWNLOADS'] = 'never'
+    if ($ProcessPath) { $start.EnvironmentVariables['PATH'] = $ProcessPath }
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $start
     try {
@@ -100,9 +101,9 @@ function Invoke-LocalProcess {
 }
 
 function Invoke-Check {
-    param([string]$Name, [string]$Executable, [string[]]$Arguments, [string]$WorkingDirectory = $workspaceRoot)
+    param([string]$Name, [string]$Executable, [string[]]$Arguments, [string]$WorkingDirectory = $workspaceRoot, [string]$ProcessPath)
     Write-Host "`nRunning: $Name"
-    $run = Invoke-LocalProcess -Executable $Executable -Arguments $Arguments -WorkingDirectory $WorkingDirectory
+    $run = Invoke-LocalProcess -Executable $Executable -Arguments $Arguments -WorkingDirectory $WorkingDirectory -ProcessPath $ProcessPath
     if ($run.Output) { Write-Host $run.Output }
     if ($run.ExitCode -eq 0) {
         Write-Result $Name 'PASS' 'Command exited 0.'
@@ -276,8 +277,14 @@ print(sys.executable + ' | Python ' + sys.version.split()[0] + ' | declared back
                 $sampleBuilt = Invoke-Check 'Sample UMD build' $node @($vite, 'build') (Join-Path $workspaceRoot 'apps/sample/frontend')
                 $portalBuilt = Invoke-Check 'Portal build' $node @($vite, 'build') (Join-Path $workspaceRoot 'apps/portal')
                 if ($sampleBuilt -and $portalBuilt) {
-                    # The project config uses process.execPath for its preview server too.
-                    [void](Invoke-Check 'Playwright browser tests' $node @((Join-Path $workspaceRoot 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.config.ts'))
+                    # Playwright uses cmd.exe + taskkill to reap its Windows web server.
+                    # cmd drops inherited PATH values over 8191 characters. Give this
+                    # child only the runtimes it needs; never change the caller/system PATH.
+                    $browserPath = $null
+                    if ($env:OS -eq 'Windows_NT') {
+                        $browserPath = @((Split-Path -Parent $node), (Join-Path $env:SystemRoot 'System32'), $env:SystemRoot) -join ';'
+                    }
+                    [void](Invoke-Check 'Playwright browser tests' $node @((Join-Path $workspaceRoot 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.config.ts') -ProcessPath $browserPath)
                 } else { Write-Result 'Playwright browser tests' 'SKIP' 'One or both Vite builds failed.' }
             } else { Write-Result 'Frontend builds / browser' 'SKIP' 'Type check failed.' }
         } else { Write-Result 'Frontend builds / browser' 'SKIP' 'Dependencies or Node are unavailable. This is not a successful frontend verification.' }

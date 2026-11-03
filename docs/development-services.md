@@ -8,17 +8,18 @@
 
 工作目录：`apps/sample/backend`。目标 Python 3.13；入口 `sample_backend.main:app`。已在本机 Python 3.13.13、FastAPI 0.140.0、Uvicorn 0.51.0 上通过测试。
 
-联网环境完成锁定与隔离安装：
+安装已入库的锁定依赖：
 
 ```powershell
 cd apps/sample/backend
-uv lock --python 3.13
 uv sync --locked --python 3.13
 $env:ASSEMBLEAI_ENVIRONMENT = 'Development'
 uv run --locked uvicorn sample_backend.main:app --host 127.0.0.1 --port 8101
 ```
 
-本轮 `uv lock` 被系统阻止连接 PyPI（OS 10013），**尚无可用的跨平台 uv.lock**。`requirements.windows.lock` 是已测试 Windows / Python 3.13 环境的 22 个精确版本及传递依赖快照；各安装版本满足声明的依赖约束，但未记录分发文件哈希，未在 Linux 或全新环境重装验证。它不替代待生成的 uv.lock。
+2026-11-03 已生成真实 `uv.lock`：23 条解析记录（含项目自身），22 个第三方包及分发哈希；支持 Python `>=3.13,<3.14`。已在 Windows / CPython 3.13.13 的独立 `.venv` 中执行 `uv sync --locked`、`uv lock --check` 与 9 项 pytest，未启用系统 site-packages。Linux 安装尚未实测。依赖升级时才运行 `uv lock`，日常以 `uv sync --locked` 复现。
+
+`requirements.windows.lock` 保留为早期预装环境的历史快照；新的项目环境以 `uv.lock` 为准。当前 Starlette 测试客户端对 httpx 0.28.1 提示弃用警告，测试仍通过，后续依赖升级再一并处理。
 
 本机预装环境的复核命令（不安装或修改该环境）：
 
@@ -89,7 +90,7 @@ MinIO 官方仓库于 2026-04-25 归档，最后的安全发布说明要求从�
 - Compose 数据库初次创建时运行 `/migrations/apply.sql`；重复执行 `migrate.ps1 -UseCompose` 只重放可幂等的已列迁移。原生 psql 入口执行同一套 SQL。
 - `0001_bootstrap.sql` 在事务和 advisory lock 下验证目标数据库名，初始化 pgvector 并要求版本 0.8.7，写入 `public.platform_schema_migrations` 的 `version=1`。误连其他数据库会失败。
 - `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`；平台 readiness 要求该版本。迁移不预置账号或权限，尚待真实数据库执行验证。
-- 平台 readiness 可检查该迁移标记；T3 / T4 再添加租户、权限与注册数据表。当前没有预建业务租户或制造业演示数据。
+- 平台 readiness 检查迁移 2 标记；T3 授权表已包含在迁移 2，应用注册表在 T4 添加。当前没有预建业务租户或制造业演示数据。
 - 迁移入口没有隐含重置数据或 `down -v`；初始化脚本只在空数据卷执行，修改 `.env` 不会自动轮换已有数据库角色密码。
 
 ## Keycloak 开发接入
@@ -117,4 +118,4 @@ Discovery：`http://localhost:8080/realms/assembleai/.well-known/openid-configur
 - FastAPI pytest：9 项通过，覆盖生产禁用开发接口、就绪生命周期、SSE 格式、输入边界、取消 / 断开清理与错误事件。
 - 真实 HTTP 烟测：启动临时 Uvicorn，配置每段间隔 1000ms，首段实测 18.3ms；主动断开后健康端点仍可访问。临时进程已停止。
 - 本地依赖快照：22 个已安装版本，传递依赖声明全部满足。
-- 未验证：全新隔离安装、跨平台 uv.lock、Docker 镜像构建 / 拉取、Compose 运行、PostgreSQL 实际迁移、Keycloak 真实登录。环境限制不能作为这些步骤通过的证据。
+- 尚未验证：Linux 隔离安装、Docker 镜像构建 / 拉取、Compose 运行、PostgreSQL 实际迁移、Keycloak 真实登录。这些项目不会由本机代码验证替代。
