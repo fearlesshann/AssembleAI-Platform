@@ -18,6 +18,7 @@ public static class ConnectorEndpoints
         builder.Services.TryAddSingleton<IConnectorStore,PostgresConnectorStore>();
         builder.Services.TryAddSingleton<IConnectorClient,PostgresConnectorClient>();
         builder.Services.AddSingleton<ConnectorExecutor>();
+        builder.Services.AddSingleton<ConnectorDelegationRegistry>();
         return builder;
     }
     public static WebApplication MapConnectorEndpoints(this WebApplication app)
@@ -31,6 +32,7 @@ public static class ConnectorEndpoints
         routes.MapGet("/{sourceId}/calls",Calls);
         routes.MapPost("/{sourceId}/test",Test);
         routes.MapPost("/{sourceId}/datasets/{datasetId}/query",Query);
+        app.MapConnectorDelegationEndpoints();
         return app;
     }
     private static async ValueTask<object?> Boundary(EndpointFilterInvocationContext invocation,EndpointFilterDelegate next)
@@ -165,7 +167,7 @@ public static class ConnectorEndpoints
     private static bool Fields(JsonElement value,params string[] allowed)=>value.ValueKind==JsonValueKind.Object
         && value.EnumerateObject().Select(p=>p.Name).Distinct(StringComparer.Ordinal).Count()==value.EnumerateObject().Count()
         && value.EnumerateObject().All(p=>allowed.Contains(p.Name,StringComparer.Ordinal));
-    private static async Task<JsonDocument?> Read(HttpRequest request,CancellationToken token)
+    internal static async Task<JsonDocument?> Read(HttpRequest request,CancellationToken token)
     {
         if (request.ContentLength>16384||request.Headers.ContentEncoding.Count!=0||!request.HasJsonContentType()) return null;
         await using var buffer=new MemoryStream(); var bytes=new byte[4096]; int count;

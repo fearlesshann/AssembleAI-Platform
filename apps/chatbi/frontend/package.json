@@ -1,0 +1,5 @@
+{
+  "name": "@assembleai/chatbi", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": { "build": "vite build" },
+  "dependencies": { "@assembleai/app-sdk": "0.1.0", "vue": "3.5.43" }
+}

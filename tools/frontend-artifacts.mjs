@@ -171,9 +171,11 @@ export function loadFrontendArtifacts(configurationPath) {
 }
 
 /** Unconfigured local PoC compatibility only. Deployment uses loadFrontendArtifacts. */
-export function developmentFrontendArtifacts(sampleRoot) {
-  if (!sampleRoot || !existsSync(sampleRoot)) return snapshot([]);
-  return snapshot([{ appId: 'sample', version: '0.1.0', entry: '/apps/sample/0.1.0/', ...scan(sampleRoot) }]);
+export function developmentFrontendArtifacts(sampleRoot, chatbiRoot) {
+  const releases = [];
+  if (sampleRoot && existsSync(sampleRoot)) releases.push({ appId: 'sample', version: '0.1.0', entry: '/apps/sample/0.1.0/', ...scan(sampleRoot) });
+  if (chatbiRoot && existsSync(chatbiRoot)) releases.push({ appId: 'chatbi', version: '0.1.0', entry: '/apps/chatbi/0.1.0/', ...scan(chatbiRoot) });
+  return snapshot(releases);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

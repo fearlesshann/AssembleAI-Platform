@@ -19,5 +19,5 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["../../../tests/backend"]
-pythonpath = ["."]
+pythonpath = [".", "../../chatbi/backend"]
 addopts = "-ra"

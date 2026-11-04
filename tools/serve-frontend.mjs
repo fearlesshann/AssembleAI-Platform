@@ -8,11 +8,11 @@ import { developmentFrontendArtifacts, loadFrontendArtifacts } from './frontend-
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
 /** Local-only production-build preview. Never exposes workspace source files. */
-export function previewServer({ portalRoot, sampleRoot, platformOrigin, frontendArtifacts, frontendArtifactsPath }) {
+export function previewServer({ portalRoot, sampleRoot, chatbiRoot, platformOrigin, frontendArtifacts, frontendArtifactsPath }) {
   const proxyPlatform = createPlatformProxy(platformOrigin);
   if (frontendArtifacts !== undefined && frontendArtifactsPath !== undefined) throw new Error('Configure one frontend artifact source');
   const artifacts = frontendArtifacts ?? (frontendArtifactsPath !== undefined
-    ? loadFrontendArtifacts(frontendArtifactsPath) : developmentFrontendArtifacts(sampleRoot));
+    ? loadFrontendArtifacts(frontendArtifactsPath) : developmentFrontendArtifacts(sampleRoot, chatbiRoot));
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'no-store');
@@ -53,6 +53,7 @@ export function previewServer({ portalRoot, sampleRoot, platformOrigin, frontend
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const server = previewServer({ portalRoot: 'apps/portal/dist', sampleRoot: 'apps/sample/frontend/dist',
+    chatbiRoot: 'apps/chatbi/frontend/dist',
     platformOrigin: process.env.ASSEMBLEAI_PLATFORM_ORIGIN, frontendArtifactsPath: process.env.ASSEMBLEAI_FRONTEND_ARTIFACTS });
   const port = Number(process.env.PORT ?? 4173);
   server.listen(port, '127.0.0.1', () => process.stdout.write(`AssembleAI preview: http://127.0.0.1:${port}\n`));

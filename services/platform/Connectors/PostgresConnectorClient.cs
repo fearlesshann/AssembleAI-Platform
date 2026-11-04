@@ -49,8 +49,8 @@ public sealed class PostgresConnectorClient(ConnectorCatalog catalog) : IConnect
             foreach (var parameter in compiled.Parameters)
                 command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = parameter.Type, Value = parameter.Value });
             var rows = new List<object?[]>();
-            // Include JSON escaping, names and punctuation. Reserve space for the HTTP request-id envelope.
-            var resultBytes = JsonSerializer.SerializeToUtf8Bytes(new { columns = compiled.Columns, rows = Array.Empty<object?[]>() }).Length + 128;
+            // Include JSON escaping, names and punctuation, plus request-id and delegated result-version fields.
+            var resultBytes = JsonSerializer.SerializeToUtf8Bytes(new { columns = compiled.Columns, rows = Array.Empty<object?[]>() }).Length + 256;
             var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, budget.Token);
             var readingFailed = false;
             try

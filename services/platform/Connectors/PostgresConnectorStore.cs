@@ -1,5 +1,7 @@
 using Npgsql;
 using NpgsqlTypes;
+using AssembleAI.Platform.Models;
+using AssembleAI.Platform.Registry;
 
 namespace AssembleAI.Platform.Connectors;
 
@@ -57,13 +59,15 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
             return new(tenantId, sourceId, enabled, maxRows, timeoutSeconds, revision);
         }, token);
 
-    public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token) =>
+    public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token, ModelCallSource? source = null) =>
         Run(async (db, tx, budget) =>
         {
             ValidateIdentity(tenantId, sourceId);
             if (userId == Guid.Empty || !ValidRequestId(requestId)
                 || operation is not ("query" or "test") || (operation == "query" ? !ValidId(datasetId) : datasetId is not null))
                 throw new ConnectorUnavailableException();
+            if (source is not null && (!ManifestValidator.IsAppId(source.AppId) || !ManifestValidator.IsVersion(source.ReleaseVersion)
+                || source.RunId == Guid.Empty || !ValidRequestId(source.GatewayRequestId))) throw new ConnectorUnavailableException();
             var callId = Guid.NewGuid();
             await using var command = Command(db, tx, """
                 INSERT INTO public.platform_connector_calls(call_id,tenant_id,user_id,source_id,request_id,operation,dataset_id)
@@ -76,6 +80,11 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
                 """, callId, tenantId, userId, sourceId, requestId, operation);
             command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Varchar, Value = (object?)datasetId ?? DBNull.Value });
             if (await command.ExecuteNonQueryAsync(budget) != 1) throw new ConnectorUnavailableException();
+            if (source is not null)
+                await Write(db, tx, """
+                    UPDATE public.platform_connector_calls SET app_id=$2,release_version=$3,run_id=$4,gateway_request_id=$5
+                    WHERE call_id=$1
+                    """, budget, callId, source.AppId, source.ReleaseVersion, source.RunId, source.GatewayRequestId);
             return callId;
         }, token);
 
@@ -101,7 +110,8 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
             ValidateIdentity(tenantId, sourceId);
             var rows = new List<ConnectorCallRecord>();
             await using var command = Command(db, tx, """
-                SELECT call_id,user_id,dataset_id,operation,request_id,outcome,row_count,elapsed_milliseconds,started_at
+                SELECT call_id,user_id,dataset_id,operation,request_id,outcome,row_count,elapsed_milliseconds,started_at,
+                    app_id,release_version,run_id,gateway_request_id
                 FROM public.platform_connector_calls WHERE tenant_id=$1 AND source_id=$2
                 ORDER BY started_at DESC,call_id DESC LIMIT 50
                 """, tenantId, sourceId);
@@ -109,7 +119,8 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
             while (await reader.ReadAsync(budget))
                 rows.Add(new(reader.GetGuid(0), tenantId, reader.GetGuid(1), sourceId, reader.IsDBNull(2) ? null : reader.GetString(2),
                     reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetInt32(6),
-                    reader.IsDBNull(7) ? 0 : reader.GetInt64(7), reader.GetFieldValue<DateTimeOffset>(8)));
+                    reader.IsDBNull(7) ? 0 : reader.GetInt64(7), reader.GetFieldValue<DateTimeOffset>(8),
+                    reader.IsDBNull(9) ? null : new(reader.GetString(9),reader.GetString(10),reader.GetGuid(11),reader.GetString(12))));
             return rows;
         }, token);
 

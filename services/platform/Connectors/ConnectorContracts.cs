@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AssembleAI.Platform.Models;
 
 namespace AssembleAI.Platform.Connectors;
 
@@ -38,13 +39,13 @@ public sealed record ConnectorQuery(IReadOnlyList<string> Columns, IReadOnlyList
 public sealed record ConnectorResult(IReadOnlyList<string> Columns, IReadOnlyList<object?[]> Rows);
 public sealed record TenantConnectorConfiguration(Guid TenantId, string SourceId, bool Enabled, int MaxRows, int TimeoutSeconds, long Revision);
 public sealed record ConnectorCallRecord(Guid CallId, Guid TenantId, Guid UserId, string SourceId, string? DatasetId,
-    string Operation, string RequestId, string Outcome, int? RowCount, long ElapsedMilliseconds, DateTimeOffset StartedAt);
+    string Operation, string RequestId, string Outcome, int? RowCount, long ElapsedMilliseconds, DateTimeOffset StartedAt, ModelCallSource? Source = null);
 public interface IConnectorStore
 {
     Task<TenantConnectorConfiguration?> ReadConfigurationAsync(Guid tenantId, string sourceId, CancellationToken token);
     Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows,
         int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token);
-    Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token);
+    Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token, ModelCallSource? source = null);
     Task CompleteCallAsync(Guid callId, string outcome, int? rowCount, long elapsedMilliseconds, CancellationToken token);
     Task<IReadOnlyList<ConnectorCallRecord>> ListCallsAsync(Guid tenantId, string sourceId, CancellationToken token);
 }

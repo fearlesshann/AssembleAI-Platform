@@ -19,4 +19,4 @@ export function frontendArtifactEntry(appId: string, version: string): string;
 export function frontendArtifactDigest(root: string): Readonly<{ sha256: string; fileCount: number; totalBytes: number }>;
 export function createFrontendArtifacts(configuration: FrontendArtifactConfiguration, options?: { baseDirectory?: string }): FrontendArtifacts;
 export function loadFrontendArtifacts(configurationPath: string): FrontendArtifacts;
-export function developmentFrontendArtifacts(sampleRoot?: string): FrontendArtifacts;
+export function developmentFrontendArtifacts(sampleRoot?: string, chatbiRoot?: string): FrontendArtifacts;

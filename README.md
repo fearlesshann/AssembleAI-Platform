@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-T1–T10 已完成。门户、子应用模板、应用管理和统一模型网关已接通；DeepSeek `deepseek-flash` 已完成实际 JSON / SSE 调用。T10 新增 PostgreSQL 只读数据连接器、三类资源权限交集、工厂范围过滤、结构化查询与元数据审计。最新 Core（36 项 Node、93 项 Python、.NET HTTP、真实 FastAPI → YARP）及原生 PostgreSQL / OIDC / 连接器联合验收通过。当前使用本机进程开发，制造业数据为明确标注的测试数据，业务问答与生产部署按后续任务交付。
+T1–T11 已完成。ChatBI 独立 Vue / FastAPI 应用已接通自然语言提问、模型规划、授权 PostgreSQL 查询、结果与依据展示，支持独立访问及门户内运行。DeepSeek `deepseek-flash` 三题实测得到 300、200 和按产线汇总 300；工厂 / 租户隔离、撤权、断连及双调用审计通过。41 项 Node、178 项 Python、36 项浏览器测试与 .NET 检查通过，完整 PostgreSQL 合同及最终 ChatBI 实库 / 实际模型验收记录见开发文档。当前使用本机进程，制造业数据明确标注为测试数据，真实业务数据与生产部署另行交付。
 
 - [产品与验收规格](SPEC.md)
 - [T1 实施决策与 T2 开工清单](docs/architecture/t1-decisions.md)
@@ -16,6 +16,7 @@ T1–T10 已完成。门户、子应用模板、应用管理和统一模型网�
 - [T8 应用注册与生命周期管理工作区](docs/architecture/registry-management.md)
 - [T9 模型配置、调用协议与验收边界](docs/architecture/model-gateway.md)
 - [T10 只读数据连接器、权限与查询协议](docs/architecture/connectors.md)
+- [T11 ChatBI 接入、查询链与题集验收](docs/architecture/chatbi.md)
 - [内部调用身份与权限契约](docs/architecture/t3-internal-calls.md)
 - [原生 Keycloak 验收入口](docs/native-identity.md)
 - [原生 PostgreSQL 验收入口](docs/native-postgres.md)
@@ -33,6 +34,6 @@ Vue 3 + TypeScript + Element Plus + Vite + qiankun；ASP.NET Core + YARP；独�
 
 ## 下一里程碑
 
-T11：交付 ChatBI 独立前后端，将自然语言提问、模型生成查询、授权连接器执行和结果依据展示串联起来。模型网关与数据连接器默认关闭；由部署者声明目标和环境变量凭据引用，再按租户启用并授权，见 [模型接入](docs/architecture/model-gateway.md)和[数据接入](docs/architecture/connectors.md)。正式门户需配置身份、数据库和应用授权，见 [T6 本机登录配置](docs/architecture/portal.md)；子应用按 [T7 接入模板](docs/architecture/application-template.md) 配置。管理工作区入口 `/manage/applications`，旧演示模板保留在 `/reference-ui/`。Docker 是可选部署方式，开发使用本机进程。
+T12：交付企业知识库问答，落实文档格式、访问范围、分块 / embedding、检索与来源引用。ChatBI 的配置和启动见 [T11 接入说明](docs/architecture/chatbi.md)。模型网关与数据连接器默认关闭；由部署者声明目标和环境变量凭据引用，再按租户启用并授权，见 [模型接入](docs/architecture/model-gateway.md)和[数据接入](docs/architecture/connectors.md)。正式门户需配置身份、数据库和应用授权，见 [T6 本机登录配置](docs/architecture/portal.md)；子应用按 [T7 接入模板](docs/architecture/application-template.md) 配置。管理工作区入口 `/manage/applications`，旧演示模板保留在 `/reference-ui/`。Docker 是可选部署方式，开发使用本机进程。
 
 `references/ui-v1` 中的模拟登录、模拟数据和占位测试不属于正式平台实现。该目录保留来源仓库的 LICENSE；源码未改写。

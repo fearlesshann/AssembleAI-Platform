@@ -114,7 +114,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 平台运行在 `http://127.0.0.1:5100`；FastAPI 运行在 8101，启动方法见 [后端与基础设施说明](development-services.md)。生产环境不注册 `/dev/sample/*`，开发代理仅允许明确的健康与流路径，且不转发调用者的认证请求头。
 
-`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 6）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
+`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 9）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
 
 项目独立 Python 环境的复核命令：
 
@@ -271,3 +271,21 @@ T9 完成，下一任务 T10 只读数据连接器。模型管理 UI、审计留
 实库边界验证 date infinity 拒绝、有限极值日期投影与筛选保持原值、numeric NaN / 超精度拒绝、UTF-8 单元格与 JSON 转义后总字节限制、列级 UPDATE 权限拒绝。先复现再修复的日期映射、外层超时分类与 JSON 小数舍入，以及验收时限 / reader 释放修正记入 SPEC B61–B65；初次 120 秒工具超时和日期红测的临时数据库均已清理。最终提交前独立代码复核无阻塞，密钥 / 私钥模式扫描未发现命中。
 
 本轮无产品前端变更，未重跑 Chromium 或实际模型调用；组合登录使用 OidcFixture 的真实协议交换，Keycloak 保持既有独立验收。测试数据和只读角色只在隔离集群创建；没有把测试数据或连接器完成写成 ChatBI 业务问答完成。T10 完成，下一任务 T11；管理 UI / 审计对账归 T13，多实例和完整生产部署归 T14。
+
+## 2026-11-04：T11 ChatBI 独立应用与真实模型查询
+
+交付 `apps/chatbi/frontend` 与 `apps/chatbi/backend`，首发 `0.1.0`，服务 / 应用标识 `chatbi`。同一前端发布物通过真实注册、独立审核、租户启用后，可在门户内或独立页运行；独立页明确连接后才创建运行。数据分析工作区提供当前授权数据集、问题、制造业测试问题、执行阶段、结果表和折叠查询依据，支持浅暗主题与 390px 视口。协议及本机启动见 [ChatBI 契约](architecture/chatbi.md)。
+
+网关签发与模型能力隔离的数据能力，内部 metadata / query / check 从活动父调用恢复可信上下文。查询复用 T10 的三类工厂权限交集、只读账号与 SQL 强制范围；原业务 JWT、模型能力和浏览器伪造头均不能替代连接器能力。迁移 9 添加连接器调用的完整应用 / 发布 / 运行 / 网关请求来源，可关联同一次提问的模型和查询审计；不保存问题、计划、业务结果或密钥。控制面 readiness 与迁移入口更新至 9。
+
+FastAPI 一问只生成一次计划，拒绝任意 SQL、额外字段、越权列、截断生成与精度损失；原始 JSON 数字字面量送平台，结果数字以精确十进制字符串交付浏览器。模型只收到问题与语义字段定义，不收到业务行。SSE 先发送阶段，等待期间心跳，行数据为临时结果；query 后、行批次间隔达到 1 秒及 complete 前串行验证授权 / 配置版本。错误、断流、取消或变更身份不能恢复旧结果。独立 Python `uv lock --check --offline`、`uv sync --locked --offline --dev` 通过，锁定依赖与自己的 Windows venv 快照一致。
+
+`tools/verify.ps1 -Scope All` 自然返回 0，日志 `.artifacts/t11-all.log`：41 项 Node、当时的 172 项 Python、36 项 Playwright、Vue 类型检查、三个前端构建、.NET 无警告 / 错误构建与完整 HTTP、真实 FastAPI → YARP 通过。后续交付边界修正新增 6 项回归，最终完整 Python 测试为 **178 passed**（`.artifacts/t11-python-all-final.log`），其中独立 ChatBI **85 passed**（`.artifacts/t11-python-serial-final.log`）。最终平台构建 0 警告 / 0 错误，四组 `--connector-tests` 通过（`.artifacts/t11-check-green-build.log`、`.artifacts/t11-check-green.log`）。前端接口未随收尾修正变化。
+
+完整原生 PostgreSQL 合同加 ChatBI 浏览器运行返回 0：`.artifacts/postgres/run-24cf47dd28294168ab64555df52ce78f/result.json`。覆盖迁移 1–9 及重放、原控制面合同、真实 OIDC / BFF / YARP / Python / 数据源读取、来源审计，以及无 API 拦截的 Chromium 独立与嵌入问答。题集核对 300、200、fixture-line-a=300，未授权工厂 900 与异租户 9999 不进入结果；非法计划不访问源，撤权与断连不能完成回答，过期 / 伪造 / 业务 JWT 委托重放被拒绝。
+
+真实供应商首轮未通过，未将失败视为成功；补充仅终态、结构、HTTP 状态及时长的诊断后，确认一次委托查询耗尽夹具的 5 秒总预算。控制回归另复现后台与最终检查并发、客户端 / 服务端同截止竞争、最终检查断连收尾，已分别修正。数据查询的短截止拒绝测试保留，ChatBI 集成夹具改用包含实时身份读取与持久审计的 15 秒预算；父状态去除重复检查，仍保留边界入口 / 出口核验与两轮配置 / 权限版本校验。相关红绿与设计边界记录在 SPEC B66–B71，不推定旧失败日志中未记录的原因。
+
+最终运行 `tools/verify-postgres.py --chatbi-real-model --chatbi-only` 返回 0，使用 ChatBI 自己的 Python venv；`.artifacts/postgres/run-4d21207574674d2a95edb8fbdd915d9f/result.json` 的 `passed / cleanupComplete / chatbiRealModelRequested` 均 true。该次先通过本地协议、全部 ChatBI 负例和真实浏览器，再用已配置的 **DeepSeek deepseek-flash** 每题一次验证三道合成问题，结果均符合真实 PostgreSQL 基准，双调用审计关联通过。focused 模式明确只覆盖实例安全、迁移及 ChatBI 链，不冒充完整平台套件。全部失败和成功轮次的临时集群、凭据文件及子进程均已清理。
+
+浅暗 / 移动端与门户嵌入截图已目视检查，最终浏览器产物位于 `.artifacts/chatbi-postgres/79464797c2ad46b5b4632c59394dbc1b/`。独立前后端与平台代码交叉复核无阻塞；提交前密钥 / 私钥模式扫描无命中。仍为明确标注的制造业测试数据，准确性结论限定于题集；未在本轮重跑独立 Keycloak 产品验收或部署生产服务。T11 完成，下一任务 T12 企业知识库问答；管理 UI 与审计治理继续归 T13，多实例回调 / 配额及生产交付归 T14。

@@ -17,6 +17,7 @@ if (args.Contains("--connector-tests", StringComparer.Ordinal))
     await ConnectorAuthorizationTests.RunAsync();
     await ConnectorCompilerTests.RunAsync();
     await ConnectorHttpTests.RunAsync();
+    await ConnectorDelegationTests.RunAsync();
     return;
 }
 if (args.Contains("--model-delegation-tests", StringComparer.Ordinal))
@@ -180,6 +181,7 @@ try
     await ConnectorAuthorizationTests.RunAsync();
     await ConnectorCompilerTests.RunAsync();
     await ConnectorHttpTests.RunAsync();
+    await ConnectorDelegationTests.RunAsync();
 }
 finally
 {

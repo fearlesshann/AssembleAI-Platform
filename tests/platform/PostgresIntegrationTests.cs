@@ -53,7 +53,7 @@ public static class PostgresIntegrationTests
                 await using var role = new NpgsqlCommand("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls FROM pg_roles WHERE rolname=current_user", connection);
                 Assert(await role.ExecuteScalarAsync() is false, "The application role must not have elevated cluster privileges.");
                 await using var migrated = new NpgsqlCommand("SELECT array_agg(version ORDER BY version) FROM public.platform_schema_migrations", connection);
-                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7, 8]) == true,
+                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]) == true,
                     "All real core migrations must have completed exactly once.");
                 await using var empty = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.platform_users)+(SELECT count(*) FROM public.platform_tenants)+(SELECT count(*) FROM public.platform_bff_sessions)+(SELECT count(*) FROM public.platform_registry_operators)+(SELECT count(*) FROM public.platform_applications)+(SELECT count(*) FROM public.tenant_models)+(SELECT count(*) FROM public.platform_model_configuration_audit)+(SELECT count(*) FROM public.platform_model_calls)", connection);
                 Assert(await empty.ExecuteScalarAsync() is 0L, "Core migrations must not seed accounts, tenants, sessions or model configuration/history.");
@@ -61,6 +61,15 @@ public static class PostgresIntegrationTests
                 Assert(await emptyConnectors.ExecuteScalarAsync() is 0L, "Connector migrations must not seed configuration or audit.");
                 await using var vector = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='vector')", connection);
                 Assert(await vector.ExecuteScalarAsync() is false, "This acceptance run deliberately verifies core storage without vector.");
+            }
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_CHATBI_ONLY") == "1")
+            {
+                Assert(Environment.GetEnvironmentVariable("ASSEMBLEAI_CHATBI_BROWSER_TESTS") == "1", "Focused ChatBI acceptance must be explicitly enabled.");
+                phase = "focused ChatBI PostgreSQL/Python/model/connector/browser chain";
+                await PostgresChatBiTests.RunAsync(connectionString, runDirectory,
+                    Environment.GetEnvironmentVariable("ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS") == "1");
+                Console.WriteLine("PASS: focused ChatBI chain with verified instance marker and complete unseeded migrations; broader platform contracts are a separate run.");
+                return;
             }
             phase = "authorization store";
             await PostgresAuthorizationTests.RunAsync(connectionString);
@@ -84,6 +93,12 @@ public static class PostgresIntegrationTests
             await PostgresConnectorFlowTests.RunAsync(connectionString, runDirectory);
             phase = "production gateway PostgreSQL and signed HTTP chain";
             await PostgresGatewayFlowTests.RunAsync(connectionString, runDirectory);
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_CHATBI_BROWSER_TESTS") == "1")
+            {
+                phase = "ChatBI PostgreSQL/Python/model/connector/browser chain";
+                await PostgresChatBiTests.RunAsync(connectionString, runDirectory,
+                    Environment.GetEnvironmentVariable("ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS") == "1");
+            }
             if (Environment.GetEnvironmentVariable("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1")
             {
                 phase = "application model delegation PostgreSQL/Python chain";
@@ -124,12 +139,12 @@ public static class PostgresIntegrationTests
         // Only the launcher-owned disposable database reaches this point. Restore the ledger on every exit.
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-8 WHERE version=8", connection);
+        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-9 WHERE version=9", connection);
         Assert(await hide.ExecuteNonQueryAsync() == 1, "The connector migration must exist before checking its readiness boundary.");
         try { await VerifyReadiness(connectionString, requireVector: false, "unavailable"); }
         finally
         {
-            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=8 WHERE version=-8", connection);
+            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=9 WHERE version=-9", connection);
             Assert(await restore.ExecuteNonQueryAsync() == 1, "The isolated migration ledger must be restored.");
         }
     }

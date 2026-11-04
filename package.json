@@ -5,10 +5,10 @@
   "type": "module",
   "packageManager": "npm@11.16.0",
   "engines": { "node": ">=24.18.0 <25", "npm": ">=11 <12" },
-  "workspaces": ["apps/portal", "apps/sample/frontend", "packages/app-sdk"],
+  "workspaces": ["apps/portal", "apps/sample/frontend", "apps/chatbi/frontend", "packages/app-sdk"],
   "scripts": {
     "dev": "npm run dev --workspace @assembleai/portal",
-    "build": "npm run build --workspace @assembleai/sample && npm run build --workspace @assembleai/portal",
+    "build": "npm run build --workspace @assembleai/sample && npm run build --workspace @assembleai/chatbi && npm run build --workspace @assembleai/portal",
     "check": "vue-tsc --noEmit -p tsconfig.json",
     "preview": "node tools/serve-frontend.mjs",
     "test": "node --test tests/frontend/*.test.mjs",

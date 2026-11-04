@@ -99,6 +99,9 @@ def main() -> int:
     parser.add_argument("--registry-browser", action="store_true", help="Also verify multi-user registry management and in-flight gateway policies through the real browser UI.")
     parser.add_argument("--model-application", action="store_true", help="Verify real OIDC/PG/YARP/FastAPI model delegation with a local protocol fixture.")
     parser.add_argument("--real-model", action="store_true", help="Also make one JSON and one SSE call using an explicit operator model acceptance configuration.")
+    parser.add_argument("--chatbi-browser", action="store_true", help="Verify ChatBI through real OIDC, browser, Python, model protocol and PostgreSQL connectors.")
+    parser.add_argument("--chatbi-real-model", action="store_true", help="Also verify three synthetic ChatBI questions with the configured real model.")
+    parser.add_argument("--chatbi-only", action="store_true", help="Focus an explicit ChatBI run on migrations, instance safety and the ChatBI chain; does not claim the full platform suite.")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("This launcher currently supports the Windows native distribution.")
@@ -117,6 +120,10 @@ def main() -> int:
     registry_browser = args.registry_browser or os.environ.get("ASSEMBLEAI_REGISTRY_BROWSER_TESTS") == "1"
     real_model = args.real_model or os.environ.get("ASSEMBLEAI_REAL_MODEL_TESTS") == "1"
     model_application = args.model_application or real_model or os.environ.get("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1"
+    chatbi_real_model = args.chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS") == "1"
+    chatbi_browser = args.chatbi_browser or chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_BROWSER_TESTS") == "1"
+    if args.chatbi_only and not chatbi_browser:
+        parser.error("--chatbi-only requires --chatbi-browser or --chatbi-real-model")
     model_secrets: tuple[str, ...] = ()
     try:
         package = json.loads((ROOT / "tools/native-postgres.lock.json").read_text(encoding="utf-8-sig"))["package"]
@@ -132,12 +139,14 @@ def main() -> int:
         if not smoke.is_file() or not dotnet:
             raise RuntimeError("Build AssembleAI.slnx before running PostgreSQL acceptance.")
         node = os.environ.get("ASSEMBLEAI_NODE") or shutil.which("node.exe")
-        if (portal_browser or application_browser or registry_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
+        if (portal_browser or application_browser or registry_browser or chatbi_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
             raise RuntimeError("Build the portal and install its locked browser dependencies before browser acceptance.")
         application_python = Path(os.environ.get("ASSEMBLEAI_PYTHON", ROOT / "apps/sample/backend/.venv/Scripts/python.exe")).resolve()
-        if (application_browser or model_application) and not application_python.is_file():
+        if (application_browser or model_application or chatbi_browser) and not application_python.is_file():
             raise RuntimeError("Sync the sample backend locked environment before Python application acceptance.")
-        if real_model:
+        if chatbi_browser and not (ROOT / "apps/chatbi/frontend/dist/index.html").is_file():
+            raise RuntimeError("Build the independent ChatBI frontend before ChatBI acceptance.")
+        if real_model or chatbi_real_model:
             acceptance_path = os.environ.get("ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG")
             if not acceptance_path or not Path(acceptance_path).is_file():
                 raise RuntimeError("Real model acceptance requires ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG.")
@@ -248,13 +257,17 @@ def main() -> int:
         test_environment["ASSEMBLEAI_REGISTRY_BROWSER_TESTS"] = "1" if registry_browser else "0"
         test_environment["ASSEMBLEAI_MODEL_APPLICATION_TESTS"] = "1" if model_application else "0"
         test_environment["ASSEMBLEAI_REAL_MODEL_TESTS"] = "1" if real_model else "0"
-        if application_browser or model_application:
+        test_environment["ASSEMBLEAI_CHATBI_BROWSER_TESTS"] = "1" if chatbi_browser else "0"
+        test_environment["ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS"] = "1" if chatbi_real_model else "0"
+        test_environment["ASSEMBLEAI_CHATBI_ONLY"] = "1" if args.chatbi_only else "0"
+        if application_browser or model_application or chatbi_browser:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
-        if portal_browser or application_browser or registry_browser:
+        if portal_browser or application_browser or registry_browser or chatbi_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
-        print("Running real PostgreSQL authorization, session, registry, gateway, model, read-only connector and authorized-catalog contracts...", flush=True)
+        print("Running focused ChatBI contracts against the verified isolated PostgreSQL instance..." if args.chatbi_only else
+              "Running real PostgreSQL authorization, session, registry, gateway, model, read-only connector and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
-                         artifact_dir / "integration.log", timeout=900 if real_model else 600 if registry_browser or model_application else 420 if application_browser else 240, sensitive=secrets_to_hide)
+                         artifact_dir / "integration.log", timeout=1200 if chatbi_real_model else 900 if real_model or chatbi_browser else 600 if registry_browser or model_application else 420 if application_browser else 240, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
             if line.startswith(("PASS:", "FAIL: PostgreSQL integration")):
                 print(line, flush=True)
@@ -298,7 +311,10 @@ def main() -> int:
                 "registryBrowserRequested": registry_browser,
                 "modelApplicationRequested": model_application,
                 "realModelRequested": real_model,
-                "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
+                "chatbiBrowserRequested": chatbi_browser,
+                "chatbiRealModelRequested": chatbi_real_model,
+                "chatbiOnly": args.chatbi_only,
+                "scope": "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
         print("PASS: native PostgreSQL acceptance; isolated cluster stopped and temporary credentials removed.", flush=True)

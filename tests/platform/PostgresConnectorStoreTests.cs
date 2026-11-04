@@ -1,4 +1,5 @@
 using AssembleAI.Platform.Connectors;
+using AssembleAI.Platform.Models;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 
@@ -46,6 +47,17 @@ public static class PostgresConnectorStoreTests
             Assert(pending.UserId == user && pending.TenantId == tenant && pending.SourceId == source && pending.DatasetId == dataset
                 && pending.Operation == "query" && pending.RequestId == callRequest && pending.Outcome == "running" && pending.RowCount is null,
                 "Admission must persist attributed metadata without inventing a result count.");
+            Assert(pending.Source is null, "Direct BFF calls must retain an empty application source.");
+            var origin = new ModelCallSource("chatbi", "1.0.0", Guid.NewGuid(), Id());
+            var delegated = await store.BeginCallAsync(tenant, user, source, dataset, "query", Id(), default, origin);
+            Assert((await store.ListCallsAsync(tenant, source, default)).Single(row => row.CallId == delegated).Source == origin,
+                "Delegated calls must persist and reconstruct the exact trusted application/run source.");
+            await store.CompleteCallAsync(delegated, "completed", 1, 1, default);
+            foreach (var invalidSource in new[] { origin with { AppId = "INVALID" }, origin with { ReleaseVersion = "../1" },
+                origin with { RunId = Guid.Empty }, origin with { GatewayRequestId = "invalid" } })
+                await Unavailable(() => store.BeginCallAsync(tenant, user, source, dataset, "query", Id(), default, invalidSource));
+            try { await Execute(db, "UPDATE public.platform_connector_calls SET app_id='chatbi' WHERE call_id=$1", call); throw new InvalidOperationException("Partial source must fail SQL CHECK."); }
+            catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.CheckViolation) { }
             Assert((await store.ListCallsAsync(otherTenant, source, default)).Count == 0 && (await store.ListCallsAsync(tenant, otherSource, default)).Count == 0,
                 "Call history must be scoped by both tenant and source.");
             await store.CompleteCallAsync(call, "completed", 0, 17, default);

@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AssembleAI.Platform.Registry;
 using AssembleAI.Platform.Models;
+using AssembleAI.Platform.Connectors;
 
 namespace AssembleAI.Platform.Gateway;
 
@@ -37,6 +38,9 @@ public sealed class GatewayOptions
                 || item.ModelIds is null || item.ModelIds.Length > 100
                 || item.ModelIds.Any(model => !ModelGatewayCatalog.ValidId(model))
                 || item.ModelIds.Distinct(StringComparer.Ordinal).Count() != item.ModelIds.Length
+                || item.ConnectorDatasetIds is null || item.ConnectorDatasetIds.Length > 100
+                || item.ConnectorDatasetIds.Any(dataset => !ConnectorCatalog.ValidId(dataset))
+                || item.ConnectorDatasetIds.Distinct(StringComparer.Ordinal).Count() != item.ConnectorDatasetIds.Length
                 || !keys.Add((item.Service, item.Version, item.Method, item.Path))) throw Invalid();
     }
     public GatewayOperation? Find(ApplicationManifest manifest, string method, string path) => Operations.FirstOrDefault(item =>
@@ -50,4 +54,5 @@ public sealed class GatewayOptions
 public sealed record GatewayOperation(string Service, string Version, string Method, string Path, string Permission)
 {
     public string[] ModelIds { get; init; } = [];
+    public string[] ConnectorDatasetIds { get; init; } = [];
 }

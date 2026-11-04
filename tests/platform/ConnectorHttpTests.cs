@@ -211,7 +211,7 @@ public static class ConnectorHttpTests
         public Task<TenantConnectorConfiguration?> ReadConfigurationAsync(Guid tenantId, string sourceId, CancellationToken token)
         { token.ThrowIfCancellationRequested(); return Task.FromResult<TenantConnectorConfiguration?>(tenantId == Tenant && sourceId == "manufacturing" ? new(Tenant, sourceId, true, 100, QueryTimeout, 1) : null); }
         public Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows, int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token) => throw new NotSupportedException();
-        public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token)
+        public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token, AssembleAI.Platform.Models.ModelCallSource? source = null)
         {
             token.ThrowIfCancellationRequested(); if (FailBegin) throw new ConnectorUnavailableException();
             var id = Guid.NewGuid(); Calls[id] = new(id, tenantId, userId, sourceId, datasetId, operation, requestId, "running", null, 0, DateTimeOffset.UtcNow); return Task.FromResult(id);

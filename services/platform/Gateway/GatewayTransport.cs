@@ -63,7 +63,7 @@ public sealed class GatewayTransport : IDisposable
 }
 
 internal sealed class GatewayTransformer(Uri destination, string token, string requestId, Action headersReceived,
-    string? modelDelegation = null) : HttpTransformer
+    string? modelDelegation = null, string? connectorDelegation = null) : HttpTransformer
 {
     public bool RejectedResponse { get; private set; }
     public override ValueTask TransformRequestAsync(HttpContext context, HttpRequestMessage request, string prefix, CancellationToken cancellationToken)
@@ -73,6 +73,7 @@ internal sealed class GatewayTransformer(Uri destination, string token, string r
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-Request-ID", requestId);
         if (modelDelegation is not null) request.Headers.Add("X-Model-Delegation", modelDelegation);
+        if (connectorDelegation is not null) request.Headers.Add("X-Connector-Delegation", connectorDelegation);
         request.Headers.Accept.Add(new("application/json"));
         request.Headers.Accept.Add(new("text/event-stream"));
         // YARP creates streaming request content; its framing remains the forwarder's responsibility.
