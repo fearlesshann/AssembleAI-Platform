@@ -107,6 +107,8 @@ $env:ASSEMBLEAI_SERVICE_VERSION = '0.1.0'
 
 ## 验证入口
 
+T9 另提供受保护 `POST /model-chat` 和可复用 Python `ModelClient`。它先验证本次业务 JWT，再通过正式网关注入的活动委托能力请求统一模型服务；不会把供应商密钥放进应用。必须显式配置模型 origin / alias、操作的 ModelIds 白名单以及当前用户 model:invoke；JSON 与 SDK delta / complete / error 均可消费。配置、期限、同实例回调限制及真实供应商验收见 [模型网关](model-gateway.md#子应用服务端委托)。
+
 ```powershell
 powershell -NoProfile -File tools/verify.ps1 -Scope Core
 powershell -NoProfile -File tools/verify.ps1 -Scope Frontend

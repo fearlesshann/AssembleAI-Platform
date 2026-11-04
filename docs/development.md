@@ -243,3 +243,19 @@ T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部�
 本机按固定校验值安装原生 PostgreSQL 17.11，`tools/verify-postgres.py` 返回 0。记录 `.artifacts/postgres/run-c925148adf66461a826bc7d895b9fccc/result.json` 中 `passed=true`、`cleanupComplete=true`。迁移 1–6 连续执行与重放、已有真实数据库 / OIDC / 网关合同均通过；新增模型测试覆盖租户隔离、并发创建 / 修改、配置与审计原子提交、调用开始 / 完成持久化、终态不可覆盖、未知 / 零 / 非加和用量、审计故障回滚、最近 50 条历史以及缺少迁移 6 时 readiness 拒绝。临时数据库、测试凭据及进程已清理。
 
 本轮未重跑浏览器验收，未将 PostgreSQL 仓储测试与模型 HTTP 测试声称为同一条联合链路。T9 保持进行中：实际模型端点 / 模型名 / 凭据尚待配置，子应用服务端委托调用仍待接入；模型管理 UI 和审计留存 / 故障对账归 T13。现有 Starlette / httpx 弃用提示仍为非失败警告。
+
+## 2026-11-04 T9 应用委托与真实模型联合验收
+
+已从 GitHub 快进拉取 `10b8118`，在既有模型后端上补齐 [子应用委托](architecture/model-gateway.md#子应用服务端委托)。部署操作的 ModelIds 明确允许模型；网关签发活动调用专属能力，回调恢复真实主体 / 租户 / app / release / run，再检查当前模型授权和配置。原调用退出或取消会立即撤销能力，不能把普通业务 JWT 或浏览器伪造头变成模型权限。BFF 和委托请求共用执行器、限流、JSON / SSE、预算与审计；迁移 7 原子保存应用来源。Python 新增严格服务端客户端及 `/model-chat`，现有门户外观保持。
+
+用户指定 DeepSeek 官方 `deepseek-flash` 并提供凭据；按 [官方 Chat Completions 文档](https://api-docs.deepseek.com/api/create-chat-completion/) 核对接口。密钥保存为本机用户环境变量 `ASSEMBLEAI_DEEPSEEK_KEY`，不在仓库；忽略文件 `.local-data/deepseek-acceptance.local.json` 只记录端点、模型、变量名与 reasoningEffort=none。思考配置仅由部署者选择，不能从调用消息覆写。供应商只收到无业务数据的两次简短验收请求。
+
+`tools/verify.ps1 -Scope Core` 返回 0，日志 `.artifacts/t9-delegation-core.log`：36 项 Node、锁定 .NET 还原 / 构建（0 警告 / 0 错误）、全部既有与新增 HTTP 测试、91 项 Python、真实 FastAPI → YARP 回归通过。随后补充 2 项非法 finishReason 的 JSON / SSE 回归，通过独立进程旧实现副本验证先失败、当前实现通过；合计 93 项 Python 用例已验证。委托测试覆盖模型白名单、随机能力、固定身份、到期、取消、正常结束、并发撤销和容量恢复。完成前的交叉复核无身份 / 来源 / 取消边界阻塞。
+
+完整组合 `tools/verify-postgres.py --portal-browser --application-browser --registry-browser --model-application --real-model` 返回 0。`.artifacts/postgres/run-17061489c10345a18ee6bbc48158a6f8/result.json` 的 passed / cleanupComplete 和五个 Requested 均 true。迁移 1–7 重放、全部旧实库合同、门户 / 两应用 / 注册管理浏览器回归通过；新链路为真实 OIDC / BFF → YARP → uvicorn → 模型委托入口 → 协议供应商及实际 DeepSeek，均查询真实 PG 授权、配置和审计。
+
+本地协议阶段验证首段在供应商完成前到达、31 秒后原业务 JWT 到期但活动委托仍有效、断连、模型撤权、停用、伪造 / 已结束能力与普通 JWT 拒绝；SQL 核对每条模型调用的用户 / 租户 / 模型 / 应用 / 发布 / 运行 / 原网关请求，只有 JSON 和完整 SSE 两次为 completed。实际 DeepSeek 阶段只发一次 JSON 与一次 SSE，均返回非空内容、明确完成和可关联审计，不输出模型内容或密钥。首轮失败是夹具混用了内部 content 与 SDK text，未触达真实供应商；修正与其他回溯见 SPEC B56–B60。
+
+最终补跑 `tools/verify-postgres.py --model-application` 返回 0，记录 `.artifacts/postgres/run-b47ff26946524832bcc3b05e89470b4a/result.json` 的 passed / cleanupComplete / modelApplicationRequested 均 true、realModelRequested=false。此轮仅本地协议供应商，在真实凭据变量名下放入测试哨兵，验证每次 Python 子进程启动均剥除该变量及验收配置路径；没有追加实际模型请求。2 项 finishReason 回归以 `-c apps/sample/backend/pyproject.toml` 独立复验通过，日志 `.artifacts/t9-python-finish-green.log`。
+
+T9 完成，下一任务 T10 只读数据连接器。模型管理 UI、审计留存 / 故障对账继续归 T13；委托注册表要求回调路由至签发实例，多副本、分布式额度和私有化完整部署归 T14。联合登录使用 OidcFixture 的真实协议交换，既有 Keycloak 和 PG 加密会话仍由各自独立验收证明；未将此结果扩展为生产完整部署或制造业用例效果验收。

@@ -53,7 +53,7 @@ public static class PostgresIntegrationTests
                 await using var role = new NpgsqlCommand("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls FROM pg_roles WHERE rolname=current_user", connection);
                 Assert(await role.ExecuteScalarAsync() is false, "The application role must not have elevated cluster privileges.");
                 await using var migrated = new NpgsqlCommand("SELECT array_agg(version ORDER BY version) FROM public.platform_schema_migrations", connection);
-                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6]) == true,
+                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7]) == true,
                     "All real core migrations must have completed exactly once.");
                 await using var empty = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.platform_users)+(SELECT count(*) FROM public.platform_tenants)+(SELECT count(*) FROM public.platform_bff_sessions)+(SELECT count(*) FROM public.platform_registry_operators)+(SELECT count(*) FROM public.platform_applications)+(SELECT count(*) FROM public.tenant_models)+(SELECT count(*) FROM public.platform_model_configuration_audit)+(SELECT count(*) FROM public.platform_model_calls)", connection);
                 Assert(await empty.ExecuteScalarAsync() is 0L, "Core migrations must not seed accounts, tenants, sessions or model configuration/history.");
@@ -78,6 +78,12 @@ public static class PostgresIntegrationTests
             await PostgresModelTests.RunAsync(connectionString);
             phase = "production gateway PostgreSQL and signed HTTP chain";
             await PostgresGatewayFlowTests.RunAsync(connectionString, runDirectory);
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1")
+            {
+                phase = "application model delegation PostgreSQL/Python chain";
+                await PostgresModelFlowTests.RunAsync(connectionString, runDirectory,
+                    Environment.GetEnvironmentVariable("ASSEMBLEAI_REAL_MODEL_TESTS") == "1");
+            }
             if (Environment.GetEnvironmentVariable("ASSEMBLEAI_APPLICATION_BROWSER_TESTS") == "1")
             {
                 phase = "application template PostgreSQL/Python/browser chain";
@@ -112,12 +118,12 @@ public static class PostgresIntegrationTests
         // Only the launcher-owned disposable database reaches this point. Restore the ledger on every exit.
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-6 WHERE version=6", connection);
+        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-7 WHERE version=7", connection);
         Assert(await hide.ExecuteNonQueryAsync() == 1, "The model migration must exist before checking its readiness boundary.");
         try { await VerifyReadiness(connectionString, requireVector: false, "unavailable"); }
         finally
         {
-            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=6 WHERE version=-6", connection);
+            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=7 WHERE version=-7", connection);
             Assert(await restore.ExecuteNonQueryAsync() == 1, "The isolated migration ledger must be restored.");
         }
     }

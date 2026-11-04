@@ -1,5 +1,6 @@
 using Npgsql;
 using NpgsqlTypes;
+using AssembleAI.Platform.Registry;
 
 namespace AssembleAI.Platform.Models;
 
@@ -48,11 +49,13 @@ public sealed class PostgresModelStore(IConfiguration configuration) : IModelSto
             return new(tenantId, modelId, enabled, maxOutputTokens, revision);
         }, token);
 
-    public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string modelId, string requestId, CancellationToken token) =>
+    public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string modelId, string requestId, CancellationToken token, ModelCallSource? source = null) =>
         Run(async (db, tx, budget) =>
         {
             ValidateIdentity(tenantId, modelId);
             if (userId == Guid.Empty || !ValidRequestId(requestId)) throw new ModelStoreUnavailableException();
+            if (source is not null && (!ManifestValidator.IsAppId(source.AppId) || !ManifestValidator.IsVersion(source.ReleaseVersion)
+                || source.RunId == Guid.Empty || !ValidRequestId(source.GatewayRequestId))) throw new ModelStoreUnavailableException();
             var callId = Guid.NewGuid();
             var written = await Write(db, tx, """
                 INSERT INTO public.platform_model_calls(call_id,tenant_id,user_id,model_id,request_id)
@@ -64,6 +67,11 @@ public sealed class PostgresModelStore(IConfiguration configuration) : IModelSto
                 WHERE m.tenant_id=$2 AND m.model_id=$4 AND m.enabled
                 """, budget, callId, tenantId, userId, modelId, requestId);
             if (written != 1) throw new ModelStoreUnavailableException();
+            if (source is not null)
+                await Write(db, tx, """
+                    UPDATE public.platform_model_calls SET app_id=$2,release_version=$3,run_id=$4,gateway_request_id=$5
+                    WHERE call_id=$1
+                    """, budget, callId, source.AppId, source.ReleaseVersion, source.RunId, source.GatewayRequestId);
             return callId;
         }, token);
 
@@ -91,7 +99,8 @@ public sealed class PostgresModelStore(IConfiguration configuration) : IModelSto
             ValidateIdentity(tenantId, modelId);
             var records = new List<ModelCallRecord>();
             await using var command = Command(db, tx, """
-                SELECT call_id,user_id,request_id,outcome,elapsed_milliseconds,prompt_tokens,completion_tokens,total_tokens,started_at
+                SELECT call_id,user_id,request_id,outcome,elapsed_milliseconds,prompt_tokens,completion_tokens,total_tokens,started_at,
+                    app_id,release_version,run_id,gateway_request_id
                 FROM public.platform_model_calls WHERE tenant_id=$1 AND model_id=$2
                 ORDER BY started_at DESC,call_id DESC LIMIT 50
                 """, tenantId, modelId);
@@ -99,7 +108,8 @@ public sealed class PostgresModelStore(IConfiguration configuration) : IModelSto
             while (await reader.ReadAsync(budget))
                 records.Add(new(reader.GetGuid(0), tenantId, reader.GetGuid(1), modelId, reader.GetString(2), reader.GetString(3),
                     reader.IsDBNull(4) ? 0 : reader.GetInt64(4),
-                    reader.IsDBNull(5) ? null : new(reader.GetInt64(5), reader.GetInt64(6), reader.GetInt64(7)), reader.GetFieldValue<DateTimeOffset>(8)));
+                    reader.IsDBNull(5) ? null : new(reader.GetInt64(5), reader.GetInt64(6), reader.GetInt64(7)), reader.GetFieldValue<DateTimeOffset>(8),
+                    reader.IsDBNull(9) ? null : new(reader.GetString(9), reader.GetString(10), reader.GetGuid(11), reader.GetString(12))));
             return records;
         }, token);
 

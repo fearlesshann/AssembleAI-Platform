@@ -29,6 +29,7 @@ public sealed class ModelDefinition
     public string DisplayName { get; set; } = "";
     public bool Enabled { get; set; }
     public int MaximumOutputTokens { get; set; } = 4096;
+    public string? ReasoningEffort { get; set; }
 }
 
 public sealed class ModelGatewayCatalog
@@ -55,7 +56,8 @@ public sealed class ModelGatewayCatalog
                 if (!ValidId(id) || model is null || !Options.Providers.ContainsKey(model.Provider)
                     || string.IsNullOrWhiteSpace(model.UpstreamModel) || model.UpstreamModel.Length > 128
                     || model.UpstreamModel.Any(char.IsControl) || string.IsNullOrWhiteSpace(model.DisplayName)
-                    || model.DisplayName.Length > 128 || model.MaximumOutputTokens is < 1 or > 32768)
+                    || model.DisplayName.Length > 128 || model.MaximumOutputTokens is < 1 or > 32768
+                    || model.ReasoningEffort is not (null or "none" or "minimal" or "low" or "medium" or "high" or "xhigh" or "max"))
                     throw Invalid();
         }
         Admission = new(clock, Options.Enabled ? Options.PerUserConcurrency : 2,

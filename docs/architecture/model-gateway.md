@@ -1,6 +1,6 @@
 # T9：OpenAI 兼容模型网关
 
-2026-11-03 用户选定 OpenAI 兼容协议，也支持本地推理服务。当前交付文本 Chat Completions 的后端配置、租户授权、JSON / SSE 调用和元数据审计。真实供应商地址、模型名和凭据尚未指定；本地协议测试服务不代表真实模型验收，T9 保持进行中。模型管理界面归 T13，子应用服务端的委托调用入口仍待接入。
+用户选定 OpenAI 兼容协议，也支持显式配置的本地推理服务。当前实现文本 Chat Completions 的后端配置、租户授权、JSON / SSE、应用服务端委托和元数据审计。2026-11-04 用户提供 DeepSeek 官方 `deepseek-flash` 用于真实验收；本地协议夹具与实际供应商结果分开记录。模型管理界面归 T13。
 
 ## 部署配置
 
@@ -39,9 +39,11 @@
 
 `Endpoint` 是完整 Chat Completions 地址，不自动补路径。生产供应商使用 HTTPS；HTTP 只接受显式开启的 loopback 地址。端点不得包含用户信息、查询或片段，不跟随重定向。凭据变量由启动平台的进程环境提供，每次调用重新读取；缺失或非法时拒绝调用。无认证的本地服务可省略 `CredentialEnvironmentVariable`，此时不发送 Authorization。密钥不能放入浏览器、调用正文或提交到仓库；本接口不提供读取密钥的能力。供应商须接受文本 `messages`、`max_tokens`、`stream` 及流式 `stream_options.include_usage`；不支持的扩展能力需另行适配，不自动降级重试。
 
-先执行统一 PostgreSQL 迁移（1–6），再按 [身份与授权规则](t3-authorization.md) 授权。`model:manage` 和 `model:invoke` 相互独立，资源类型为 `model`、资源 ID 为目录别名（示例 `assistant`）。当前模型为租户级资源，需要 tenant-wide 范围授权。管理员通过下述配置 API 为租户启用模型；没有租户配置即禁用。
+先执行统一 PostgreSQL 迁移（1–7），再按 [身份与授权规则](t3-authorization.md) 授权。`model:manage` 和 `model:invoke` 相互独立，资源类型为 `model`、资源 ID 为目录别名（示例 `assistant`）。当前模型为租户级资源，需要 tenant-wide 范围授权。管理员通过下述配置 API 为租户启用模型；没有租户配置即禁用。
 
 ## 平台接口
+
+部署模型还可设置可选的 `ReasoningEffort`（none / minimal / low / medium / high / xhigh / max），由服务端映射为 `reasoning_effort`；调用正文不能覆盖。留空时不发送，实际支持值以所选供应商为准，不自动重试其他值。[DeepSeek 官方协议](https://api-docs.deepseek.com/api/create-chat-completion/) 当前默认开启思考模式；本轮简短验收显式设置 `none`，使用 `https://api.deepseek.com/chat/completions` 和 `deepseek-flash`。上游推理过程不会作为回答返回或存入审计。
 
 公共前缀：`/api/platform/v1/tenants/{tenantId}/models`。所有请求需要有效 BFF 登录，且路由租户必须是服务端会话当前选择的租户。写请求要求现有 Origin / CSRF 验证。模型列表与配置只返回别名、展示名、启用状态和输出上限，绝不返回供应商地址、上游模型名或凭据引用。
 
@@ -81,7 +83,37 @@ JSON 返回 `content`、`finishReason`、`usage`、服务器生成的 `requestId
 - 调用总预算默认 120 秒（包括读取正文），连接预算 10 秒，会话检查和存储操作另有 3 秒上限。会话到期直接取消；默认每秒复核登录、当前租户、权限和模型配置，故障即停止。退出、切租户、撤权、停用以及客户端断开会取消上游。已经传给浏览器的内容无法撤回。
 - 调用结束写入耗时、状态和可得用量。状态有 `completed`、`cancelled`、`revoked`、`timeout`、`upstream_error`、`failed`。审计写入期间发生晚撤权时，已完成的供应商调用可记录为 `completed`，但响应仍被拒绝；状态不代表浏览器已收到全部内容。
 - 完成审计失败时不报告成功，保留可追踪的 `running` 记录，重启后的对账与留存策略归 T13 / D9。审计不存提示词、回复、原始错误、端点或凭据；未提供费用估算。没有自动重试，避免重复生成或收费。
-- 非流式上游响应最多 1 MiB；SSE 单行最多 64 KiB、单事件最多 256 KiB，逐段解析 UTF-8，不缓存整条生成。完整协议依据 [Chat Completions 官方说明](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。
+- 非流式上游响应最多 1 MiB；SSE 单行内容最多 64 KiB、单事件按 UTF-8 行内容加单字节换行计的解析预算最多 256 KiB，逐段解析 UTF-8，不缓存整条生成。完整协议依据 [Chat Completions 官方说明](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。
+
+## 子应用服务端委托
+
+部署者给需要模型的精确后端操作配置白名单，例如：
+
+```json
+{"Service":"sample","Version":"0.1.0","Method":"POST","Path":"/model-chat","Permission":"sample:use","ModelIds":["assistant"]}
+```
+
+默认 ModelIds 为空；注册 Manifest 本身不能授予委托权限。网关清除浏览器传入的头，向受控服务发送原业务 JWT 和独立的 `X-Model-Delegation` 能力。能力只在原网关调用活动期间有效，随机 256 位，最多登记 4096 个，只保存摘要；原调用取消或结束时立即删除并取消已启动的模型调用，早于写网关完成审计。普通业务 JWT 无法直接调用模型接口。
+
+Python 服务端使用如下显式配置，生产 origin 要求 HTTPS，开发允许 loopback HTTP：
+
+```powershell
+$env:ASSEMBLEAI_MODEL_GATEWAY_ORIGIN = 'http://127.0.0.1:5080'
+$env:ASSEMBLEAI_MODEL_ID = 'assistant'
+$env:ASSEMBLEAI_MODEL_MAX_OUTPUT_TOKENS = '128'
+```
+
+原来的 `ASSEMBLEAI_VALIDATION_URL` / SERVICE / SERVICE_VERSION 仍须按 [应用接入文档](application-template.md) 配置。`POST /model-chat` 接受 `{message,stream?}`（最多 4 KiB），先远程验证业务 JWT，再将能力作为 Bearer 调用固定平台 origin 的 `/internal/models/assistant/chat`；浏览器从既有应用 SDK 访问这个业务操作，不接收该能力或供应商凭据。客户端不重试、不跟随重定向、不沿用 Cookie，缺少配置或能力即拒绝。
+
+内部接口仅从能力恢复主体、租户、应用与固定运行，正文仍是本页的模型消息格式，不能指定身份 / 来源 / 端点。每次调用同时要求白名单、原会话和运行有效、当前 model:invoke 权限及租户模型配置启用；直接 BFF 与委托请求共用限流、预算、审计及协议执行器。接收业务请求时的 JWT 可以自然到期，已开始的委托继续按真实活动调用检查，不延长或刷新原 JWT。
+
+委托总时长取模型、会话、租约及外层网关实际剩余预算的较小值。外层默认首响应头 10 秒、空闲 30 秒仍生效；较慢模型的部署需显式配置合适的 Gateway.ResponseHeadersSeconds / IdleSeconds，不能只提高 Models.CallSeconds。验收部署使用首头 / 空闲 60 秒、外层总计 180 秒、模型总计 120 秒，生产默认值没有放宽。
+
+注册表位于签发网关实例内，Python 回调必须路由回该实例，重启后能力失效。当前适合本机或单实例部署；多副本共享能力或定向路由需在 T14 交付拓扑中实现。能力不支持后台任务脱离原请求继续运行。
+
+迁移 7 给每条模型调用增加 `source`：`{appId,releaseVersion,runId,gatewayRequestId}`，直接 BFF 调用为 null。来源由网关捕获，与调用准入同事务存储，不引用可删除业务行；四字段必须全空或全部有效。授权模型管理员可通过 calls 查询关联原业务调用，审计不保存 capability、JWT、提示词、回复或密钥。
+
+Python 将模型 delta.content 转为 SDK 的 delta.text，大增量按 4096 字符拆帧；usage 保留至 complete，避免给既有 SDK 增加未知事件。发生协议错误、取消或没有 complete 时不能报告成功。
 
 ## 验证入口与剩余验收
 
@@ -90,8 +122,15 @@ dotnet build AssembleAI.slnx --no-restore
 dotnet run --project tests/platform/AssembleAI.Platform.SmokeTests.csproj --no-build -- --model-provider-tests
 dotnet run --project tests/platform/AssembleAI.Platform.SmokeTests.csproj --no-build -- --model-gateway-tests
 python tools/verify-postgres.py
+# 真实 OIDC / PostgreSQL / YARP / Python 与协议供应商，包含 31 秒活动委托
+python tools/verify-postgres.py --model-application
+# 额外真实供应商 JSON + SSE；只接受显式的本机配置和环境变量凭据
+$env:ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG = 'D:\path\provider.local.json'
+python tools/verify-postgres.py --model-application --real-model
 ```
 
-协议与 HTTP 测试使用明确的本地测试供应商；HTTP 路径经过真实 OIDC Code / PKCE、BFF Cookie / CSRF，授权与模型存储使用内存测试替身。数据库测试由原生 PostgreSQL 启动器创建临时隔离集群，验证迁移重放、租户隔离、并发修订和审计持久化，不使用业务数据库。两组验证不能代替真实供应商联调，也不代表 PostgreSQL 与模型 HTTP 的完整联合验收。
+独立协议 / HTTP 测试使用本地供应商与内存授权替身；默认实库测试验证迁移、并发配置和审计。`--model-application` 进一步在同一实际 PostgreSQL 集群串联 OIDC / BFF / YARP / uvicorn / 内部模型入口，检查 JSON / 增量 SSE / 原 JWT 30 秒后仍活动的委托、断连、撤权、停用、能力重放拒绝和来源审计。测试只使用新建临时集群，不写业务数据库。
 
-T9 剩余：实际端点 / 模型 / 凭据配置后的 JSON 与 SSE 验收、子应用服务端委托调用接入，以及选定部署环境的网络出口和额度策略确认。模型界面、审计查询过滤和长期故障对账随 T13 完善。
+`--real-model` 先跑上述本地组合，再对显式供应商执行一次简短 JSON 和一次 SSE，无业务数据，不做真实供应商负例。配置文件仅含 `endpoint`、`upstreamModel`、`credentialEnvironmentVariable` 和可选 `reasoningEffort`；值为环境变量名，不存密钥。运行器不打印提示词、回答或凭据，Python 子应用进程也不接收供应商密钥。与三个浏览器参数可组合；具体验证记录见 [开发记录](../development.md)。
+
+模型界面、审计查询过滤和长期故障对账随 T13 完善；多副本委托路由、分布式额度、私有化出口与网络部署验收归 T14。当前不默认联系任何外部模型。

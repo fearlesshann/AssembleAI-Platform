@@ -49,6 +49,7 @@ public static class ModelGatewayTests
                 || context.Request.Headers.Authorization != "Bearer " + Credential
                 || context.Request.Headers.ContainsKey("Cookie") || context.Request.Headers.ContainsKey("Origin")
                 || input.GetProperty("model").GetString() != "fixture-model"
+                || !input.TryGetProperty("reasoning_effort", out var effort) || effort.GetString() != "none"
                 || input.GetProperty("max_tokens").GetInt32() != 32
                 || input.GetProperty("messages")[0].GetProperty("content").GetString() != Prompt)
                 state.UpstreamViolation = true;
@@ -99,7 +100,8 @@ public static class ModelGatewayTests
                 ["Models:Providers:local:CredentialEnvironmentVariable"] = CredentialVariable,
                 ["Models:Catalog:demo:Provider"] = "local", ["Models:Catalog:demo:UpstreamModel"] = "fixture-model",
                 ["Models:Catalog:demo:DisplayName"] = "Demo", ["Models:Catalog:demo:Enabled"] = "true",
-                ["Models:Catalog:demo:MaximumOutputTokens"] = "128"
+                ["Models:Catalog:demo:MaximumOutputTokens"] = "128",
+                ["Models:Catalog:demo:ReasoningEffort"] = "none"
             };
             await using var platform = PlatformApplication.Build([
                 "--environment", "Development", "--urls", origin,
@@ -408,7 +410,7 @@ public static class ModelGatewayTests
                 return Task.FromResult<TenantModelConfiguration?>(Configuration);
             }
         }
-        public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string modelId, string requestId, CancellationToken token)
+        public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string modelId, string requestId, CancellationToken token, ModelCallSource? source = null)
         {
             token.ThrowIfCancellationRequested(); if (FailBegin) throw new ModelStoreUnavailableException();
             var id = Guid.NewGuid(); Calls[id] = new(id, tenantId, userId, modelId, requestId, "running", 0, null, DateTimeOffset.UtcNow); return Task.FromResult(id);

@@ -94,6 +94,8 @@ def main() -> int:
     parser.add_argument("--portal-browser", action="store_true", help="Also verify the built portal with real OIDC/BFF and PostgreSQL in Chromium.")
     parser.add_argument("--application-browser", action="store_true", help="Also verify SDK, independently built applications and real FastAPI through OIDC/BFF/YARP in Chromium.")
     parser.add_argument("--registry-browser", action="store_true", help="Also verify multi-user registry management and in-flight gateway policies through the real browser UI.")
+    parser.add_argument("--model-application", action="store_true", help="Verify real OIDC/PG/YARP/FastAPI model delegation with a local protocol fixture.")
+    parser.add_argument("--real-model", action="store_true", help="Also make one JSON and one SSE call using an explicit operator model acceptance configuration.")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("This launcher currently supports the Windows native distribution.")
@@ -110,6 +112,9 @@ def main() -> int:
     portal_browser = args.portal_browser or os.environ.get("ASSEMBLEAI_PORTAL_BROWSER_TESTS") == "1"
     application_browser = args.application_browser or os.environ.get("ASSEMBLEAI_APPLICATION_BROWSER_TESTS") == "1"
     registry_browser = args.registry_browser or os.environ.get("ASSEMBLEAI_REGISTRY_BROWSER_TESTS") == "1"
+    real_model = args.real_model or os.environ.get("ASSEMBLEAI_REAL_MODEL_TESTS") == "1"
+    model_application = args.model_application or real_model or os.environ.get("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1"
+    model_secrets: tuple[str, ...] = ()
     try:
         package = json.loads((ROOT / "tools/native-postgres.lock.json").read_text(encoding="utf-8-sig"))["package"]
         version = package["version"]
@@ -127,8 +132,20 @@ def main() -> int:
         if (portal_browser or application_browser or registry_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
             raise RuntimeError("Build the portal and install its locked browser dependencies before browser acceptance.")
         application_python = Path(os.environ.get("ASSEMBLEAI_PYTHON", ROOT / "apps/sample/backend/.venv/Scripts/python.exe")).resolve()
-        if application_browser and not application_python.is_file():
-            raise RuntimeError("Sync the sample backend locked environment before --application-browser acceptance.")
+        if (application_browser or model_application) and not application_python.is_file():
+            raise RuntimeError("Sync the sample backend locked environment before Python application acceptance.")
+        if real_model:
+            acceptance_path = os.environ.get("ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG")
+            if not acceptance_path or not Path(acceptance_path).is_file():
+                raise RuntimeError("Real model acceptance requires ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG.")
+            acceptance = json.loads(Path(acceptance_path).read_text(encoding="utf-8-sig"))
+            required = {"endpoint", "upstreamModel", "credentialEnvironmentVariable"}
+            if not required.issubset(acceptance) or set(acceptance) - required - {"reasoningEffort"}:
+                raise RuntimeError("Real model acceptance configuration has unexpected fields.")
+            variable = acceptance.get("credentialEnvironmentVariable")
+            if not isinstance(variable, str) or not os.environ.get(variable):
+                raise RuntimeError("The configured real-model credential environment variable is unavailable.")
+            model_secrets = (os.environ[variable],)
         run_id = uuid.uuid4().hex
         run_dir = local_path(RUNS / ("run-" + run_id))
         artifact_dir = local_path(ARTIFACTS / ("run-" + run_id))
@@ -138,7 +155,7 @@ def main() -> int:
         port = free_port()
         admin_password = secrets.token_urlsafe(32)
         app_password = secrets.token_urlsafe(32)
-        secrets_to_hide = (admin_password, app_password)
+        secrets_to_hide = (admin_password, app_password) + model_secrets
         password_file = run_dir / "initdb-password"
         password_file.write_text(admin_password + "\n", encoding="utf-8")
 
@@ -219,13 +236,15 @@ def main() -> int:
         test_environment["ASSEMBLEAI_PORTAL_BROWSER_TESTS"] = "1" if portal_browser else "0"
         test_environment["ASSEMBLEAI_APPLICATION_BROWSER_TESTS"] = "1" if application_browser else "0"
         test_environment["ASSEMBLEAI_REGISTRY_BROWSER_TESTS"] = "1" if registry_browser else "0"
-        if application_browser:
+        test_environment["ASSEMBLEAI_MODEL_APPLICATION_TESTS"] = "1" if model_application else "0"
+        test_environment["ASSEMBLEAI_REAL_MODEL_TESTS"] = "1" if real_model else "0"
+        if application_browser or model_application:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
         if portal_browser or application_browser or registry_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
         print("Running real PostgreSQL authorization, session, registry, gateway, model and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
-                         artifact_dir / "integration.log", timeout=600 if registry_browser else 420 if application_browser else 240 if portal_browser else 120, sensitive=secrets_to_hide)
+                         artifact_dir / "integration.log", timeout=900 if real_model else 600 if registry_browser or model_application else 420 if application_browser else 240 if portal_browser else 120, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
             if line.startswith(("PASS:", "FAIL: PostgreSQL integration")):
                 print(line, flush=True)
@@ -267,6 +286,8 @@ def main() -> int:
                 "portalBrowserRequested": portal_browser,
                 "applicationBrowserRequested": application_browser,
                 "registryBrowserRequested": registry_browser,
+                "modelApplicationRequested": model_application,
+                "realModelRequested": real_model,
                 "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:

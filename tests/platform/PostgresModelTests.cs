@@ -87,6 +87,19 @@ public static class PostgresModelTests
                 "Storage must preserve provider-reported totals rather than calculate or replace them.");
             await VerifyCallAuditFailure(db, store, tenant, user, model);
 
+            Assert(completed.Source is null, "Direct model calls must not invent an application source.");
+            var source = new ModelCallSource("model-sample", "1.0.0", Guid.NewGuid(), Id());
+            var delegated = await store.BeginCallAsync(tenant, user, model, Id(), default, source);
+            Assert((await store.ListCallsAsync(tenant, model, default)).Single(row => row.CallId == delegated).Source == source,
+                "Delegated model admission must atomically retain its server-captured application and run source.");
+            await Unavailable(() => store.BeginCallAsync(tenant, user, model, Id(), default, source with { RunId = Guid.Empty }));
+            try
+            {
+                await Execute(db, "UPDATE public.platform_model_calls SET app_id='partial-source' WHERE call_id=$1", call);
+                throw new InvalidOperationException("A partial application source passed the database check.");
+            }
+            catch (PostgresException error) when (error.SqlState == "23514") { }
+
             await store.SaveConfigurationAsync(tenant, model, false, 512, 2, user, Id(), default);
             await Unavailable(() => store.BeginCallAsync(tenant, user, model, Id(), default));
             await Unavailable(() => store.BeginCallAsync(otherTenant, user, model, Id(), default));

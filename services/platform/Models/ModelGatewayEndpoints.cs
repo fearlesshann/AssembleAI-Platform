@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using AssembleAI.Platform.Authorization;
 using AssembleAI.Platform.Identity;
@@ -12,11 +11,11 @@ public static class ModelGatewayEndpoints
 {
     private static readonly object SessionKey = new();
     private static readonly object DisconnectKey = new();
-    private static readonly JsonSerializerOptions StreamJson = new(JsonSerializerDefaults.Web);
     public static WebApplicationBuilder AddPlatformModels(this WebApplicationBuilder builder)
     {
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ModelGatewayCatalog>();
+        builder.Services.AddSingleton<ModelDelegationRegistry>();
         builder.Services.TryAddSingleton<IModelStore, PostgresModelStore>();
         builder.Services.AddHttpClient<OpenAiModelClient>(client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
@@ -36,6 +35,7 @@ public static class ModelGatewayEndpoints
         routes.MapPut("/{modelId}/configuration", SaveConfiguration);
         routes.MapGet("/{modelId}/calls", Calls);
         routes.MapPost("/{modelId}/chat", Chat);
+        app.MapPost("/internal/models/{modelId}/chat", ModelDelegationEndpoints.Chat);
         return app;
     }
     private static async ValueTask<object?> Boundary(EndpointFilterInvocationContext invocation, EndpointFilterDelegate next)
@@ -149,127 +149,11 @@ public static class ModelGatewayEndpoints
     {
         if (!await BffEndpoints.IsVerifiedRequest(context, antiforgery, settings)) return Problem(403, "request_verification_failed");
         var access = await Access(context, tenantId, authorization);
-        if (!Allows(access, "model:invoke", tenantId, modelId)) return Problem(403, "model_access_denied");
-        var model = catalog.Find(modelId);
-        if (model is null || !model.Enabled) return Problem(403, "model_access_denied");
-        var configuration = await store.ReadConfigurationAsync(tenantId, modelId, context.RequestAborted);
-        if (configuration is null || !configuration.Enabled) return Problem(403, "model_access_denied");
-        using var document = await ModelRequestReader.ReadAsync(context.Request, context.RequestAborted);
-        var request = document is null ? null : ModelRequestReader.Chat(document.RootElement,
-            Math.Min(model.MaximumOutputTokens, configuration.MaxOutputTokens));
-        if (request is null) return Problem(400, "invalid_model_request");
+        if (access is null) return Problem(403, "model_access_denied");
         var session = Session(context);
-        var provider = catalog.Options.Providers[model.Provider];
-        var credential = ModelGatewayCatalog.ReadCredential(provider);
-        using var slot = catalog.Admission.TryAcquire(tenantId, access!.UserId);
-        if (slot is null) return Problem(429, "model_rate_limited");
-        if (!await Current(context.RequestAborted)) return Problem(403, "model_access_denied");
-        var requestId = Guid.NewGuid().ToString("N");
-        // Persist admission before any provider side effect. Never record content.
-        var callId = await store.BeginCallAsync(tenantId, access.UserId, modelId, requestId, context.RequestAborted);
-        var stopwatch = Stopwatch.StartNew();
-        var outcome = "failed";
-        ModelUsage? usage = null;
-        var finalized = false;
-        var reason = "timeout";
-        var clock = context.RequestServices.GetRequiredService<TimeProvider>();
-        var remainingSession = session.ExpiresAt - clock.GetUtcNow();
-        using var expires = new CancellationTokenSource(remainingSession > TimeSpan.Zero ? remainingSession : TimeSpan.Zero, clock);
-        using var running = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, expires.Token);
-        using var monitorStop = new CancellationTokenSource();
-        var monitor = Monitor();
-        try
-        {
-            if (!await Current(running.Token)) { reason = "revoked"; running.Cancel(); running.Token.ThrowIfCancellationRequested(); }
-            if (!request.Stream)
-            {
-                var result = await client.CompleteAsync(new(provider.Endpoint), model.UpstreamModel, credential, request, running.Token);
-                usage = result.Usage;
-                if (!await Current(running.Token)) { reason = "revoked"; running.Cancel(); running.Token.ThrowIfCancellationRequested(); }
-                await Finish("completed");
-                if (!await Current(running.Token)) { reason = "revoked"; running.Cancel(); running.Token.ThrowIfCancellationRequested(); }
-                return Results.Ok(new { result.Content, result.FinishReason, result.Usage, requestId });
-            }
-            await foreach (var item in client.StreamAsync(new(provider.Endpoint), model.UpstreamModel, credential, request, running.Token))
-            {
-                if (item.Usage is not null) usage = item.Usage;
-                if (item.Type == "complete")
-                {
-                    if (!await Current(running.Token)) { reason = "revoked"; running.Cancel(); running.Token.ThrowIfCancellationRequested(); }
-                    await Finish("completed");
-                    if (!await Current(running.Token)) { reason = "revoked"; running.Cancel(); running.Token.ThrowIfCancellationRequested(); }
-                }
-                if (!context.Response.HasStarted)
-                {
-                    context.Response.ContentType = "text/event-stream; charset=utf-8";
-                    context.Response.Headers["X-Request-ID"] = requestId;
-                }
-                var data = JsonSerializer.Serialize(new { content = item.Content, finishReason = item.FinishReason, usage = item.Usage, requestId }, StreamJson);
-                await context.Response.WriteAsync($"event: {item.Type}\ndata: {data}\n\n", running.Token);
-                await context.Response.Body.FlushAsync(running.Token);
-            }
-            return Results.Empty;
-        }
-        catch (ModelUpstreamException)
-        {
-            outcome = "upstream_error";
-            if (context.Response.HasStarted) { context.Abort(); return Results.Empty; }
-            return Problem(502, "model_upstream_error");
-        }
-        catch (OperationCanceledException)
-        {
-            outcome = ((CancellationToken)context.Items[DisconnectKey]!).IsCancellationRequested ? "cancelled"
-                : expires.IsCancellationRequested ? "revoked"
-                : context.RequestAborted.IsCancellationRequested ? "timeout" : reason;
-            if (context.Response.HasStarted) { context.Abort(); return Results.Empty; }
-            return Problem(outcome == "revoked" ? 403 : 503, outcome == "revoked" ? "model_access_denied" : "model_timeout");
-        }
-        catch (Exception error) when (Unavailable(error))
-        {
-            if (context.Response.HasStarted) { context.Abort(); return Results.Empty; }
-            return Problem(503, "models_unavailable");
-        }
-        finally
-        {
-            monitorStop.Cancel();
-            await monitor;
-            if (!finalized)
-                try { await Finish(outcome); }
-                catch (ModelStoreUnavailableException) { /* Durable admission remains unfinished; never claim success. */ }
-                catch (OperationCanceledException) { /* Completion storage has its own finite budget. */ }
-        }
-        async Task Finish(string result)
-        {
-            using var auditBudget = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            await store.CompleteCallAsync(callId, result, stopwatch.ElapsedMilliseconds, usage, auditBudget.Token);
-            outcome = result;
-            finalized = true;
-        }
-        async Task<bool> Current(CancellationToken token)
-        {
-            using var check = CancellationTokenSource.CreateLinkedTokenSource(token);
-            check.CancelAfter(TimeSpan.FromSeconds(3));
-            if (!await session.CheckAsync(check.Token)) return false;
-            var fresh = await authorization.ReadAccessAsync(session.Subject, tenantId, check.Token);
-            if (fresh?.UserId != access.UserId || !Allows(fresh, "model:invoke", tenantId, modelId)) return false;
-            var current = await store.ReadConfigurationAsync(tenantId, modelId, check.Token);
-            return current is { Enabled: true } && current.Revision == configuration.Revision;
-        }
-        async Task Monitor()
-        {
-            using var stop = CancellationTokenSource.CreateLinkedTokenSource(running.Token, monitorStop.Token);
-            try
-            {
-                while (true)
-                {
-                    await Task.Delay(catalog.Options.RecheckMilliseconds, stop.Token);
-                    if (!await Current(stop.Token)) { reason = "revoked"; running.Cancel(); return; }
-                }
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-            catch (Exception error) when (Unavailable(error) || error is OperationCanceledException)
-            { reason = "failed"; running.Cancel(); }
-        }
+        var caller = new ModelCaller(session.Subject, tenantId, access.UserId, session.ExpiresAt, session.CheckAsync, CancellationToken.None);
+        return await ModelChatExecutor.RunAsync(context, modelId, caller, catalog, authorization, store, client,
+            (CancellationToken)context.Items[DisconnectKey]!);
     }
     private static bool Unavailable(Exception error) => error is ModelStoreUnavailableException
         or AuthorizationStoreUnavailableException or BffSessionStoreException;

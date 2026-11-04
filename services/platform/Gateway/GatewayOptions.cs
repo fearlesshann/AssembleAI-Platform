@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AssembleAI.Platform.Registry;
+using AssembleAI.Platform.Models;
 
 namespace AssembleAI.Platform.Gateway;
 
@@ -33,6 +34,9 @@ public sealed class GatewayOptions
             if (item is null || !ManifestValidator.IsAppId(item.Service) || !ManifestValidator.IsVersion(item.Version)
                 || !ValidPath(item.Path) || item.Method is not ("GET" or "POST")
                 || item.Permission is null || !Regex.IsMatch(item.Permission, "\\A[a-z][a-z0-9:._-]{0,127}\\z")
+                || item.ModelIds is null || item.ModelIds.Length > 100
+                || item.ModelIds.Any(model => !ModelGatewayCatalog.ValidId(model))
+                || item.ModelIds.Distinct(StringComparer.Ordinal).Count() != item.ModelIds.Length
                 || !keys.Add((item.Service, item.Version, item.Method, item.Path))) throw Invalid();
     }
     public GatewayOperation? Find(ApplicationManifest manifest, string method, string path) => Operations.FirstOrDefault(item =>
@@ -43,4 +47,7 @@ public sealed class GatewayOptions
     private static InvalidOperationException Invalid() => new("Gateway configuration is invalid.");
 }
 
-public sealed record GatewayOperation(string Service, string Version, string Method, string Path, string Permission);
+public sealed record GatewayOperation(string Service, string Version, string Method, string Path, string Permission)
+{
+    public string[] ModelIds { get; init; } = [];
+}

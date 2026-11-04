@@ -19,9 +19,9 @@ public sealed class OpenAiModelClient
         this.client = client;
     }
 
-    public async Task<ModelChatResult> CompleteAsync(Uri completionsEndpoint, string model, string? credential, ModelChatRequest request, CancellationToken token)
+    public async Task<ModelChatResult> CompleteAsync(Uri completionsEndpoint, string model, string? credential, ModelChatRequest request, CancellationToken token, string? reasoningEffort = null)
     {
-        using var message = CreateRequest(completionsEndpoint, model, credential, request, stream: false);
+        using var message = CreateRequest(completionsEndpoint, model, credential, request, stream: false, reasoningEffort);
         using var response = await SendAsync(message, token);
         if (response.Content.Headers.ContentLength > MaxResponseBytes) throw TooLarge();
         await using var stream = await OpenStreamAsync(response, token);
@@ -45,9 +45,9 @@ public sealed class OpenAiModelClient
         return new(ReadString(content), OptionalString(choice, "finish_reason"), ReadUsage(root));
     }
 
-    public async IAsyncEnumerable<ModelStreamEvent> StreamAsync(Uri completionsEndpoint, string model, string? credential, ModelChatRequest request, [EnumeratorCancellation] CancellationToken token)
+    public async IAsyncEnumerable<ModelStreamEvent> StreamAsync(Uri completionsEndpoint, string model, string? credential, ModelChatRequest request, [EnumeratorCancellation] CancellationToken token, string? reasoningEffort = null)
     {
-        using var message = CreateRequest(completionsEndpoint, model, credential, request, stream: true);
+        using var message = CreateRequest(completionsEndpoint, model, credential, request, stream: true, reasoningEffort);
         using var response = await SendAsync(message, token);
         if (!string.Equals(response.Content.Headers.ContentType?.MediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase)) throw InvalidResponse();
         await using var stream = await OpenStreamAsync(response, token);
@@ -157,7 +157,7 @@ public sealed class OpenAiModelClient
         }
     }
 
-    private static HttpRequestMessage CreateRequest(Uri endpoint, string model, string? credential, ModelChatRequest request, bool stream)
+    private static HttpRequestMessage CreateRequest(Uri endpoint, string model, string? credential, ModelChatRequest request, bool stream, string? reasoningEffort)
     {
         var payload = new Dictionary<string, object>
         {
@@ -167,6 +167,7 @@ public sealed class OpenAiModelClient
             ["stream"] = stream
         };
         if (request.Temperature is { } temperature) payload["temperature"] = temperature;
+        if (reasoningEffort is not null) payload["reasoning_effort"] = reasoningEffort;
         if (stream) payload["stream_options"] = new { include_usage = true };
         var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {

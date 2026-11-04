@@ -64,7 +64,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 生产还要求 `ConnectionStrings__Platform`，应用外部必须终止可信 HTTPS。默认 `AllowedHosts` 仅 loopback，部署时显式配置实际域名。本切片未配置信任代理头；若在反向代理后部署，需要在交付阶段显式配置可信代理与 HTTPS 转发，不可直接信任任意客户端转发头。
 
-核心迁移入口顺序执行 1、2、3；向量扩展通过 `enable-vector.sql` 独立初始化，完整入口为 `apply-with-vector.sql`。BFF 启用时 readiness 要求迁移 3；未启用时仍要求迁移 2。默认还检查 vector 0.8.7，控制面可显式设置 `Readiness:RequireVector=false`。连接、密钥或证书配置不完整时拒绝启动认证，不回退到生产内存会话。实际 RSA PFX 加密落盘、重新构建应用后恢复和错误证书拒绝已通过测试；密钥 / 证书轮换、跨机器部署和备份恢复仍需验收。
+当前核心迁移入口顺序执行 1–7；向量扩展通过 `enable-vector.sql` 独立初始化，完整入口为 `apply-with-vector.sql`。readiness 统一要求迁移 7，不随 BFF 开关降级。默认还检查 vector 0.8.7，控制面可显式设置 `Readiness:RequireVector=false`。连接、密钥或证书配置不完整时拒绝启动认证，不回退到生产内存会话。实际 RSA PFX 加密落盘、重新构建应用后恢复和错误证书拒绝已通过测试；密钥 / 证书轮换、跨机器部署和备份恢复仍需验收。
 
 ## 验证边界
 

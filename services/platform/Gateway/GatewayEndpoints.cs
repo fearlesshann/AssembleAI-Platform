@@ -4,6 +4,7 @@ using AssembleAI.Platform.Authorization;
 using AssembleAI.Platform.Identity;
 using AssembleAI.Platform.Identity.Sessions;
 using AssembleAI.Platform.InternalCalls;
+using AssembleAI.Platform.Models;
 using AssembleAI.Platform.Registry;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http.Features;
@@ -143,9 +144,11 @@ public static class GatewayEndpoints
         callStop.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
         using var headersTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(options.ResponseHeadersSeconds));
         using var forwarding = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, callStop.Token, headersTimeout.Token);
+        var forwardingToken = forwarding.Token;
         using var watchStop = CancellationTokenSource.CreateLinkedTokenSource(forwarding.Token);
         string? stoppedReason = null;
         var watcher = Watch();
+        ModelDelegationRegistry.Lease? delegation = null;
         try
         {
             // A slow durable admission may have consumed the lease/call budget.
@@ -156,7 +159,15 @@ public static class GatewayEndpoints
                 await Problem(context, 504, "application_call_interrupted");
                 return;
             }
-            var transformer = new GatewayTransformer(destination, token, requestId, () => headersTimeout.CancelAfter(Timeout.InfiniteTimeSpan));
+            if (operation.ModelIds.Length > 0)
+            {
+                var caller = new ModelCaller(session.Subject, run.TenantId, run.UserId, absoluteDeadline,
+                    CheckDelegation, forwardingToken, new(run.AppId, run.ReleaseVersion, run.RunId, requestId));
+                delegation = context.RequestServices.GetRequiredService<ModelDelegationRegistry>().Register(caller, operation.ModelIds);
+                if (delegation is null) { await Problem(context, 503, "model_delegation_unavailable"); return; }
+            }
+            var transformer = new GatewayTransformer(destination, token, requestId,
+                () => headersTimeout.CancelAfter(Timeout.InfiniteTimeSpan), delegation?.Capability);
             var result = await forwarder.SendAsync(context, binding.Destination, transport.Client,
                 new ForwarderRequestConfig { ActivityTimeout = TimeSpan.FromSeconds(options.IdleSeconds), AllowResponseBuffering = false },
                 transformer, forwarding.Token);
@@ -174,6 +185,9 @@ public static class GatewayEndpoints
         }
         finally
         {
+            // Revoke before watcher/completion auditing: a normally completed
+            // outer request must leave no interval for late model callbacks.
+            delegation?.Dispose();
             await watchStop.CancelAsync();
             await watcher;
             using var finish = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -183,6 +197,20 @@ public static class GatewayEndpoints
                 context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("GatewayAudit")
                     .LogError("Gateway completion for {RequestId} could not persist; call remains running and must be reconciled.", requestId);
             }
+        }
+
+        async Task<bool> CheckDelegation(CancellationToken cancellation)
+        {
+            using var check = CancellationTokenSource.CreateLinkedTokenSource(cancellation, forwardingToken);
+            check.CancelAfter(TimeSpan.FromSeconds(options.CheckTimeoutSeconds));
+            if (deadline.Remaining() <= TimeSpan.Zero || !await session.CheckAsync(check.Token)) return false;
+            var state = await store.ReadRunAsync(session.Subject, session.Key, run.RunId, check.Token);
+            if (state is null || state.UserId != run.UserId || state.TenantId != run.TenantId
+                || state.AppId != run.AppId || state.ReleaseVersion != run.ReleaseVersion) return false;
+            var left = deadline.Remaining(state.DrainUntil is { } drain && drain < state.ExpiresAt ? drain : state.ExpiresAt);
+            if (left <= TimeSpan.Zero) return false;
+            check.Token.ThrowIfCancellationRequested();
+            return true;
         }
 
         async Task Watch()
