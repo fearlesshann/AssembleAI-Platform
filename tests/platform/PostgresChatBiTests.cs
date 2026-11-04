@@ -25,6 +25,7 @@ public static class PostgresChatBiTests
     private const string Group = "{\"columns\":[\"line\"],\"filters\":[],\"metrics\":[{\"function\":\"sum\",\"column\":\"produced\"}],\"limit\":100}";
     public static async Task RunAsync(string connection, string directory, bool realModel)
     {
+        Check(!InteractiveDemo || !realModel, "The local interactive experience cannot call a real model provider.");
         await Exercise(connection, directory, null);
         if (realModel)
         {
@@ -42,6 +43,8 @@ public static class PostgresChatBiTests
 
     private static async Task Exercise(string connection, string runDirectory, Provider? actual)
     {
+        var interactive = InteractiveDemo && actual is null;
+        var publicOrigin = interactive ? InteractiveOrigin() : FreeOrigin();
         var workspace = Workspace(); var f = new Fixture();
         var directory = Path.Combine(runDirectory, "chatbi-" + f.Tenant.ToString("N")); Directory.CreateDirectory(directory);
         var node = Environment.GetEnvironmentVariable("ASSEMBLEAI_NODE") ?? "node";
@@ -50,14 +53,16 @@ public static class PostgresChatBiTests
         await Run(node, workspace, [previewScript, "prepare", directory], 60);
         using var artifacts = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(directory, "artifacts.json")));
         var artifact = artifacts.RootElement.GetProperty("artifacts")[0];
-        var manifest = new ApplicationManifest(1, "chatbi", "生产数据分析", Version, "/apps/chatbi/0.1.0/", "chatbi", ["chatbi:use"], "draft",
-            new(Version, artifact.GetProperty("sha256").GetString()!), Version, "制造运营", "制造业测试数据：按当前授权工厂查询每日产量");
+        var manifest = new ApplicationManifest(1, "chatbi", interactive ? "ChatBI 本地体验" : "生产数据分析", Version, "/apps/chatbi/0.1.0/", "chatbi", ["chatbi:use"], "draft",
+            new(Version, artifact.GetProperty("sha256").GetString()!), Version, "制造运营", interactive
+                ? "本地交互体验：制造业测试数据，3 个示例问题使用固定查询规划；真实数据库查询，未接入真实 AI。"
+                : "制造业测试数据：按当前授权工厂查询每日产量");
         using var input = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(runDirectory, "test-config.json")));
         var previous = Environment.GetEnvironmentVariable(f.CredentialVariable);
         Environment.SetEnvironmentVariable(f.CredentialVariable, input.RootElement.GetProperty("connectorConnectionString").GetString());
         await using var identity = await OidcFixture.StartAsync();
         await using var db = new NpgsqlConnection(connection); await db.OpenAsync();
-        var platformOrigin = FreeOrigin(); var publicOrigin = FreeOrigin(); var backendOrigin = FreeOrigin();
+        var platformOrigin = FreeOrigin(); var backendOrigin = FreeOrigin();
         var plan = Sum; Hold? hold = null; var upstreamCalls = 0;
         var captureKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         string? capturedCapability = null, capturedAuthorization = null;
@@ -89,8 +94,9 @@ public static class PostgresChatBiTests
                 && !context.Request.Headers.ContainsKey("X-Model-Delegation") && json.RootElement.GetProperty("model").GetString() == "fixture-model"
                 && !json.RootElement.GetProperty("stream").GetBoolean(), "Model planning must use trusted non-streaming provider settings.");
             var wire = json.RootElement.GetRawText();
-            Check(!wire.Contains("fixture-line-a", StringComparison.Ordinal) && !wire.Contains("9999", StringComparison.Ordinal)
-                && !wire.Contains(f.Table, StringComparison.Ordinal), "Model planning must contain no source rows or physical table names.");
+            Check(interactive || (!wire.Contains("fixture-line-a", StringComparison.Ordinal) && !wire.Contains("9999", StringComparison.Ordinal)
+                && !wire.Contains(f.Table, StringComparison.Ordinal)), "Model planning must contain no source rows or physical table names.");
+            if (interactive) content = InteractivePlan(json.RootElement);
             try
             {
                 if (pause is not null) { pause.Started.TrySetResult(); await pause.Release.Task.WaitAsync(context.RequestAborted); }
@@ -134,6 +140,11 @@ public static class PostgresChatBiTests
                 using (var selected = await browser.Send("POST", "/bff/tenant", new { tenantId = f.Tenant })) await Expect(selected, 200);
                 using (var configured = await browser.Send("PUT", $"/api/platform/v1/tenants/{f.Tenant}/models/assistant/configuration", new { enabled = true, maxOutputTokens = 2048, expectedRevision = 0 })) await Expect(configured, 200);
                 using (var configured = await browser.Send("PUT", $"/api/platform/v1/tenants/{f.Tenant}/connectors/{Source}/configuration", new { enabled = true, maxRows = 100, timeoutSeconds = 15, expectedRevision = 0 })) await Expect(configured, 200);
+                if (interactive)
+                {
+                    await WaitForInteractiveDemo(runDirectory, publicOrigin, f, backend, preview);
+                    return;
+                }
                 await browser.StartRun();
                 using (var datasets = await browser.Send("GET", "/api/apps/chatbi/releases/0.1.0/datasets"))
                 {
@@ -218,6 +229,72 @@ public static class PostgresChatBiTests
             await Execute(db, "DELETE FROM public.platform_registry_audit WHERE app_id='chatbi'");
             await Execute(db, "DELETE FROM public.platform_tenants WHERE tenant_id IN ($1,$2)", f.Tenant, f.OtherTenant);
             await Execute(db, "DELETE FROM public.platform_users WHERE user_id IN ($1,$2)", f.Owner, f.Reviewer);
+        }
+    }
+
+    private static bool InteractiveDemo => Environment.GetEnvironmentVariable("ASSEMBLEAI_INTERACTIVE_DEMO") == "1";
+
+    private static string InteractiveOrigin()
+    {
+        using var socket = new TcpListener(IPAddress.Loopback, 4174) { ExclusiveAddressUse = true };
+        try { socket.Start(); }
+        catch (SocketException error) { throw new InvalidOperationException("Local experience port 4174 is already in use. Stop the existing experience before starting another.", error); }
+        return "http://127.0.0.1:4174";
+    }
+
+    private static string InteractivePlan(JsonElement request)
+    {
+        const string refusal = "{\"refusal\":\"unsupported_question\"}";
+        if (!request.TryGetProperty("messages", out var messages) || messages.ValueKind != JsonValueKind.Array) return refusal;
+        var users = messages.EnumerateArray().Where(message => message.ValueKind == JsonValueKind.Object
+            && message.TryGetProperty("role", out var role) && role.ValueKind == JsonValueKind.String && role.GetString() == "user").ToArray();
+        if (users.Length != 1 || !users[0].TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.String) return refusal;
+        var prompt = content.GetString()!;
+        // make_prompt appends the schema/question JSON after its instruction line. Never match instructions or substrings.
+        try
+        {
+            using var payload = JsonDocument.Parse(prompt[(prompt.LastIndexOf('\n') + 1)..]);
+            if (payload.RootElement.ValueKind != JsonValueKind.Object || !payload.RootElement.TryGetProperty("question", out var question)
+                || question.ValueKind != JsonValueKind.String) return refusal;
+            return question.GetString() switch
+            {
+                "2026年11月1日至2日的产量合计是多少？" => Sum,
+                "2026年11月2日的产量是多少？" => Day,
+                "按产线汇总产量" => Group,
+                _ => refusal
+            };
+        }
+        catch (JsonException) { return refusal; }
+    }
+
+    private static async Task WaitForInteractiveDemo(string runDirectory, string publicOrigin, Fixture fixture, Child backend, Child preview)
+    {
+        var readyPath = Path.Combine(runDirectory, "demo-ready.json");
+        var stopPath = Path.Combine(runDirectory, "demo-stop");
+        var expiresAtUtc = DateTimeOffset.UtcNow.AddHours(4);
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromHours(4));
+        ConsoleCancelEventHandler cancel = (_, eventArgs) => { eventArgs.Cancel = true; lifetime.Cancel(); };
+        Console.CancelKeyPress += cancel;
+        try
+        {
+            await File.WriteAllTextAsync(readyPath + ".tmp", JsonSerializer.Serialize(new
+            {
+                publicOrigin, tenantId = fixture.Tenant, appId = "chatbi", modelMode = "fixed-example-plans", expiresAtUtc
+            }), lifetime.Token);
+            File.Move(readyPath + ".tmp", readyPath, overwrite: true);
+            Console.WriteLine($"LOCAL EXPERIENCE READY: {publicOrigin}/ — manufacturing test data; three fixed example plans, no real AI provider. Expires at {expiresAtUtc:O}.");
+            while (!lifetime.IsCancellationRequested && !File.Exists(stopPath))
+            {
+                Check(!backend.Process.HasExited && !preview.Process.HasExited, "A local experience service stopped unexpectedly.");
+                await Task.Delay(TimeSpan.FromSeconds(1), lifetime.Token);
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally
+        {
+            Console.CancelKeyPress -= cancel;
+            File.Delete(readyPath);
+            File.Delete(readyPath + ".tmp");
         }
     }
 

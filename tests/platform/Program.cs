@@ -12,6 +12,14 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Xml.Linq;
 using AssembleAI.Platform.SmokeTests;
 
+if (args.Contains("--knowledge-tests", StringComparer.Ordinal))
+{
+    await KnowledgeObjectTests.RunAsync();
+    await KnowledgeWorkerTests.RunAsync();
+    await KnowledgeHttpTests.RunAsync();
+    return;
+}
+
 if (args.Contains("--connector-tests", StringComparer.Ordinal))
 {
     await ConnectorAuthorizationTests.RunAsync();
@@ -182,6 +190,9 @@ try
     await ConnectorCompilerTests.RunAsync();
     await ConnectorHttpTests.RunAsync();
     await ConnectorDelegationTests.RunAsync();
+    await KnowledgeObjectTests.RunAsync();
+    await KnowledgeWorkerTests.RunAsync();
+    await KnowledgeHttpTests.RunAsync();
 }
 finally
 {

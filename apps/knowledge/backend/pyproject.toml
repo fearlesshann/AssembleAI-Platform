@@ -1,0 +1,21 @@
+[project]
+name = "assembleai-knowledge-backend"
+version = "0.1.0"
+description = "Bounded private document parser for the AssembleAI knowledge pipeline"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi==0.140.0",
+  "uvicorn==0.51.0",
+  "pypdf==6.21.4",
+]
+
+[dependency-groups]
+dev = ["pytest==8.4.2", "httpx==0.28.1"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["../../../tests/backend/test_knowledge_documents.py"]
+pythonpath = ["."]
+addopts = "-ra"

@@ -4,6 +4,8 @@
 
 ## 当前进度
 
+T12 进行中：首期文档摄取已实现 PDF / Word（DOCX）/ TXT / Markdown 的上传、权限、原文下载、删除和后台提取。检索问答、知识库界面及 RabbitMQ / 向量链路仍待完成，见 [文档摄取接入说明](docs/architecture/knowledge-ingestion.md)。
+
 T1–T11 已完成。ChatBI 独立 Vue / FastAPI 应用已接通自然语言提问、模型规划、授权 PostgreSQL 查询、结果与依据展示，支持独立访问及门户内运行。DeepSeek `deepseek-flash` 三题实测得到 300、200 和按产线汇总 300；工厂 / 租户隔离、撤权、断连及双调用审计通过。41 项 Node、178 项 Python、36 项浏览器测试与 .NET 检查通过，完整 PostgreSQL 合同及最终 ChatBI 实库 / 实际模型验收记录见开发文档。当前使用本机进程，制造业数据明确标注为测试数据，真实业务数据与生产部署另行交付。
 
 - [产品与验收规格](SPEC.md)
@@ -17,6 +19,7 @@ T1–T11 已完成。ChatBI 独立 Vue / FastAPI 应用已接通自然语言提�
 - [T9 模型配置、调用协议与验收边界](docs/architecture/model-gateway.md)
 - [T10 只读数据连接器、权限与查询协议](docs/architecture/connectors.md)
 - [T11 ChatBI 接入、查询链与题集验收](docs/architecture/chatbi.md)
+- [T12 文档摄取、解析与删除边界](docs/architecture/knowledge-ingestion.md)
 - [内部调用身份与权限契约](docs/architecture/t3-internal-calls.md)
 - [原生 Keycloak 验收入口](docs/native-identity.md)
 - [原生 PostgreSQL 验收入口](docs/native-postgres.md)
@@ -25,6 +28,14 @@ T1–T11 已完成。ChatBI 独立 Vue / FastAPI 应用已接通自然语言提�
 - [旧 UI 复用评估](docs/architecture/ui-reuse-audit.md)
 - [旧 UI 原样快照](references/ui-v1/README.md)
 - [快照来源与文件校验值](references/ui-v1.source.json)
+
+## 本机可操作体验
+
+构建前端、.NET 解决方案并安装原生 PostgreSQL 与 ChatBI 的锁定 Python 环境后，运行 `powershell -File tools/local-demo.ps1`。访问 `http://127.0.0.1:4174`，点击“企业账号登录”，选择体验租户，再打开“ChatBI 本地体验”。本机测试身份自动登录，无需填写账号密码。
+
+此入口使用隔离的临时数据库和制造业测试数据，只支持页面上的三个示例问题，结果分别为 300、200 和按产线汇总 300；模型端采用固定示例查询方案，没有连接真实模型。登录、权限、应用运行、数据查询与结果展示经过实际服务。知识库页面和文档问答仍未交付。
+
+体验最多运行四小时；另开终端执行 `powershell -File tools/local-demo.ps1 -Stop` 可提前停止并清理临时数据。已有服务和数据库不受影响。若 Node 不在系统路径，可用 `-Node` 指定完整路径。
 
 ## 工程基线
 

@@ -53,7 +53,7 @@ powershell -NoProfile -File deploy/postgres/migrate.ps1 -Psql '.\.local-data\nat
 
 将示例路径与地址换成实际环境。迁移前需已有 `assembleai_platform` 数据库及同名角色，迁移账号需有 `SET ROLE assembleai_platform` 和创建对应对象的权限。密码使用 PostgreSQL 密码文件或进程环境 `PGPASSWORD`，不放入命令行。脚本限定目标数据库，SQL 会再次检查数据库名，使用事务及 advisory lock。
 
-默认执行 `apply.sql` 的控制面迁移 1–9，不需要 pgvector。需要知识库扩展时加 `-IncludeVector`，执行 `apply-with-vector.sql`：控制面迁移完成后，再由 `enable-vector.sql` 安装并严格核验 pgvector 0.8.7。此时服务器必须已安装扩展文件，迁移账号也需具备安装扩展的权限；缺失或版本不符都会失败。该组合按各迁移事务顺序提交，vector 失败时已提交的控制面迁移仍保留。
+默认执行 `apply.sql` 的控制面迁移 1–10，不需要 pgvector。需要知识库扩展时加 `-IncludeVector`，执行 `apply-with-vector.sql`：控制面迁移完成后，再由 `enable-vector.sql` 安装并严格核验 pgvector 0.8.7。此时服务器必须已安装扩展文件，迁移账号也需具备安装扩展的权限；缺失或版本不符都会失败。该组合按各迁移事务顺序提交，vector 失败时已提交的控制面迁移仍保留。
 
 平台 `Readiness:RequireVector` 默认 true；仅控制面环境需明确配置 `Readiness__RequireVector=false`。这不会声明知识库已就绪，也不会绕过其他基础设施检查。开发流式样例仍不依赖数据库。
 
@@ -95,8 +95,8 @@ MinIO 官方仓库于 2026-04-25 归档，最后的安全发布说明要求从�
 - `0001_bootstrap.sql` 在事务和 advisory lock 下验证目标数据库名，创建迁移记录表并写入 `public.platform_schema_migrations` 的 `version=1`。误连其他数据库会失败；该迁移不安装 vector。
 - `0002_authorization.sql` 增加用户、租户、组织、成员、角色和授权关系，使用租户复合外键，并记录 `version=2`。迁移不预置账号或权限，已通过真实数据库验收。
 - `0003_bff_sessions.sql` 增加服务端加密 ticket、随机会话引用与绝对到期时间，记录 `version=3`；不包含保护密钥或预置会话。
-- `enable-vector.sql` 独立安装并核验 pgvector 0.8.7；已有其他版本时拒绝自动升级。`apply.sql` 包含控制面 1–9，`apply-with-vector.sql` 在其后执行此扩展步骤。
-- 平台 readiness 统一检查迁移 9；`Readiness:RequireVector` 默认 true，只有显式设为 false 才允许无 vector 的控制面数据库。没有预建业务租户、模型授权或制造业演示数据。
+- `enable-vector.sql` 独立安装并核验 pgvector 0.8.7；已有其他版本时拒绝自动升级。`apply.sql` 包含控制面 1–10，`apply-with-vector.sql` 在其后执行此扩展步骤。
+- 平台 readiness 统一检查迁移 10；`Readiness:RequireVector` 默认 true，只有显式设为 false 才允许无 vector 的控制面数据库。没有预建业务租户、模型授权或制造业演示数据。
 - 迁移入口没有隐含重置数据或 `down -v`；初始化脚本只在空数据卷执行，修改 `.env` 不会自动轮换已有数据库角色密码。
 
 ## Keycloak 开发接入

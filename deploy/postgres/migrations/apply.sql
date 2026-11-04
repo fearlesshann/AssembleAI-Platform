@@ -8,3 +8,4 @@
 \ir 0007_model_call_source.sql
 \ir 0008_connectors.sql
 \ir 0009_connector_call_source.sql
+\ir 0010_knowledge.sql

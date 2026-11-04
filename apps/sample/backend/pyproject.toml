@@ -12,6 +12,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "pytest==8.4.2",
+  "pypdf==6.21.4",
 ]
 
 [tool.uv]
@@ -19,5 +20,5 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["../../../tests/backend"]
-pythonpath = [".", "../../chatbi/backend"]
+pythonpath = [".", "../../chatbi/backend", "../../knowledge/backend"]
 addopts = "-ra"

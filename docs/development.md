@@ -114,7 +114,7 @@ dotnet run --project services/platform/AssembleAI.Platform.csproj --launch-profi
 
 平台运行在 `http://127.0.0.1:5100`；FastAPI 运行在 8101，启动方法见 [后端与基础设施说明](development-services.md)。生产环境不注册 `/dev/sample/*`，开发代理仅允许明确的健康与流路径，且不转发调用者的认证请求头。
 
-`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 9）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
+`/health/live` 只说明进程存活。`/health/ready` 实际检查 PostgreSQL 迁移标记（统一要求迁移 10）、默认要求的 vector 0.8.7、Redis PING、MinIO、RabbitMQ、OIDC discovery；任何必需依赖缺失或配置不完整时为 503。`Readiness:RequireVector=false` 可显式限定为控制面数据库检查。
 
 项目独立 Python 环境的复核命令：
 
@@ -289,3 +289,15 @@ FastAPI 一问只生成一次计划，拒绝任意 SQL、额外字段、越权�
 最终运行 `tools/verify-postgres.py --chatbi-real-model --chatbi-only` 返回 0，使用 ChatBI 自己的 Python venv；`.artifacts/postgres/run-4d21207574674d2a95edb8fbdd915d9f/result.json` 的 `passed / cleanupComplete / chatbiRealModelRequested` 均 true。该次先通过本地协议、全部 ChatBI 负例和真实浏览器，再用已配置的 **DeepSeek deepseek-flash** 每题一次验证三道合成问题，结果均符合真实 PostgreSQL 基准，双调用审计关联通过。focused 模式明确只覆盖实例安全、迁移及 ChatBI 链，不冒充完整平台套件。全部失败和成功轮次的临时集群、凭据文件及子进程均已清理。
 
 浅暗 / 移动端与门户嵌入截图已目视检查，最终浏览器产物位于 `.artifacts/chatbi-postgres/79464797c2ad46b5b4632c59394dbc1b/`。独立前后端与平台代码交叉复核无阻塞；提交前密钥 / 私钥模式扫描无命中。仍为明确标注的制造业测试数据，准确性结论限定于题集；未在本轮重跑独立 Keycloak 产品验收或部署生产服务。T11 完成，下一任务 T12 企业知识库问答；管理 UI 与审计治理继续归 T13，多实例回调 / 配额及生产交付归 T14。
+
+## 2026-11-04 T12 文档摄取首期
+
+同步 `39acc72` 后，按用户“首期必须包含 PDF / Word”的要求实现 DOCX、文本层 PDF、UTF-8 TXT / Markdown，单文件最多 5 MiB。提供真实 BFF / CSRF 文档上传、按租户组织过滤、受保护附件下载、带修订号删除；官方 Minio SDK 7.0.0 使用私有对象路径与环境变量凭据。独立 Python 解析服务使用 pypdf 6.21.4 和有界 OOXML 读取，每次解析在限时 / 限内存子进程中执行，保留页、段落和行号。扫描件及加密文件的安全原因保留到文档 failureCode。
+
+迁移 10 引入文档、文本分块、持久任务和审计。当前 worker 轮询数据库任务；重复领取、60 秒过期租约、3 次失败上限、30 秒重试、当前上传者权限及删除修订围栏均覆盖。删除先写墓碑、清分块、取消旧任务，再清理对象；旧 worker 不得复活内容。文档提取成功的 extracted 不等于已创建向量或可以问答。完整配置、下载授权边界、未关联对象对账及后续范围见 [摄取契约](architecture/knowledge-ingestion.md)。
+
+最终 `tools/verify.ps1 -Scope Core` 返回 0，日志 `.artifacts/t12-core.log`：锁定还原、.NET 构建 0 警告 / 0 错误、完整 HTTP 回归（含知识库对象 / worker / OIDC HTTP）、41 项 Node、201 项 Python及真实 FastAPI → YARP 均通过。新增解析测试包含实际生成的 PDF / DOCX、异常 ZIP/XML、扫描 / 加密文档、分块定位、私有接口鉴权，以及真实受限子进程完成 / 超时 / 取消。
+
+实库首轮发现 BFF 禁用时 DELETE 处理器缺少 Antiforgery 服务注册，已修复。最终 `tools/verify-postgres.py` 返回 0，`.artifacts/postgres/run-ec0f062eaeaa4d17abab801a49b4a9c5/result.json` 的 passed / cleanupComplete 均 true，PostgreSQL 17.11；迁移 1–10、知识库任务与删除竞争、失败原因分类、原子审计及既有数据库合同全部通过，临时数据库与进程已清理。
+
+验证分别覆盖受控 S3 HTTP fixture、内存仓储 HTTP / worker、真实 PostgreSQL 仓储和真实解析子进程；没有将其声称为真实 MinIO 联合部署。未新增或重验浏览器界面，未调用真实模型。T12 保持进行中：真实 MinIO 联合验收、RabbitMQ、embedding / pgvector、知识库前端与问答引用待继续。已有 Starlette / httpx 弃用提示为非失败警告。

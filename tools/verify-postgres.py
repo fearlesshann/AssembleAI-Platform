@@ -102,6 +102,7 @@ def main() -> int:
     parser.add_argument("--chatbi-browser", action="store_true", help="Verify ChatBI through real OIDC, browser, Python, model protocol and PostgreSQL connectors.")
     parser.add_argument("--chatbi-real-model", action="store_true", help="Also verify three synthetic ChatBI questions with the configured real model.")
     parser.add_argument("--chatbi-only", action="store_true", help="Focus an explicit ChatBI run on migrations, instance safety and the ChatBI chain; does not claim the full platform suite.")
+    parser.add_argument("--interactive-demo", action="store_true", help="Keep an isolated local ChatBI experience alive for up to four hours with synthetic data and three fixed query plans; never calls a real model.")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("This launcher currently supports the Windows native distribution.")
@@ -122,6 +123,12 @@ def main() -> int:
     model_application = args.model_application or real_model or os.environ.get("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1"
     chatbi_real_model = args.chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS") == "1"
     chatbi_browser = args.chatbi_browser or chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_BROWSER_TESTS") == "1"
+    if args.interactive_demo:
+        if args.real_model or args.chatbi_real_model:
+            parser.error("--interactive-demo cannot call a real model")
+        portal_browser = application_browser = registry_browser = model_application = False
+        real_model = chatbi_real_model = False
+        chatbi_browser = args.chatbi_only = True
     if args.chatbi_only and not chatbi_browser:
         parser.error("--chatbi-only requires --chatbi-browser or --chatbi-real-model")
     model_secrets: tuple[str, ...] = ()
@@ -251,6 +258,8 @@ def main() -> int:
                                           "runDirectory": str(run_dir), "runId": run_id}), encoding="utf-8")
         test_environment = environment.copy()
         test_environment.pop("PGPASSWORD", None)
+        if args.interactive_demo:
+            test_environment.pop("ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG", None)
         test_environment["ASSEMBLEAI_POSTGRES_TEST_CONFIG"] = str(config_path)
         test_environment["ASSEMBLEAI_PORTAL_BROWSER_TESTS"] = "1" if portal_browser else "0"
         test_environment["ASSEMBLEAI_APPLICATION_BROWSER_TESTS"] = "1" if application_browser else "0"
@@ -260,14 +269,16 @@ def main() -> int:
         test_environment["ASSEMBLEAI_CHATBI_BROWSER_TESTS"] = "1" if chatbi_browser else "0"
         test_environment["ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS"] = "1" if chatbi_real_model else "0"
         test_environment["ASSEMBLEAI_CHATBI_ONLY"] = "1" if args.chatbi_only else "0"
+        test_environment["ASSEMBLEAI_INTERACTIVE_DEMO"] = "1" if args.interactive_demo else "0"
         if application_browser or model_application or chatbi_browser:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
         if portal_browser or application_browser or registry_browser or chatbi_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
-        print("Running focused ChatBI contracts against the verified isolated PostgreSQL instance..." if args.chatbi_only else
+        print(f"Starting local interactive ChatBI; readiness: {run_dir / 'demo-ready.json'}" if args.interactive_demo else
+              "Running focused ChatBI contracts against the verified isolated PostgreSQL instance..." if args.chatbi_only else
               "Running real PostgreSQL authorization, session, registry, gateway, model, read-only connector and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
-                         artifact_dir / "integration.log", timeout=1200 if chatbi_real_model else 900 if real_model or chatbi_browser else 600 if registry_browser or model_application else 420 if application_browser else 240, sensitive=secrets_to_hide)
+                         artifact_dir / "integration.log", timeout=14700 if args.interactive_demo else 1200 if chatbi_real_model else 900 if real_model or chatbi_browser else 600 if registry_browser or model_application else 420 if application_browser else 240, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
             if line.startswith(("PASS:", "FAIL: PostgreSQL integration")):
                 print(line, flush=True)
@@ -304,7 +315,9 @@ def main() -> int:
                 cleanup_ok = False
                 print("FAIL: PostgreSQL temporary-directory cleanup failed.", file=sys.stderr)
         if artifact_dir is not None and artifact_dir.is_dir():
-            (artifact_dir / "result.json").write_text(json.dumps({"passed": passed and cleanup_ok,
+            (artifact_dir / "result.json").write_text(json.dumps({"passed": passed and cleanup_ok and not args.interactive_demo,
+                "interactiveDemo": args.interactive_demo,
+                "demoExitedCleanly": passed and cleanup_ok if args.interactive_demo else None,
                 "cleanupComplete": cleanup_ok, "postgresVersion": version,
                 "portalBrowserRequested": portal_browser,
                 "applicationBrowserRequested": application_browser,
@@ -314,10 +327,11 @@ def main() -> int:
                 "chatbiBrowserRequested": chatbi_browser,
                 "chatbiRealModelRequested": chatbi_real_model,
                 "chatbiOnly": args.chatbi_only,
-                "scope": "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
+                "scope": "interactive local demo with synthetic data and fixed example plans; not acceptance" if args.interactive_demo else "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
-        print("PASS: native PostgreSQL acceptance; isolated cluster stopped and temporary credentials removed.", flush=True)
+        print("Local demo stopped; isolated cluster and temporary credentials removed." if args.interactive_demo else
+              "PASS: native PostgreSQL acceptance; isolated cluster stopped and temporary credentials removed.", flush=True)
         return 0
     return 1
 
