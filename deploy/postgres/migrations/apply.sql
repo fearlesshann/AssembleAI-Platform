@@ -6,3 +6,4 @@
 \ir 0005_gateway.sql
 \ir 0006_models.sql
 \ir 0007_model_call_source.sql
+\ir 0008_connectors.sql

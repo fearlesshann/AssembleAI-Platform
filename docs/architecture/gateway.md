@@ -4,7 +4,7 @@
 
 ## 启用与服务契约
 
-先执行核心迁移 1–7，配置 [BFF](t3-bff.md)、[内部签名密钥](t3-internal-calls.md) 和 [注册部署映射](registry.md)。`Gateway:Enabled` 默认 false；启用时必须同时启用 BFF 和持有私钥的 InternalCalls，否则启动失败。
+先执行核心迁移 1–8，配置 [BFF](t3-bff.md)、[内部签名密钥](t3-internal-calls.md) 和 [注册部署映射](registry.md)。`Gateway:Enabled` 默认 false；启用时必须同时启用 BFF 和持有私钥的 InternalCalls，否则启动失败。
 
 配置公开的业务操作，每条精确指定逻辑服务、后端版本、HTTP 方法、下游路径及一个入口权限：
 
@@ -94,6 +94,6 @@ SSE 使用 UTF-8，事件为 delta、complete、error；可以使用注释心跳
 
 `tools/verify.ps1 -Scope Core` 覆盖真实 OIDC / YARP / 公钥下游链路，使用明确标注的内存控制面测试 fixture，验证签名、头与日志隔离、首段、取消、时限、限流和编码错误。`GatewayDeadlineTests` 与 `GatewayAdmissionTests` 使用可控单调时钟和并发请求验证边界。
 
-`tools/verify-postgres.py` 运行完整迁移 1–7，再验证真实 PG 租约 / 审计和生产 Gateway → PostgreSQL → 签名 HTTP 下游组合，不替换仓储。组合身份服务为 OidcFixture，BFF 使用开发内存会话；T3 真 Keycloak 浏览器和 PG 加密会话另有验收，不等同完整生产 HTTPS 部署。结果以 [开发记录](../development.md) 为准。
+`tools/verify-postgres.py` 运行完整迁移 1–8，再验证真实 PG 租约 / 审计和生产 Gateway → PostgreSQL → 签名 HTTP 下游组合，不替换仓储。组合身份服务为 OidcFixture，BFF 使用开发内存会话；T3 真 Keycloak 浏览器和 PG 加密会话另有验收，不等同完整生产 HTTPS 部署。结果以 [开发记录](../development.md) 为准。
 
 API 机制依据 [YARP Direct Forwarding](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/direct-forwarding?view=aspnetcore-10.0)；上文超时、排空、权限与审计规则是本项目决定。

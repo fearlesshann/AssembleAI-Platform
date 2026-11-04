@@ -39,7 +39,7 @@
 
 `Endpoint` 是完整 Chat Completions 地址，不自动补路径。生产供应商使用 HTTPS；HTTP 只接受显式开启的 loopback 地址。端点不得包含用户信息、查询或片段，不跟随重定向。凭据变量由启动平台的进程环境提供，每次调用重新读取；缺失或非法时拒绝调用。无认证的本地服务可省略 `CredentialEnvironmentVariable`，此时不发送 Authorization。密钥不能放入浏览器、调用正文或提交到仓库；本接口不提供读取密钥的能力。供应商须接受文本 `messages`、`max_tokens`、`stream` 及流式 `stream_options.include_usage`；不支持的扩展能力需另行适配，不自动降级重试。
 
-先执行统一 PostgreSQL 迁移（1–7），再按 [身份与授权规则](t3-authorization.md) 授权。`model:manage` 和 `model:invoke` 相互独立，资源类型为 `model`、资源 ID 为目录别名（示例 `assistant`）。当前模型为租户级资源，需要 tenant-wide 范围授权。管理员通过下述配置 API 为租户启用模型；没有租户配置即禁用。
+先执行统一 PostgreSQL 迁移（1–8），再按 [身份与授权规则](t3-authorization.md) 授权。`model:manage` 和 `model:invoke` 相互独立，资源类型为 `model`、资源 ID 为目录别名（示例 `assistant`）。当前模型为租户级资源，需要 tenant-wide 范围授权。管理员通过下述配置 API 为租户启用模型；没有租户配置即禁用。
 
 ## 平台接口
 

@@ -259,3 +259,15 @@ T5 限流为单实例；正式配置默认关闭，需显式配置 BFF、内部�
 最终补跑 `tools/verify-postgres.py --model-application` 返回 0，记录 `.artifacts/postgres/run-b47ff26946524832bcc3b05e89470b4a/result.json` 的 passed / cleanupComplete / modelApplicationRequested 均 true、realModelRequested=false。此轮仅本地协议供应商，在真实凭据变量名下放入测试哨兵，验证每次 Python 子进程启动均剥除该变量及验收配置路径；没有追加实际模型请求。2 项 finishReason 回归以 `-c apps/sample/backend/pyproject.toml` 独立复验通过，日志 `.artifacts/t9-python-finish-green.log`。
 
 T9 完成，下一任务 T10 只读数据连接器。模型管理 UI、审计留存 / 故障对账继续归 T13；委托注册表要求回调路由至签发实例，多副本、分布式额度和私有化完整部署归 T14。联合登录使用 OidcFixture 的真实协议交换，既有 Keycloak 和 PG 加密会话仍由各自独立验收证明；未将此结果扩展为生产完整部署或制造业用例效果验收。
+
+## 2026-11-04 T10 只读数据连接器验收
+
+用户确认先使用制造业测试数据。新增[连接器接口与查询契约](architecture/connectors.md)：部署受控 PostgreSQL 源 / 数据集 / 字段和环境变量凭据引用；租户管理员使用 CAS 启停与收紧限额。真实 BFF / CSRF 保护配置、连接测试、历史与查询；每个当前启用工厂的 datasource:read / dataset:read / tool:invoke 交集在 SQL 聚合前过滤。查询只接收结构化投影、类型化 AND 筛选及五种聚合，禁止任意 SQL。专用源账号、只读事务、类型 / 行数 / 字节 / 时间上限和撤权复核共同约束执行；迁移 8 原子保存配置审计与执行元数据，不保存业务值或凭据。
+
+最终 `tools/verify.ps1 -Scope Core` 返回 0，日志 `.artifacts/t10-core.log`。36 项 Node、锁定 .NET 还原 / 构建（0 警告 / 0 错误）、全部既有与新 HTTP 合同、93 项 Python 及实际 FastAPI → YARP 通过。新增测试验证授权交集、严格编译、审计失败零源调用或不交付数据、完成审计等待期间撤权 / 退出 / 切租户、活动取消及真实 30 秒外层截止的 timeout 审计。现有 Starlette/httpx 弃用提示不影响通过结果。
+
+最终 `tools/verify-postgres.py` 返回 0；`.artifacts/postgres/run-54c2bac2a5584f24886cd0c540f98006/result.json` 的 passed / cleanupComplete 均 true。迁移 1–8 连续执行及重放、旧授权 / 会话 / 注册 / 模型 / 网关合同全部回归；新增配置 CAS 与原子审计、真实独立只读账号和 OIDC/BFF → PostgreSQL 查询链通过。工厂 A 的两行产量合计为 300，工厂 B 与异租户行不会参与聚合；工具权限交集为空、伪造头、SQL 注入文本、未知字段均不能扩大数据范围。持有真实表锁时，撤权、停用、3 秒超时、客户端取消均终止正在等待的数据库操作并留下终态审计。
+
+实库边界验证 date infinity 拒绝、有限极值日期投影与筛选保持原值、numeric NaN / 超精度拒绝、UTF-8 单元格与 JSON 转义后总字节限制、列级 UPDATE 权限拒绝。先复现再修复的日期映射、外层超时分类与 JSON 小数舍入，以及验收时限 / reader 释放修正记入 SPEC B61–B65；初次 120 秒工具超时和日期红测的临时数据库均已清理。最终提交前独立代码复核无阻塞，密钥 / 私钥模式扫描未发现命中。
+
+本轮无产品前端变更，未重跑 Chromium 或实际模型调用；组合登录使用 OidcFixture 的真实协议交换，Keycloak 保持既有独立验收。测试数据和只读角色只在隔离集群创建；没有把测试数据或连接器完成写成 ChatBI 业务问答完成。T10 完成，下一任务 T11；管理 UI / 审计对账归 T13，多实例和完整生产部署归 T14。

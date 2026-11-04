@@ -57,7 +57,10 @@ def execute(command: list[str], environment: dict[str, str], log: Path, *,
                             "/PID", str(child.pid), "/T", "/F"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                            creationflags=subprocess.CREATE_NO_WINDOW, timeout=15)
-        child.communicate(timeout=15)
+        output, _ = child.communicate(timeout=15)
+        for value in sensitive:
+            output = output.replace(value, "[redacted]")
+        log.write_text(output, encoding="utf-8")
         raise
     result = subprocess.CompletedProcess(command, child.returncode, output)
     for value in sensitive:
@@ -155,7 +158,8 @@ def main() -> int:
         port = free_port()
         admin_password = secrets.token_urlsafe(32)
         app_password = secrets.token_urlsafe(32)
-        secrets_to_hide = (admin_password, app_password) + model_secrets
+        connector_password = secrets.token_urlsafe(32)
+        secrets_to_hide = (admin_password, app_password, connector_password) + model_secrets
         password_file = run_dir / "initdb-password"
         password_file.write_text(admin_password + "\n", encoding="utf-8")
 
@@ -189,9 +193,12 @@ def main() -> int:
         bootstrap = (
             "CREATE ROLE assembleai_platform LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD "
             + sql_literal(app_password) + ";\n"
+            "CREATE ROLE assembleai_connector_reader LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD "
+            + sql_literal(connector_password) + ";\n"
             "CREATE DATABASE assembleai_platform OWNER assembleai_platform;\n"
             "REVOKE CONNECT ON DATABASE assembleai_platform FROM PUBLIC;\n"
             "GRANT CONNECT ON DATABASE assembleai_platform TO assembleai_platform;\n"
+            "GRANT CONNECT ON DATABASE assembleai_platform TO assembleai_connector_reader;\n"
         )
         created = execute(psql(binaries["psql"], port, "postgres"), environment, artifact_dir / "bootstrap.log",
                           input_text=bootstrap, sensitive=secrets_to_hide)
@@ -228,7 +235,10 @@ def main() -> int:
         connection_string = (f"Host=127.0.0.1;Port={port};Database=assembleai_platform;Username=assembleai_platform;"
                              f"Password={app_password};Timeout=5;Command Timeout=5;SSL Mode=Disable;Pooling=false")
         config_path = run_dir / "test-config.json"
+        connector_connection_string = (f"Host=127.0.0.1;Port={port};Database=assembleai_platform;Username=assembleai_connector_reader;"
+                                       f"Password={connector_password};Timeout=5;Command Timeout=5;SSL Mode=Disable;Pooling=false")
         config_path.write_text(json.dumps({"connectionString": connection_string,
+                                          "connectorConnectionString": connector_connection_string,
                                           "runDirectory": str(run_dir), "runId": run_id}), encoding="utf-8")
         test_environment = environment.copy()
         test_environment.pop("PGPASSWORD", None)
@@ -242,9 +252,9 @@ def main() -> int:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
         if portal_browser or application_browser or registry_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
-        print("Running real PostgreSQL authorization, session, registry, gateway, model and authorized-catalog contracts...", flush=True)
+        print("Running real PostgreSQL authorization, session, registry, gateway, model, read-only connector and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
-                         artifact_dir / "integration.log", timeout=900 if real_model else 600 if registry_browser or model_application else 420 if application_browser else 240 if portal_browser else 120, sensitive=secrets_to_hide)
+                         artifact_dir / "integration.log", timeout=900 if real_model else 600 if registry_browser or model_application else 420 if application_browser else 240, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
             if line.startswith(("PASS:", "FAIL: PostgreSQL integration")):
                 print(line, flush=True)
@@ -288,7 +298,7 @@ def main() -> int:
                 "registryBrowserRequested": registry_browser,
                 "modelApplicationRequested": model_application,
                 "realModelRequested": real_model,
-                "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
+                "scope": "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
         print("PASS: native PostgreSQL acceptance; isolated cluster stopped and temporary credentials removed.", flush=True)

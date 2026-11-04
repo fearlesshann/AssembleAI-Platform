@@ -53,10 +53,12 @@ public static class PostgresIntegrationTests
                 await using var role = new NpgsqlCommand("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls FROM pg_roles WHERE rolname=current_user", connection);
                 Assert(await role.ExecuteScalarAsync() is false, "The application role must not have elevated cluster privileges.");
                 await using var migrated = new NpgsqlCommand("SELECT array_agg(version ORDER BY version) FROM public.platform_schema_migrations", connection);
-                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7]) == true,
+                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7, 8]) == true,
                     "All real core migrations must have completed exactly once.");
                 await using var empty = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.platform_users)+(SELECT count(*) FROM public.platform_tenants)+(SELECT count(*) FROM public.platform_bff_sessions)+(SELECT count(*) FROM public.platform_registry_operators)+(SELECT count(*) FROM public.platform_applications)+(SELECT count(*) FROM public.tenant_models)+(SELECT count(*) FROM public.platform_model_configuration_audit)+(SELECT count(*) FROM public.platform_model_calls)", connection);
                 Assert(await empty.ExecuteScalarAsync() is 0L, "Core migrations must not seed accounts, tenants, sessions or model configuration/history.");
+                await using var emptyConnectors = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.tenant_connectors)+(SELECT count(*) FROM public.platform_connector_configuration_audit)+(SELECT count(*) FROM public.platform_connector_calls)", connection);
+                Assert(await emptyConnectors.ExecuteScalarAsync() is 0L, "Connector migrations must not seed configuration or audit.");
                 await using var vector = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='vector')", connection);
                 Assert(await vector.ExecuteScalarAsync() is false, "This acceptance run deliberately verifies core storage without vector.");
             }
@@ -76,6 +78,10 @@ public static class PostgresIntegrationTests
             await PostgresGatewayStoreTests.RunAsync(connectionString);
             phase = "tenant models and durable model call records";
             await PostgresModelTests.RunAsync(connectionString);
+            phase = "tenant connector configuration and durable call records";
+            await PostgresConnectorStoreTests.RunAsync(connectionString);
+            phase = "read-only data connector PostgreSQL and OIDC HTTP chain";
+            await PostgresConnectorFlowTests.RunAsync(connectionString, runDirectory);
             phase = "production gateway PostgreSQL and signed HTTP chain";
             await PostgresGatewayFlowTests.RunAsync(connectionString, runDirectory);
             if (Environment.GetEnvironmentVariable("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1")
@@ -97,7 +103,7 @@ public static class PostgresIntegrationTests
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");
             await VerifyReadiness(connectionString, requireVector: true, "unavailable");
-            await VerifyMissingModelMigration(connectionString);
+            await VerifyMissingConnectorMigration(connectionString);
             Console.WriteLine("PASS: PostgreSQL instance marker, non-superuser role, complete/idempotent unseeded core schema and explicit vector readiness boundary.");
         }
         catch (Exception exception)
@@ -113,17 +119,17 @@ public static class PostgresIntegrationTests
         }
     }
 
-    private static async Task VerifyMissingModelMigration(string connectionString)
+    private static async Task VerifyMissingConnectorMigration(string connectionString)
     {
         // Only the launcher-owned disposable database reaches this point. Restore the ledger on every exit.
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-7 WHERE version=7", connection);
-        Assert(await hide.ExecuteNonQueryAsync() == 1, "The model migration must exist before checking its readiness boundary.");
+        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-8 WHERE version=8", connection);
+        Assert(await hide.ExecuteNonQueryAsync() == 1, "The connector migration must exist before checking its readiness boundary.");
         try { await VerifyReadiness(connectionString, requireVector: false, "unavailable"); }
         finally
         {
-            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=7 WHERE version=-7", connection);
+            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=8 WHERE version=-8", connection);
             Assert(await restore.ExecuteNonQueryAsync() == 1, "The isolated migration ledger must be restored.");
         }
     }

@@ -52,7 +52,7 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 | 入口 | 行为 |
 | --- | --- |
-| `deploy/postgres/migrations/apply.sql` | 执行真实控制面迁移 1–7：迁移记录、授权关系、BFF 会话、注册 / 租约、租户模型配置与调用审计；不安装 vector |
+| `deploy/postgres/migrations/apply.sql` | 执行真实控制面迁移 1–8：迁移记录、授权关系、BFF 会话、注册 / 租约、租户模型及连接器配置与调用审计；不安装 vector |
 | `deploy/postgres/migrations/enable-vector.sql` | 独立安装并核验 pgvector **0.8.7**；缺少扩展文件或已有版本不符都会失败 |
 | `deploy/postgres/migrations/apply-with-vector.sql` | 先执行控制面迁移，再执行 vector 初始化 |
 | `deploy/postgres/migrate.ps1` | 默认执行控制面；加 `-IncludeVector` 执行两者；`-UseCompose` 仅切换执行环境 |
@@ -61,11 +61,12 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 操作已有数据库时，需先准备数据库和角色，并为迁移账号配置对应权限；这些准备由本验收器自动完成的范围仅限一次性测试集群。手动迁移示例见 [本地后端与基础设施](development-services.md#原生-postgresql-迁移)。
 
-`Readiness:RequireVector` 默认 **true**（环境变量 `Readiness__RequireVector`），保持完整平台对 vector 0.8.7 的要求。只有明确运行控制面时才配置 `false`；该选项不代表知识库功能已就绪，也不忽略 Redis、MinIO、RabbitMQ 或 OIDC 的健康检查。无论 BFF 或 Models 是否开启，当前控制面均要求迁移 7。
+`Readiness:RequireVector` 默认 **true**（环境变量 `Readiness__RequireVector`），保持完整平台对 vector 0.8.7 的要求。只有明确运行控制面时才配置 `false`；该选项不代表知识库功能已就绪，也不忽略 Redis、MinIO、RabbitMQ 或 OIDC 的健康检查。无论 BFF 或 Models 是否开启，当前控制面均要求迁移 8。
 
 ## 验证内容与边界
 
-- 真实迁移 1–7 连续执行两遍，检查迁移记录完整且无重复、没有预置业务数据；误连其他数据库必须失败。
+- 真实迁移 1–8 连续执行两遍，检查迁移记录完整且无重复、没有预置业务数据；误连其他数据库必须失败。
+- T10 始终验证连接配置 / 审计、真实 OIDC/BFF 数据查询和独立只读源角色；制造业测试表覆盖跨工厂 / 租户、聚合、权限交集、撤权 / 取消 / 超时、类型与结果大小限制。运行器创建专用非特权 reader，只授权测试表 SELECT；测试完成清理集群和凭据。基础验收整体窗口 240 秒，业务查询截止保持各自配置。
 - 独立 vector 初始化在缺少扩展文件时返回 PostgreSQL `0A000`，不会将缺失扩展报告为成功。
 - 授权仓储覆盖 issuer / subject、租户与工厂组织隔离、租户复合外键、事务内版本一致性、撤权生效、取消，以及连接真实仓储的 HTTP 授权边界。
 - 会话仓储覆盖数据库中的真实密文、独立重建的密钥提供器与重新加载 PFX 后恢复、密文篡改拒绝、UTC 到期、删除与续期并发、取消和数据库连接失败。

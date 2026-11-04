@@ -37,7 +37,7 @@
 
 `deploy/postgres/migrations/0002_authorization.sql` 建立身份、租户、成员、组织、角色与授权关系。租户内关联使用复合外键，禁止把其他租户的组织、角色或成员关联到本租户。授权相关变化递增租户策略版本；用户身份与启用状态变化会更新受影响租户版本。
 
-没有预置管理员、自动授权或固定账号。迁移通过项目原生 `psql` 脚本执行，配置沿用 [开发服务说明](../development-services.md)。迁移 3 为加密 BFF 会话表；当前 `apply.sql` 已扩展到迁移 1–7，readiness 统一要求迁移 7，不随 BFF 开关降级。
+没有预置管理员、自动授权或固定账号。迁移通过项目原生 `psql` 脚本执行，配置沿用 [开发服务说明](../development-services.md)。迁移 3 为加密 BFF 会话表；当前 `apply.sql` 已扩展到迁移 1–8，readiness 统一要求迁移 8，不随 BFF 开关降级。
 
 知识库的 pgvector 0.8.7 由 `enable-vector.sql` 独立初始化；`apply-with-vector.sql` 执行核心与扩展，Compose 初始化使用完整入口。默认 readiness 还要求该扩展版本；显式 `Readiness:RequireVector=false` 仅用于控制面运行，不代表知识库已就绪。
 

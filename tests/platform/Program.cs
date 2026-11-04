@@ -12,6 +12,13 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Xml.Linq;
 using AssembleAI.Platform.SmokeTests;
 
+if (args.Contains("--connector-tests", StringComparer.Ordinal))
+{
+    await ConnectorAuthorizationTests.RunAsync();
+    await ConnectorCompilerTests.RunAsync();
+    await ConnectorHttpTests.RunAsync();
+    return;
+}
 if (args.Contains("--model-delegation-tests", StringComparer.Ordinal))
 {
     await ModelDelegationTests.RunAsync();
@@ -170,6 +177,9 @@ try
     await ModelProviderTests.RunAsync();
     await ModelGatewayTests.RunAsync();
     await ModelDelegationTests.RunAsync();
+    await ConnectorAuthorizationTests.RunAsync();
+    await ConnectorCompilerTests.RunAsync();
+    await ConnectorHttpTests.RunAsync();
 }
 finally
 {
