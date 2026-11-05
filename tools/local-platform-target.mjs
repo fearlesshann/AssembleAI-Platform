@@ -50,8 +50,16 @@ export function createPlatformProxy(platformOrigin) {
     if (req.headers.upgrade || req.method === 'CONNECT') {
       failure(res, 400, 'upgrade_not_supported'); req.resume(); return true;
     }
+    const transfer = req.headers['transfer-encoding'];
+    if (transfer !== undefined && String(transfer).trim().toLowerCase() !== 'chunked') {
+      failure(res, 400, 'transfer_encoding_not_supported'); req.resume(); return true;
+    }
     const headers = safeHeaders(req.headers, true);
     headers.host = target.host;
+    // IncomingMessage decodes chunk framing. Reframe the outgoing body explicitly:
+    // node:http does not default to chunked encoding for DELETE without a length.
+    if (headers['content-length'] === undefined
+      && (transfer !== undefined || req.headers['content-length'] !== undefined)) headers['transfer-encoding'] = 'chunked';
     // Resolve localhost to a literal so a changed hosts/DNS entry cannot route outside loopback.
     const hostname = target.hostname === 'localhost' ? '127.0.0.1' : target.hostname.replace(/^\[|\]$/g, '');
     const upstream = request({ protocol: 'http:', hostname, port: target.port || 80,

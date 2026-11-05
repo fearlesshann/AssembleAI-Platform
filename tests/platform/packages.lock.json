@@ -84,6 +84,7 @@
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.14, )",
           "Minio": "[7.0.0, )",
           "Npgsql": "[10.0.0, )",
+          "RabbitMQ.Client": "[7.2.2, )",
           "Yarp.ReverseProxy": "[2.3.0, )"
         }
       },
@@ -112,6 +113,12 @@
         "requested": "[10.0.0, )",
         "resolved": "10.0.0",
         "contentHash": "xZAYhPOU2rUIFpV48xsqhCx9vXs6Y+0jX2LCoSEfDFYMw9jtAOUk3iQsCnDLrFIv9NT3JGMihn7nnuZsPKqJmA=="
+      },
+      "RabbitMQ.Client": {
+        "type": "CentralTransitive",
+        "requested": "[7.2.2, )",
+        "resolved": "7.2.2",
+        "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
       },
       "Yarp.ReverseProxy": {
         "type": "CentralTransitive",

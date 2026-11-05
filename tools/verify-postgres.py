@@ -6,6 +6,7 @@ Creates only an isolated loopback cluster under .local-data/postgres-tests.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -102,6 +103,9 @@ def main() -> int:
     parser.add_argument("--chatbi-browser", action="store_true", help="Verify ChatBI through real OIDC, browser, Python, model protocol and PostgreSQL connectors.")
     parser.add_argument("--chatbi-real-model", action="store_true", help="Also verify three synthetic ChatBI questions with the configured real model.")
     parser.add_argument("--chatbi-only", action="store_true", help="Focus an explicit ChatBI run on migrations, instance safety and the ChatBI chain; does not claim the full platform suite.")
+    parser.add_argument("--knowledge-browser", action="store_true", help="Verify knowledge using isolated native MinIO/RabbitMQ, real parser/embedding/pgvector, BFF and browser.")
+    parser.add_argument("--knowledge-real-model", action="store_true", help="Also verify synthetic document answers with the explicitly configured real model.")
+    parser.add_argument("--knowledge-index-only", action="store_true", help="Verify only core migrations and real pgvector indexing/authorization contracts; no broker/model/browser.")
     parser.add_argument("--interactive-demo", action="store_true", help="Keep an isolated local ChatBI experience alive for up to four hours with synthetic data and three fixed query plans; never calls a real model.")
     args = parser.parse_args()
     if os.name != "nt":
@@ -114,6 +118,7 @@ def main() -> int:
     started = False
     passed = False
     cleanup_ok = True
+    knowledge_services = None
     secrets_to_hide: tuple[str, ...] = ()
     version = "unknown"
     portal_browser = args.portal_browser or os.environ.get("ASSEMBLEAI_PORTAL_BROWSER_TESTS") == "1"
@@ -123,6 +128,13 @@ def main() -> int:
     model_application = args.model_application or real_model or os.environ.get("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1"
     chatbi_real_model = args.chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS") == "1"
     chatbi_browser = args.chatbi_browser or chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_BROWSER_TESTS") == "1"
+    knowledge_real_model = args.knowledge_real_model
+    knowledge_browser = args.knowledge_browser or knowledge_real_model
+    knowledge = knowledge_browser or args.knowledge_index_only
+    if knowledge and (args.interactive_demo or chatbi_browser or args.chatbi_only or real_model or model_application or portal_browser or application_browser or registry_browser):
+        parser.error("Knowledge acceptance is an isolated scope; do not combine it with another application scope")
+    if args.knowledge_index_only and knowledge_browser:
+        parser.error("--knowledge-index-only cannot be combined with browser/model acceptance")
     if args.interactive_demo:
         if args.real_model or args.chatbi_real_model:
             parser.error("--interactive-demo cannot call a real model")
@@ -138,6 +150,16 @@ def main() -> int:
         postgres_home = (args.dependencies_root / package["relativeHome"]).resolve()
         if not postgres_home.is_relative_to(args.dependencies_root.resolve()):
             raise RuntimeError("Invalid PostgreSQL dependency path.")
+        if knowledge:
+            installed_path = ROOT / ".local-data/native-knowledge/installed.json"
+            if not installed_path.is_file():
+                raise RuntimeError("Install the native knowledge dependencies before knowledge acceptance.")
+            installed = json.loads(installed_path.read_text(encoding="utf-8-sig"))
+            if installed.get("vectorVersion") != "0.8.7" or not installed.get("postgresHome"):
+                raise RuntimeError("The independent pgvector 0.8.7 PostgreSQL runtime is required.")
+            postgres_home = local_path(Path(installed["postgresHome"]))
+            if not postgres_home.is_relative_to((ROOT / ".local-data/native-knowledge").resolve()):
+                raise RuntimeError("Knowledge acceptance requires its independent PostgreSQL runtime.")
         binaries = {name: postgres_home / "bin" / (name + ".exe") for name in ("initdb", "pg_ctl", "psql", "postgres")}
         if not all(path.is_file() for path in binaries.values()):
             raise RuntimeError("Run tools/install-native-postgres.ps1 first.")
@@ -146,14 +168,19 @@ def main() -> int:
         if not smoke.is_file() or not dotnet:
             raise RuntimeError("Build AssembleAI.slnx before running PostgreSQL acceptance.")
         node = os.environ.get("ASSEMBLEAI_NODE") or shutil.which("node.exe")
-        if (portal_browser or application_browser or registry_browser or chatbi_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
+        if (portal_browser or application_browser or registry_browser or chatbi_browser or knowledge_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
             raise RuntimeError("Build the portal and install its locked browser dependencies before browser acceptance.")
         application_python = Path(os.environ.get("ASSEMBLEAI_PYTHON", ROOT / "apps/sample/backend/.venv/Scripts/python.exe")).resolve()
         if (application_browser or model_application or chatbi_browser) and not application_python.is_file():
             raise RuntimeError("Sync the sample backend locked environment before Python application acceptance.")
         if chatbi_browser and not (ROOT / "apps/chatbi/frontend/dist/index.html").is_file():
             raise RuntimeError("Build the independent ChatBI frontend before ChatBI acceptance.")
-        if real_model or chatbi_real_model:
+        knowledge_python = ROOT / "apps/knowledge/backend/.venv/Scripts/python.exe"
+        if knowledge_browser and (not knowledge_python.is_file() or not (ROOT / "apps/knowledge/frontend/dist/index.html").is_file()):
+            raise RuntimeError("Build the knowledge frontend and install its independent backend environment.")
+        if knowledge_browser and not os.environ.get("ASSEMBLEAI_KNOWLEDGE_MODEL_DIRECTORY"):
+            raise RuntimeError("Knowledge acceptance requires the explicitly installed local embedding model directory.")
+        if real_model or chatbi_real_model or knowledge_real_model:
             acceptance_path = os.environ.get("ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG")
             if not acceptance_path or not Path(acceptance_path).is_file():
                 raise RuntimeError("Real model acceptance requires ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG.")
@@ -237,8 +264,15 @@ def main() -> int:
             raise RuntimeError("The explicit vector initialization script is missing.")
         vector_result = execute(psql(binaries["psql"], port, "assembleai_platform")
                                 + ["--set", "VERBOSITY=sqlstate", "--file", str(vector_step)],
-                                environment, artifact_dir / "missing-vector.log", sensitive=secrets_to_hide)
-        if vector_result.returncode != 3 or "ERROR:  0A000" not in vector_result.stdout:
+                                environment, artifact_dir / ("enable-vector.log" if knowledge else "missing-vector.log"), sensitive=secrets_to_hide)
+        if knowledge:
+            if vector_result.returncode != 0:
+                raise RuntimeError("The real pgvector extension must initialize before knowledge acceptance.")
+            vector_repeat = execute(psql(binaries["psql"], port, "assembleai_platform") + ["--file", str(vector_step)],
+                                    environment, artifact_dir / "enable-vector-repeat.log", sensitive=secrets_to_hide)
+            if vector_repeat.returncode != 0:
+                raise RuntimeError("pgvector initialization must be idempotent.")
+        elif vector_result.returncode != 3 or "ERROR:  0A000" not in vector_result.stdout:
             raise RuntimeError("The absent vector extension must fail its explicit initialization step.")
 
         marker_sql = ("SET ROLE assembleai_platform; CREATE SCHEMA test_support; "
@@ -270,15 +304,30 @@ def main() -> int:
         test_environment["ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS"] = "1" if chatbi_real_model else "0"
         test_environment["ASSEMBLEAI_CHATBI_ONLY"] = "1" if args.chatbi_only else "0"
         test_environment["ASSEMBLEAI_INTERACTIVE_DEMO"] = "1" if args.interactive_demo else "0"
+        test_environment["ASSEMBLEAI_KNOWLEDGE_ONLY"] = "1" if knowledge else "0"
+        test_environment["ASSEMBLEAI_KNOWLEDGE_BROWSER_TESTS"] = "1" if knowledge_browser else "0"
+        test_environment["ASSEMBLEAI_KNOWLEDGE_REAL_MODEL_TESTS"] = "1" if knowledge_real_model else "0"
+        if knowledge_browser:
+            module_spec = importlib.util.spec_from_file_location("knowledge_native", ROOT / "tools/knowledge-native.py")
+            native = importlib.util.module_from_spec(module_spec)
+            module_spec.loader.exec_module(native)
+            knowledge_services = native.NativeKnowledgeServices(run_dir, artifact_dir=artifact_dir / "knowledge-services")
+            knowledge_services.__enter__()
+            secrets_to_hide += knowledge_services.sensitive
+            service_config = run_dir / "knowledge-services.json"
+            service_config.write_text(json.dumps(knowledge_services.configuration), encoding="utf-8")
+            test_environment["ASSEMBLEAI_KNOWLEDGE_SERVICES_CONFIG"] = str(service_config)
+            test_environment["ASSEMBLEAI_PYTHON"] = str(knowledge_python)
         if application_browser or model_application or chatbi_browser:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
-        if portal_browser or application_browser or registry_browser or chatbi_browser:
+        if portal_browser or application_browser or registry_browser or chatbi_browser or knowledge_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
         print(f"Starting local interactive ChatBI; readiness: {run_dir / 'demo-ready.json'}" if args.interactive_demo else
+              "Running isolated knowledge contracts with real pgvector and explicitly selected native services..." if knowledge else
               "Running focused ChatBI contracts against the verified isolated PostgreSQL instance..." if args.chatbi_only else
               "Running real PostgreSQL authorization, session, registry, gateway, model, read-only connector and authorized-catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
-                         artifact_dir / "integration.log", timeout=14700 if args.interactive_demo else 1200 if chatbi_real_model else 900 if real_model or chatbi_browser else 600 if registry_browser or model_application else 420 if application_browser else 240, sensitive=secrets_to_hide)
+                         artifact_dir / "integration.log", timeout=14700 if args.interactive_demo else 1500 if knowledge_real_model else 1200 if chatbi_real_model or knowledge_browser else 900 if real_model or chatbi_browser else 600, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
             if line.startswith(("PASS:", "FAIL: PostgreSQL integration")):
                 print(line, flush=True)
@@ -287,10 +336,21 @@ def main() -> int:
         passed = True
     except KeyboardInterrupt:
         print("PostgreSQL verification interrupted; cleaning up the isolated cluster.", file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        print("FAIL: Native PostgreSQL verification exceeded its outer acceptance budget; inspect the last completed contract in integration.log.", file=sys.stderr)
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"FAIL: {error}" if isinstance(error, RuntimeError)
               else "FAIL: Native PostgreSQL verification could not finish.", file=sys.stderr)
     finally:
+        if knowledge_services is not None:
+            try:
+                knowledge_services.__exit__(None, None, None)
+                if not knowledge_services.cleanup_ok:
+                    cleanup_ok = False
+                    print("FAIL: Native knowledge cleanup could not be confirmed; run data retained.", file=sys.stderr)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+                cleanup_ok = False
+                print("FAIL: Native knowledge shutdown failed; run data retained.", file=sys.stderr)
         if started and pg_ctl is not None and data is not None and environment is not None:
             try:
                 stopped = execute([str(pg_ctl), "stop", "-D", str(data), "-m", "fast", "-w", "-t", "30"],
@@ -327,7 +387,10 @@ def main() -> int:
                 "chatbiBrowserRequested": chatbi_browser,
                 "chatbiRealModelRequested": chatbi_real_model,
                 "chatbiOnly": args.chatbi_only,
-                "scope": "interactive local demo with synthetic data and fixed example plans; not acceptance" if args.interactive_demo else "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
+                "knowledgeBrowserRequested": knowledge_browser,
+                "knowledgeRealModelRequested": knowledge_real_model,
+                "knowledgeIndexOnly": args.knowledge_index_only,
+                "scope": "interactive local demo with synthetic data and fixed example plans; not acceptance" if args.interactive_demo else "knowledge indexing and ACL with real pgvector, plus native services/browser when requested" if knowledge else "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
         print("Local demo stopped; isolated cluster and temporary credentials removed." if args.interactive_demo else

@@ -1,5 +1,6 @@
 """Private HTTP adapter. The platform owns document authorization and persistence."""
 import asyncio
+from contextlib import asynccontextmanager
 import hmac
 import json
 import os
@@ -50,8 +51,19 @@ async def parse_isolated(content: bytes, filename: str, *, timeout=15):
 
 
 def create_app():
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    @asynccontextmanager
+    async def lifespan(app):
+        directory = os.environ.get("ASSEMBLEAI_KNOWLEDGE_MODEL_DIRECTORY")
+        if directory:
+            from .embeddings import EmbeddingEngine
+            app.state.embeddings = EmbeddingEngine(Path(directory))
+        yield
+        app.state.embeddings = None
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.active = 0
+    app.state.embeddings = None
+    app.state.embedding_active = 0
 
     def response(code, status=None):
         return JSONResponse({"code": code}, status_code=status or STATUS.get(code, 422), headers=HEADERS)
@@ -109,6 +121,54 @@ def create_app():
                 except (asyncio.CancelledError, DocumentError, OSError):
                     pass
             app.state.active -= 1
+
+    async def embedding(request, indexing):
+        from .authentication import JSON_UTF8, strict_json
+        from .embeddings import EmbeddingError, validate_chunks, validate_query
+        from .models import while_connected
+        key = key_from_environment()
+        if key is None:
+            return response("parser_unavailable")
+        auth = request.headers.getlist("authorization")
+        if len(auth) != 1 or not hmac.compare_digest(auth[0].encode(), ("Bearer " + key).encode()):
+            return response("unauthorized", 401)
+        if app.state.embeddings is None:
+            return response("embedding_unavailable", 503)
+        types = request.headers.getlist("content-type")
+        if request.url.query or len(types) != 1 or JSON_UTF8.fullmatch(types[0]) is None or request.headers.getlist("content-encoding"):
+            return response("invalid_embedding_request", 400)
+        if app.state.embedding_active >= 2:
+            return response("embedding_busy", 429)
+        app.state.embedding_active += 1
+        try:
+            body = bytearray()
+            async with asyncio.timeout(3):
+                async for chunk in request.stream():
+                    if len(body) + len(chunk) > 1024 * 1024:
+                        return response("embedding_input_too_large", 413)
+                    body.extend(chunk)
+            value = strict_json(bytes(body))
+            argument = validate_chunks(value) if indexing else validate_query(value)
+            operation = app.state.embeddings.index(argument) if indexing else app.state.embeddings.query(argument)
+            async with asyncio.timeout(25):
+                result = await while_connected(request, operation)
+            return JSONResponse(result, headers=HEADERS)
+        except EmbeddingError as failure:
+            return response(failure.code, 503 if failure.code == "embedding_unavailable" else 413 if failure.code == "embedding_input_too_large" else 400)
+        except (ValueError, TypeError, RecursionError):
+            return response("invalid_embedding_request", 400)
+        except TimeoutError:
+            return response("embedding_timeout", 504)
+        finally:
+            app.state.embedding_active -= 1
+
+    @app.post("/internal/index")
+    async def index(request: Request):
+        return await embedding(request, True)
+
+    @app.post("/internal/embed-query")
+    async def embed_query(request: Request):
+        return await embedding(request, False)
 
     return app
 

@@ -56,6 +56,7 @@ public static class PlatformApplication
         app.MapModelEndpoints();
         app.MapConnectorEndpoints();
         app.MapKnowledgeEndpoints();
+        app.MapKnowledgeDelegationEndpoints();
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = _ => false,

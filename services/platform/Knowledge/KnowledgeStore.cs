@@ -4,8 +4,8 @@ namespace AssembleAI.Platform.Knowledge;
 
 public sealed record KnowledgeDocument(Guid TenantId, Guid DocumentId, string FileName, string MediaType,
     long SizeBytes, string Sha256, Guid? OrganizationId, string Status, long Revision, Guid CreatedBy, DateTimeOffset CreatedAt,
-    string? FailureCode = null);
-public sealed record KnowledgeJob(Guid JobId, Guid TenantId, Guid DocumentId, string Kind, long DocumentRevision, string Status, int Attempts);
+    string? FailureCode = null, string? IndexProfile = null);
+public sealed record KnowledgeJob(Guid JobId, Guid TenantId, Guid DocumentId, string Kind, long DocumentRevision, string Status, int Attempts, int NextChunkIndex = 0);
 public sealed record KnowledgeJobLease(KnowledgeJob Job, Guid LeaseId);
 public sealed record KnowledgeChunk(int Index, string Text, string Locator);
 

@@ -150,6 +150,7 @@ public static class GatewayEndpoints
         var watcher = Watch();
         ModelDelegationRegistry.Lease? delegation = null;
         ModelDelegationRegistry.Lease? connectorDelegation = null;
+        ModelDelegationRegistry.Lease? knowledgeDelegation = null;
         try
         {
             // A slow durable admission may have consumed the lease/call budget.
@@ -160,7 +161,7 @@ public static class GatewayEndpoints
                 await Problem(context, 504, "application_call_interrupted");
                 return;
             }
-            if (operation.ModelIds.Length > 0 || operation.ConnectorDatasetIds.Length > 0)
+            if (operation.ModelIds.Length > 0 || operation.ConnectorDatasetIds.Length > 0 || operation.KnowledgeRead)
             {
                 var caller = new ModelCaller(session.Subject, run.TenantId, run.UserId, absoluteDeadline,
                     CheckDelegation, forwardingToken, new(run.AppId, run.ReleaseVersion, run.RunId, requestId));
@@ -175,9 +176,14 @@ public static class GatewayEndpoints
                         .Register(caller, operation.ConnectorDatasetIds);
                     if (connectorDelegation is null) { await Problem(context, 503, "connector_delegation_unavailable"); return; }
                 }
+                if (operation.KnowledgeRead)
+                {
+                    knowledgeDelegation = context.RequestServices.GetRequiredService<AssembleAI.Platform.Knowledge.KnowledgeDelegationRegistry>().Register(caller);
+                    if (knowledgeDelegation is null) { await Problem(context, 503, "knowledge_delegation_unavailable"); return; }
+                }
             }
             var transformer = new GatewayTransformer(destination, token, requestId,
-                () => headersTimeout.CancelAfter(Timeout.InfiniteTimeSpan), delegation?.Capability, connectorDelegation?.Capability);
+                () => headersTimeout.CancelAfter(Timeout.InfiniteTimeSpan), delegation?.Capability, connectorDelegation?.Capability, knowledgeDelegation?.Capability);
             var result = await forwarder.SendAsync(context, binding.Destination, transport.Client,
                 new ForwarderRequestConfig { ActivityTimeout = TimeSpan.FromSeconds(options.IdleSeconds), AllowResponseBuffering = false },
                 transformer, forwarding.Token);
@@ -199,6 +205,7 @@ public static class GatewayEndpoints
             // outer request must leave no interval for late model callbacks.
             delegation?.Dispose();
             connectorDelegation?.Dispose();
+            knowledgeDelegation?.Dispose();
             await watchStop.CancelAsync();
             await watcher;
             using var finish = new CancellationTokenSource(TimeSpan.FromSeconds(3));

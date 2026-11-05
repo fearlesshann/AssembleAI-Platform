@@ -55,4 +55,5 @@ public sealed record GatewayOperation(string Service, string Version, string Met
 {
     public string[] ModelIds { get; init; } = [];
     public string[] ConnectorDatasetIds { get; init; } = [];
+    public bool KnowledgeRead { get; init; }
 }

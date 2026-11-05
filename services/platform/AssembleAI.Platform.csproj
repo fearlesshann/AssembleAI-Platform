@@ -3,6 +3,7 @@
     <PackageReference Include="Yarp.ReverseProxy" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Minio" />
+    <PackageReference Include="RabbitMQ.Client" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
   </ItemGroup>
 </Project>

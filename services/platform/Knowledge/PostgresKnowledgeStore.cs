@@ -4,13 +4,13 @@ using AssembleAI.Platform.Authorization;
 
 namespace AssembleAI.Platform.Knowledge;
 
-public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnowledgeStore, IKnowledgeJobStore
+public sealed partial class PostgresKnowledgeStore(IConfiguration configuration) : IKnowledgeStore, IKnowledgeJobStore, IKnowledgeIndexStore, IKnowledgeSearchStore, IKnowledgeBrokerStore
 {
-    private const string Columns = "tenant_id,document_id,file_name,media_type,size_bytes,sha256,organization_id,status,revision,created_by,created_at,failure_code";
+    private const string Columns = "tenant_id,document_id,file_name,media_type,size_bytes,sha256,organization_id,status,revision,created_by,created_at,failure_code,index_profile";
     public Task<KnowledgeDocument> CreateAsync(KnowledgeDocument document, string requestId, CancellationToken token) => Run(async (db, tx, ct) =>
     {
         Validate(document.TenantId, document.DocumentId);
-        if (document.Status != "queued" || document.Revision != 1 || document.CreatedBy == Guid.Empty || document.FailureCode is not null
+        if (document.Status != "queued" || document.Revision != 1 || document.CreatedBy == Guid.Empty || document.FailureCode is not null || document.IndexProfile is not null
             || document.FileName is not {Length: >=1 and <=255} || string.IsNullOrWhiteSpace(document.FileName)
             || document.FileName.Any(char.IsControl) || document.FileName.IndexOfAny(['/', '\\', ':']) >= 0
             || document.MediaType is not ("text/plain" or "text/markdown" or "application/pdf" or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
@@ -18,7 +18,7 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
             || document.OrganizationId == Guid.Empty) throw new KnowledgeStoreUnavailableException();
         if (!await Active(db,tx,document.TenantId,document.CreatedBy,document.OrganizationId,ct)) throw new KnowledgeStoreUnavailableException();
         await using var insert = Command(db,tx,$"""
-            INSERT INTO public.knowledge_documents({Columns}) VALUES($1,$2,$3,$4,$5,$6,$7,'queued',1,$8,now(),NULL)
+            INSERT INTO public.knowledge_documents({Columns}) VALUES($1,$2,$3,$4,$5,$6,$7,'queued',1,$8,now(),NULL,NULL)
             ON CONFLICT(tenant_id,document_id) DO NOTHING RETURNING {Columns}
             """, document.TenantId,document.DocumentId,document.FileName,document.MediaType,document.SizeBytes,document.Sha256);
         insert.Parameters.Add(new NpgsqlParameter { NpgsqlDbType=NpgsqlDbType.Uuid,Value=(object?)document.OrganizationId??DBNull.Value });
@@ -58,7 +58,7 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
         if (current is null || current.Status=="deleted" || current.Revision!=expectedRevision) return false;
         if (!await Active(db,tx,tenant,actor,current.OrganizationId,ct)) throw new KnowledgeStoreUnavailableException();
         await Write(db,tx,"UPDATE public.knowledge_documents SET status='deleted',revision=revision+1 WHERE tenant_id=$1 AND document_id=$2",ct,tenant,document);
-        await Write(db,tx,"UPDATE public.knowledge_jobs SET status='cancelled',lease_id=NULL,lease_until=NULL WHERE tenant_id=$1 AND document_id=$2 AND kind='ingest' AND status IN ('queued','running')",ct,tenant,document);
+        await Write(db,tx,"UPDATE public.knowledge_jobs SET status='cancelled',lease_id=NULL,lease_until=NULL WHERE tenant_id=$1 AND document_id=$2 AND kind IN ('ingest','embed') AND status IN ('queued','running')",ct,tenant,document);
         await Write(db,tx,"DELETE FROM public.knowledge_chunks WHERE tenant_id=$1 AND document_id=$2",ct,tenant,document);
         var deleted=current with { Status="deleted",Revision=current.Revision+1 };
         await Enqueue(db,tx,deleted,"purge",ct);
@@ -69,7 +69,7 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
     public Task<IReadOnlyList<KnowledgeJob>> PendingAsync(CancellationToken token) => Run<IReadOnlyList<KnowledgeJob>>(async (db,tx,ct) =>
     {
         await using var command=Command(db,tx,"""
-            SELECT job_id,tenant_id,document_id,kind,document_revision,status,attempts FROM public.knowledge_jobs
+            SELECT job_id,tenant_id,document_id,kind,document_revision,status,attempts,next_chunk_index FROM public.knowledge_jobs
             WHERE (status='queued' AND available_at<=now()) OR (status='running' AND lease_until<=now())
             ORDER BY available_at,created_at,job_id LIMIT 100
             """);
@@ -85,6 +85,12 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
         return await reader.ReadAsync(ct)?new(reader.GetString(0),reader.GetString(1)):null;
     },token);
 
+    public Task<KnowledgeJob?> ReadJobAsync(Guid jobId,CancellationToken token)=>Run<KnowledgeJob?>(async(db,tx,ct)=>
+    {
+        if(jobId==Guid.Empty) return null;
+        return await FindJob(db,tx,jobId,ct);
+    },token);
+
     public Task<KnowledgeJobLease?> ClaimAsync(Guid jobId,CancellationToken token) => Run<KnowledgeJobLease?>(async (db,tx,ct) =>
     {
         if (jobId==Guid.Empty) throw new KnowledgeStoreUnavailableException();
@@ -92,17 +98,19 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
         if (job is null) return null;
         var document=await Find(db,tx,job.TenantId,job.DocumentId,ct,locked:true);
         await using var command=Command(db,tx,"""
-            SELECT job_id,tenant_id,document_id,kind,document_revision,status,attempts FROM public.knowledge_jobs
+            SELECT job_id,tenant_id,document_id,kind,document_revision,status,attempts,next_chunk_index FROM public.knowledge_jobs
             WHERE job_id=$1 AND ((status='queued' AND available_at<=now()) OR (status='running' AND lease_until<=now())) FOR UPDATE
             """,jobId);
         await using(var reader=await command.ExecuteReaderAsync(ct)) job=await reader.ReadAsync(ct)?ReadJob(reader):null;
         if(job is null) return null;
-        if (document is null || document.Revision!=job.DocumentRevision || (job.Kind=="ingest" ? document.Status=="deleted" : document.Status!="deleted"))
+        if (document is null || document.Revision!=job.DocumentRevision || (job.Kind=="purge" ? document.Status!="deleted" : document.Status=="deleted")
+            || job.Kind=="embed" && (document.Status!="indexing" || document.IndexProfile!=KnowledgeIndexProfile.Id))
         { await EndJob(db,tx,jobId,"cancelled",ct); return null; }
-        if(job.Attempts>=3 || job.Kind=="ingest" && !await Active(db,tx,document.TenantId,document.CreatedBy,document.OrganizationId,ct))
+        if(job.Attempts>=3 || job.Kind!="purge" && (!await Active(db,tx,document.TenantId,document.CreatedBy,document.OrganizationId,ct)
+            || job.Kind=="embed" && !await Manage(db,tx,document,ct)))
         {
             await EndJob(db,tx,jobId,"failed",ct);
-            if(job.Kind=="ingest") await Write(db,tx,"UPDATE public.knowledge_documents SET status='failed',failure_code=COALESCE(failure_code,'ingestion_failed') WHERE tenant_id=$1 AND document_id=$2",ct,job.TenantId,job.DocumentId);
+            if(job.Kind!="purge") await Write(db,tx,"UPDATE public.knowledge_documents SET status='failed',failure_code=COALESCE(failure_code,'ingestion_failed') WHERE tenant_id=$1 AND document_id=$2",ct,job.TenantId,job.DocumentId);
             return null;
         }
         var lease=Guid.NewGuid();
@@ -119,7 +127,8 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
             || chunks.Sum(c=>(long)c.Text.Length)>8388608) throw new KnowledgeStoreUnavailableException();
         var document=await LockLease(db,tx,lease,"ingest",ct);
         if(document is null) return false;
-        if(!await Active(db,tx,document.TenantId,document.CreatedBy,document.OrganizationId,ct))
+        if(!await Active(db,tx,document.TenantId,document.CreatedBy,document.OrganizationId,ct)
+            || configuration.GetValue<bool>("Knowledge:IndexEnabled") && !await Manage(db,tx,document,ct))
         {
             await EndJob(db,tx,lease.Job.JobId,"failed",ct);
             await Write(db,tx,"UPDATE public.knowledge_documents SET status='failed',failure_code='ingestion_failed' WHERE tenant_id=$1 AND document_id=$2",ct,document.TenantId,document.DocumentId);
@@ -136,7 +145,12 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
             }
             await batch.ExecuteNonQueryAsync(ct);
         }
-        await Write(db,tx,"UPDATE public.knowledge_documents SET status='extracted',failure_code=NULL WHERE tenant_id=$1 AND document_id=$2",ct,document.TenantId,document.DocumentId);
+        if(configuration.GetValue<bool>("Knowledge:IndexEnabled"))
+        {
+            await Write(db,tx,"UPDATE public.knowledge_documents SET status='indexing',failure_code=NULL,index_profile=$3 WHERE tenant_id=$1 AND document_id=$2",ct,document.TenantId,document.DocumentId,KnowledgeIndexProfile.Id);
+            await Enqueue(db,tx,document,"embed",ct);
+        }
+        else await Write(db,tx,"UPDATE public.knowledge_documents SET status='extracted',failure_code=NULL WHERE tenant_id=$1 AND document_id=$2",ct,document.TenantId,document.DocumentId);
         await EndJob(db,tx,lease.Job.JobId,"completed",ct);
         return true;
     },token);
@@ -151,11 +165,12 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
     {
         var document=await LockLease(db,tx,lease,lease.Job.Kind,ct); if(document is null) return false;
         var code=SafeFailure(failureCode);
-        var permanent=lease.Job.Kind=="ingest" && code is not ("ingestion_failed" or "parser_timeout" or "parser_unavailable");
+        var permanent=lease.Job.Kind=="ingest" && code is not ("ingestion_failed" or "parser_timeout" or "parser_unavailable")
+            || lease.Job.Kind=="embed" && code is "index_profile_mismatch" or "index_too_large";
         if(lease.Job.Attempts>=3 || permanent)
         {
             await EndJob(db,tx,lease.Job.JobId,"failed",ct);
-            if(lease.Job.Kind=="ingest") await Write(db,tx,"UPDATE public.knowledge_documents SET status='failed',failure_code=$3 WHERE tenant_id=$1 AND document_id=$2",ct,document.TenantId,document.DocumentId,code);
+            if(lease.Job.Kind!="purge") await Write(db,tx,"UPDATE public.knowledge_documents SET status='failed',failure_code=$3 WHERE tenant_id=$1 AND document_id=$2",ct,document.TenantId,document.DocumentId,code);
         }
         else
         {
@@ -167,22 +182,23 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
 
     private static async Task<KnowledgeDocument?> LockLease(NpgsqlConnection db,NpgsqlTransaction tx,KnowledgeJobLease lease,string kind,CancellationToken token)
     {
-        if(lease is null || lease.LeaseId==Guid.Empty || kind is not ("ingest" or "purge") || lease.Job.Kind!=kind) return null;
+        if(lease is null || lease.LeaseId==Guid.Empty || kind is not ("ingest" or "embed" or "purge") || lease.Job.Kind!=kind) return null;
         var document=await Find(db,tx,lease.Job.TenantId,lease.Job.DocumentId,token,locked:true);
-        if(document is null || document.Revision!=lease.Job.DocumentRevision || (kind=="ingest" ? document.Status!="processing" : document.Status!="deleted")) return null;
+        if(document is null || document.Revision!=lease.Job.DocumentRevision || document.Status!=(kind switch {"ingest"=>"processing","embed"=>"indexing",_=>"deleted"})
+            || kind=="embed" && document.IndexProfile!=KnowledgeIndexProfile.Id) return null;
         await using var command=Command(db,tx,"""
             SELECT job_id FROM public.knowledge_jobs WHERE job_id=$1 AND tenant_id=$2 AND document_id=$3
-            AND kind=$4 AND document_revision=$5 AND attempts=$6 AND status='running' AND lease_id=$7 AND lease_until>now() FOR UPDATE
-            """,lease.Job.JobId,lease.Job.TenantId,lease.Job.DocumentId,kind,lease.Job.DocumentRevision,lease.Job.Attempts,lease.LeaseId);
+            AND kind=$4 AND document_revision=$5 AND attempts=$6 AND status='running' AND lease_id=$7 AND lease_until>now() AND next_chunk_index=$8 FOR UPDATE
+            """,lease.Job.JobId,lease.Job.TenantId,lease.Job.DocumentId,kind,lease.Job.DocumentRevision,lease.Job.Attempts,lease.LeaseId,lease.Job.NextChunkIndex);
         return await command.ExecuteScalarAsync(token) is Guid ? document:null;
     }
     private static async Task<KnowledgeJob?> FindJob(NpgsqlConnection db,NpgsqlTransaction tx,Guid job,CancellationToken token)
     {
-        await using var command=Command(db,tx,"SELECT job_id,tenant_id,document_id,kind,document_revision,status,attempts FROM public.knowledge_jobs WHERE job_id=$1",job);
+        await using var command=Command(db,tx,"SELECT job_id,tenant_id,document_id,kind,document_revision,status,attempts,next_chunk_index FROM public.knowledge_jobs WHERE job_id=$1",job);
         await using var reader=await command.ExecuteReaderAsync(token); return await reader.ReadAsync(token)?ReadJob(reader):null;
     }
-    private static KnowledgeJob ReadJob(NpgsqlDataReader reader)=>new(reader.GetGuid(0),reader.GetGuid(1),reader.GetGuid(2),reader.GetString(3),reader.GetInt64(4),reader.GetString(5),reader.GetInt32(6));
-    private static KnowledgeDocument Read(NpgsqlDataReader reader)=>new(reader.GetGuid(0),reader.GetGuid(1),reader.GetString(2),reader.GetString(3),reader.GetInt64(4),reader.GetString(5),reader.IsDBNull(6)?null:reader.GetGuid(6),reader.GetString(7),reader.GetInt64(8),reader.GetGuid(9),reader.GetFieldValue<DateTimeOffset>(10),reader.IsDBNull(11)?null:reader.GetString(11));
+    private static KnowledgeJob ReadJob(NpgsqlDataReader reader)=>new(reader.GetGuid(0),reader.GetGuid(1),reader.GetGuid(2),reader.GetString(3),reader.GetInt64(4),reader.GetString(5),reader.GetInt32(6),reader.GetInt32(7));
+    private static KnowledgeDocument Read(NpgsqlDataReader reader)=>new(reader.GetGuid(0),reader.GetGuid(1),reader.GetString(2),reader.GetString(3),reader.GetInt64(4),reader.GetString(5),reader.IsDBNull(6)?null:reader.GetGuid(6),reader.GetString(7),reader.GetInt64(8),reader.GetGuid(9),reader.GetFieldValue<DateTimeOffset>(10),reader.IsDBNull(11)?null:reader.GetString(11),reader.IsDBNull(12)?null:reader.GetString(12));
     private static async Task<KnowledgeDocument?> Find(NpgsqlConnection db,NpgsqlTransaction tx,Guid tenant,Guid document,CancellationToken token,bool locked=false)
     {
         await using var command=Command(db,tx,$"SELECT {Columns} FROM public.knowledge_documents WHERE tenant_id=$1 AND document_id=$2"+(locked?" FOR UPDATE":""),tenant,document);
@@ -209,7 +225,7 @@ public sealed class PostgresKnowledgeStore(IConfiguration configuration) : IKnow
     private static bool Hex(string value,int length)=>value is not null && value.Length==length && value.All(c=>c is >= 'a' and <= 'f' or >= '0' and <= '9');
     private static string SafeFailure(string value)=>value is "ocr_required" or "encrypted_document" or "unsupported_document"
         or "empty_document" or "extracted_text_too_large" or "document_too_complex" or "invalid_document"
-        or "parser_timeout" or "parser_unavailable" ? value : "ingestion_failed";
+        or "parser_timeout" or "parser_unavailable" or "embedding_unavailable" or "index_profile_mismatch" or "index_too_large" ? value : "ingestion_failed";
     private static NpgsqlCommand Command(NpgsqlConnection db,NpgsqlTransaction tx,string sql,params object[] values)
     { var command=new NpgsqlCommand(sql,db,tx){CommandTimeout=3}; foreach(var value in values) command.Parameters.AddWithValue(value); return command; }
     private static async Task Write(NpgsqlConnection db,NpgsqlTransaction tx,string sql,CancellationToken token,params object[] values)

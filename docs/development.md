@@ -301,3 +301,25 @@ FastAPI 一问只生成一次计划，拒绝任意 SQL、额外字段、越权�
 实库首轮发现 BFF 禁用时 DELETE 处理器缺少 Antiforgery 服务注册，已修复。最终 `tools/verify-postgres.py` 返回 0，`.artifacts/postgres/run-ec0f062eaeaa4d17abab801a49b4a9c5/result.json` 的 passed / cleanupComplete 均 true，PostgreSQL 17.11；迁移 1–10、知识库任务与删除竞争、失败原因分类、原子审计及既有数据库合同全部通过，临时数据库与进程已清理。
 
 验证分别覆盖受控 S3 HTTP fixture、内存仓储 HTTP / worker、真实 PostgreSQL 仓储和真实解析子进程；没有将其声称为真实 MinIO 联合部署。未新增或重验浏览器界面，未调用真实模型。T12 保持进行中：真实 MinIO 联合验收、RabbitMQ、embedding / pgvector、知识库前端与问答引用待继续。已有 Starlette / httpx 弃用提示为非失败警告。
+
+## 2026-11-05 T12 知识库索引与问答
+
+拉取 `bbda377` 后补齐独立 `knowledge` 前后端 0.1.0、固定 multilingual-e5-small CPU embedding、pgvector 精确检索与 RabbitMQ 持久通知。迁移 11 保存受约束向量和检索审计；PostgreSQL 继续作为任务事实源。索引分批持久化，完整 revision/profile 才发布 ready；授权在排名前过滤，精确文档权限不能与另一 grant 的组织范围交叉组合。删除墓碑同事务清分块 / 向量并取消旧任务。独立活动知识库能力与模型、连接器能力隔离，全部模型上下文在调用前和答案交付前重新授权。详见[问答契约](architecture/knowledge-qa.md)。
+
+界面提供文档上传、范围、处理状态、删除确认、原文附件和问答引用。同一发布物支持独立与门户运行、浅暗主题及 390px 视口；取消、切身份 / 租户和焦点复核失败清除旧内容。答案只在完整 SSE 通过后显示，引用 quote 必须为实际命中原文的连续子串；不持久化答案历史。旧 extracted 文档仍需启用索引后重新上传，当前没有重建索引接口。模型引用校验不等于证明答案全部自由文本结论，效果必须以实际题集为准。
+
+`tools/verify.ps1 -Scope All` 返回 0，日志 `.artifacts/t12-all.log`：48 项 Node、201 项原有 Python、109 项独立知识库 Python、44 项 Playwright、Vue 类型检查、四个前端构建、.NET 全部 HTTP 及真实 FastAPI → YARP 通过。知识库 Python 测试明确配置了本机固定模型目录，真实 ONNX CPU 测试没有跳过。后续父片段 Unicode / 控制字符边界红绿完成，最新 .NET 构建 0 警告 / 0 错误、知识库六组通过，日志 `.artifacts/t12-parent-green-build.log` 与 `t12-parent-green.log`。浏览器 maxlength 的 UTF-16 截断经实际输入复现后修复，类型检查、知识库重建和最终 9 项专项通过（`.artifacts/t12-question-green.log`）。这使当前浏览器用例总数为 45；完整44项与新增后9项专项分别执行，不冒充一次45项全跑。
+
+核心原生 PostgreSQL 串行复验返回 0，`.artifacts/postgres/run-29be6c581eea402497587dbb8cd7f6af/result.json` 的 passed / cleanupComplete 均 true。覆盖迁移1–11及重放、全部既有授权 / BFF / 注册 / 网关 / 模型 / 连接器合同和知识库任务；原无 vector 安装继续验证扩展缺失负例。首轮与全套浏览器并行时触发旧240秒外层预算，未将中止视为通过；外层预算600秒不改变任何业务请求截止。手动浏览器红测的服务收尾另触发既有B9长PATH问题，仅回收已核实的自有进程树；最终专项采用验证器相同的短进程PATH并自然退出。
+
+真实 MinIO 对象字节往返、RabbitMQ 持久队列发布 / 消费以及 AMQP 端口握手通过；`.artifacts/knowledge/run-c9fc6761d24840dd8cb2bc8a0a13cd21/result.json` 的四项结果均 true，含 cleanup。服务以普通本机进程运行，不依赖 Docker。原生工具、固定官方依赖、隔离目录及本机容量说明见[原生验收](native-knowledge.md)。此独立烟测仍不替代平台 worker 与实际 pgvector / 模型的联合验收。
+
+固定官方 MSVC / Windows SDK 以只读解包方式补齐后，pgvector 0.8.7 从锁定源码原生编译成功（`.artifacts/t12-native-vector-linked.log`），生成独立 PostgreSQL 17.11 目录，原无 vector 安装未改。`--knowledge-index-only` 返回0；`.artifacts/postgres/run-0195ecf6f9304e1690f8c014b4672bbd/result.json` 的 passed / cleanupComplete 均 true。真实扩展验证可恢复分批索引、重复提交、精确向量排名前ACL、授权版本、精确资源 / 组织范围、删除与撤权围栏，readiness 要求真实vector和迁移11。
+
+真实原生浏览器联合验收最终返回0：`.artifacts/postgres/run-069cdb60fea84521b098cae52125f8ff/result.json` 的 passed / cleanupComplete / knowledgeBrowserRequested 均 true。实际 DOCX / PDF 原件经 MinIO、生产 RabbitMQ 客户端、私有解析与CPU模型、pgvector、BFF / YARP / 独立业务服务完成问答；检验重复通知、跨工厂及异租户排除、全部上下文撤权 / 删除复核、依据不足拒答、关联检索 / 模型审计。无 API 拦截的 Chromium 验证独立 / 门户、真实上传到ready、原件下载逐字节一致、删除、浅暗 / 移动端及跨标签退出清理。截图 `.artifacts/knowledge-postgres/d4a49fb81e1f435198e632a4e4906114/` 已目视检查。
+
+首轮浏览器夹具误把 Chromium 未暴露 File 正文当成上传丢失；改为真实下载逐字节验证。后续删除负例揭示本地开发代理剥离传输头后丢弃无显式长度的 DELETE 正文；已按实际分帧协议修复，保留删除负例，新增HTTP红绿与完整 **49项Node** 通过（`.artifacts/t12-proxy-framing-green.log`）。另一次初始化失败来自夹具未等租户提交便打开独立页，实际页面加延迟HTTP复现后按权威提交 / 读取同步，不放宽原断言时限。上述失败轮次均未记为通过，隔离资源均清理；根因与边界记录于SPEC B72–B81。原生 Windows shell 在工作区产生的本机缓存已精确忽略，不提交数据库缓存或依赖二进制。
+
+最终 `tools/verify-postgres.py --knowledge-real-model` 返回0：`.artifacts/postgres/run-e868293794b24e83ab32619f4a01d81c/result.json` 的 passed / cleanupComplete / knowledgeRealModelRequested 均 true。该轮再次通过本地完整链路与浏览器，然后使用已配置 **DeepSeek deepseek-flash** 每题一次验证三题：轴承过热先停机（DOCX）、切削前冷却液压力0.35 MPa（PDF）、资料未包含的火星班车票价明确拒答。两种原文引用、全部授权上下文和同一网关调用的审计关联均核对。凭据仅由平台环境读取，不传给业务 / 解析服务或浏览器，不记录问题、模型正文或密钥。
+
+T12完成，下一任务T13管理与审计。本轮为普通原生进程，无Docker；效果结论只覆盖合成题集，不等同于真实制造业务准确率或生产部署。未重跑独立Keycloak产品验收；联合登录使用既有真实OidcFixture协议交换。大规模向量性能、组织管理体验、历史治理、多实例回调与完整生产交付继续归后续任务。原文提取状态extracted不自动回填索引，启用后需重新上传；缓存 / 编译包保留情况见原生依赖说明。

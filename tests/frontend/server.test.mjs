@@ -118,6 +118,32 @@ test('T6: same-origin proxy preserves BFF POST, redirects and cookies without fo
   assert.equal(received.url, '/api/unknown');
 });
 
+test('T12 V32: local proxy preserves chunked DELETE bodies and rejects unsupported transfer coding', { timeout: 10000 }, async (t) => {
+  const received = [];
+  const backend = createServer(async (req, res) => {
+    const parts = []; for await (const part of req) parts.push(part);
+    received.push({ method: req.method, body: Buffer.concat(parts).toString() });
+    res.writeHead(204); res.end();
+  });
+  const target = await listen(backend, t);
+  const base = await listen(preview(target), t);
+  const body = '{"expectedRevision":1}';
+  const send = (headers, content) => new Promise((resolve, reject) => {
+    const outgoing = request(base + '/api/platform/v1/tenants/test/knowledge/documents/test', {
+      method: 'DELETE', headers: { 'content-type': 'application/json', ...headers },
+    }, (incoming) => { incoming.resume(); incoming.on('end', () => resolve(incoming.statusCode)); });
+    outgoing.on('error', reject); outgoing.end(content);
+  });
+  assert.equal(await send({ 'transfer-encoding': 'chunked' }, body), 204);
+  assert.deepEqual(received.at(-1), { method: 'DELETE', body });
+  assert.equal(await send({ 'content-length': Buffer.byteLength(body) }, body), 204);
+  assert.deepEqual(received.at(-1), { method: 'DELETE', body });
+  assert.equal(await send({ 'content-length': '0' }, ''), 204);
+  assert.deepEqual(received.at(-1), { method: 'DELETE', body: '' });
+  assert.equal(await send({ 'transfer-encoding': 'gzip, chunked' }, body), 400);
+  assert.equal(received.length, 3);
+});
+
 test('T6: proxy streams the first SSE segment and cancels the upstream on browser disconnect', { timeout: 10000 }, async (t) => {
   let stopped;
   const cancelled = new Promise((resolve) => { stopped = resolve; });

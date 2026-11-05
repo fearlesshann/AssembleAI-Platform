@@ -52,7 +52,7 @@ def document_kind(filename):
 
 
 def _clean_text(text):
-    if any(ord(char) < 32 and char not in "\t\r\n" for char in text) or any(0xD800 <= ord(char) <= 0xDFFF for char in text):
+    if any((ord(char) < 32 and char not in "\t\r\n") or 127 <= ord(char) <= 159 or 0xD800 <= ord(char) <= 0xDFFF for char in text):
         raise DocumentError("invalid_document")
     return text.replace("\r\n", "\n").replace("\r", "\n").strip()
 
@@ -180,7 +180,8 @@ def parse_document(content: bytes, filename: str) -> ParsedDocument:
                 location = locator
                 if locator == "lines":
                     location = f"lines:{leading_lines + text.count(chr(10), 0, start) + 1}-{leading_lines + text.count(chr(10), 0, end - 1) + 1}"
-                chunks.append(DocumentChunk(len(chunks), text[start:end], location))
+                if text[start:end].strip():
+                    chunks.append(DocumentChunk(len(chunks), text[start:end], location))
                 if len(chunks) > MAX_CHUNKS:
                     raise DocumentError("document_too_complex")
                 if end == len(text):

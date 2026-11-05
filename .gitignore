@@ -30,3 +30,6 @@ __pycache__/
 .artifacts/
 .local-data/
 *.log
+
+# Local Windows shell cache generated during native browser acceptance
+/%SystemDrive%/

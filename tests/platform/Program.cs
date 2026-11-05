@@ -16,6 +16,9 @@ if (args.Contains("--knowledge-tests", StringComparer.Ordinal))
 {
     await KnowledgeObjectTests.RunAsync();
     await KnowledgeWorkerTests.RunAsync();
+    await KnowledgeIndexTests.RunAsync();
+    await KnowledgeDelegationTests.RunAsync();
+    await KnowledgeBrokerTests.RunAsync();
     await KnowledgeHttpTests.RunAsync();
     return;
 }
@@ -192,6 +195,9 @@ try
     await ConnectorDelegationTests.RunAsync();
     await KnowledgeObjectTests.RunAsync();
     await KnowledgeWorkerTests.RunAsync();
+    await KnowledgeIndexTests.RunAsync();
+    await KnowledgeDelegationTests.RunAsync();
+    await KnowledgeBrokerTests.RunAsync();
     await KnowledgeHttpTests.RunAsync();
 }
 finally

@@ -59,7 +59,7 @@ public sealed class KnowledgeParserClient(HttpClient client, KnowledgeOptions op
                 var locator = chunk.GetProperty("locator").GetString();
                 if (index != result.Count || string.IsNullOrWhiteSpace(text) || text.Length > 2400 || text.Contains('\0')
                     || string.IsNullOrWhiteSpace(locator) || locator.Length > 200 || locator.Any(char.IsControl)
-                    || (characters += text.Length) > 2_000_000) throw new KnowledgeParserException();
+                    || (characters += text.Length) > 2_400_000) throw new KnowledgeParserException();
                 result.Add(new(index, text, locator));
             }
             return result;
@@ -75,7 +75,8 @@ public sealed class KnowledgeParserClient(HttpClient client, KnowledgeOptions op
 
 // Durable DB outbox claims survive process restarts. RabbitMQ dispatch and vector generation are a later T12 slice.
 public sealed class KnowledgeWorker(IKnowledgeStore documents, IKnowledgeJobStore jobs, IKnowledgeObjects objects,
-    IAuthorizationStore authorization, KnowledgeParserClient parser, ILogger<KnowledgeWorker> logger) : BackgroundService
+    IAuthorizationStore authorization, KnowledgeParserClient parser, ILogger<KnowledgeWorker> logger,
+    IKnowledgeIndexStore? index = null, KnowledgeEmbeddingClient? embeddings = null, KnowledgeOptions? options = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -112,6 +113,16 @@ public sealed class KnowledgeWorker(IKnowledgeStore documents, IKnowledgeJobStor
             var doc = await documents.ReadAsync(job.TenantId, job.DocumentId, token);
             if (doc is null || doc.Status == "deleted" || doc.Revision != job.DocumentRevision || !await Allowed(doc, token))
                 throw new KnowledgeParserException();
+            if (job.Kind == "embed")
+            {
+                if (options?.IndexEnabled != true || index is null || embeddings is null) throw new KnowledgeEmbeddingException();
+                var batch = await index.ReadIndexBatchAsync(lease, token);
+                if (batch.Count == 0) throw new KnowledgeEmbeddingException();
+                var segments = await embeddings.IndexAsync(batch, token);
+                if (!await Allowed(doc, token)) throw new KnowledgeEmbeddingException();
+                await index.CompleteIndexBatchAsync(lease, segments, token);
+                return;
+            }
             var content = await objects.GetAsync(doc.TenantId, doc.DocumentId, token);
             if (content.LongLength != doc.SizeBytes || Convert.ToHexStringLower(SHA256.HashData(content)) != doc.Sha256)
                 throw new KnowledgeParserException();
@@ -121,10 +132,11 @@ public sealed class KnowledgeWorker(IKnowledgeStore documents, IKnowledgeJobStor
             await jobs.CompleteIngestAsync(lease, chunks, token);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { /* Expired leases are reclaimable. */ }
-        catch (Exception error) when (KnowledgeEndpoints.Unavailable(error) || error is KnowledgeParserException or OperationCanceledException)
+        catch (Exception error) when (KnowledgeEndpoints.Unavailable(error) || error is KnowledgeParserException or KnowledgeEmbeddingException or OperationCanceledException)
         {
             using var finish = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            await jobs.FailAsync(lease, finish.Token, error is KnowledgeParserException parsing ? parsing.Code : "ingestion_failed");
+            await jobs.FailAsync(lease, finish.Token, error is KnowledgeParserException parsing ? parsing.Code
+                : error is KnowledgeEmbeddingException embedding ? embedding.Code : "ingestion_failed");
         }
     }
     private async Task<bool> Allowed(KnowledgeDocument doc, CancellationToken token)

@@ -3,7 +3,7 @@
 Runs local code verification without installing dependencies or starting Docker.
 .DESCRIPTION
 Core: Node tests, cache-only locked .NET restore/build/smoke, Python tests and proxy smoke.
-Frontend: Node tests, vue-tsc, three Vite builds and Playwright browser tests.
+Frontend: Node tests, vue-tsc, four Vite builds and Playwright browser tests.
 All: both scopes, plus package-lock.json, uv.lock and project .venv prerequisites.
 All covers code verification only; container, database migration and Keycloak acceptance
 must be run separately. No scope implies T2 is complete.
@@ -225,6 +225,7 @@ print(sys.executable + ' | Python ' + sys.version.split()[0] + ' | declared back
         [void](Test-RequiredFile 'package-lock.json' 'npm lockfile')
         [void](Test-RequiredFile 'apps/sample/backend/uv.lock' 'uv lockfile')
         [void](Test-RequiredFile 'apps/chatbi/backend/uv.lock' 'ChatBI uv lockfile')
+        [void](Test-RequiredFile 'apps/knowledge/backend/uv.lock' 'Knowledge uv lockfile')
         $venvPython = @('apps/sample/backend/.venv/Scripts/python.exe', 'apps/sample/backend/.venv/bin/python') |
             Where-Object { Test-Path -LiteralPath (Join-Path $workspaceRoot $_) -PathType Leaf } | Select-Object -First 1
         if (-not $venvPython) {
@@ -258,6 +259,11 @@ print(sys.executable + ' | Python ' + sys.version.split()[0] + ' | declared back
         if ($pythonPath) {
             $pythonTestsPassed = Invoke-Check 'FastAPI pytest' $pythonPath @('-m', 'pytest', '-q', '-c', 'apps/sample/backend/pyproject.toml', 'tests/backend')
         } else { Write-Result 'FastAPI pytest' 'SKIP' 'Python prerequisite failed.' }
+        $knowledgePython = Resolve-Executable (Join-Path $workspaceRoot 'apps/knowledge/backend/.venv/Scripts/python.exe')
+        if (-not $knowledgePython) { $knowledgePython = Resolve-Executable (Join-Path $workspaceRoot 'apps/knowledge/backend/.venv/bin/python') }
+        if ($knowledgePython) {
+            [void](Invoke-Check 'Knowledge FastAPI pytest' $knowledgePython @('-m', 'pytest', '-q', '-c', 'apps/knowledge/backend/pyproject.toml'))
+        } else { Write-Result 'Knowledge FastAPI pytest' 'BLOCKED' 'Missing the locked independent knowledge environment.' 2 }
         if ($buildPassed -and $pythonTestsPassed) {
             [void](Invoke-Check 'FastAPI to YARP HTTP smoke' $pythonPath @('tests/platform/smoke_fastapi_proxy.py'))
         } else { Write-Result 'FastAPI to YARP HTTP smoke' 'SKIP' 'Requires a passing platform build and Python tests.' }
@@ -277,8 +283,9 @@ print(sys.executable + ' | Python ' + sys.version.split()[0] + ' | declared back
                 $vite = Join-Path $workspaceRoot 'node_modules/vite/bin/vite.js'
                 $sampleBuilt = Invoke-Check 'Sample UMD build' $node @($vite, 'build') (Join-Path $workspaceRoot 'apps/sample/frontend')
                 $chatbiBuilt = Invoke-Check 'ChatBI UMD build' $node @($vite, 'build') (Join-Path $workspaceRoot 'apps/chatbi/frontend')
+                $knowledgeBuilt = Invoke-Check 'Knowledge UMD build' $node @($vite, 'build') (Join-Path $workspaceRoot 'apps/knowledge/frontend')
                 $portalBuilt = Invoke-Check 'Portal build' $node @($vite, 'build') (Join-Path $workspaceRoot 'apps/portal')
-                if ($sampleBuilt -and $chatbiBuilt -and $portalBuilt) {
+                if ($sampleBuilt -and $chatbiBuilt -and $knowledgeBuilt -and $portalBuilt) {
                     # Playwright uses cmd.exe + taskkill to reap its Windows web server.
                     # cmd drops inherited PATH values over 8191 characters. Give this
                     # child only the runtimes it needs; never change the caller/system PATH.
@@ -287,7 +294,7 @@ print(sys.executable + ' | Python ' + sys.version.split()[0] + ' | declared back
                         $browserPath = @((Split-Path -Parent $node), (Join-Path $env:SystemRoot 'System32'), $env:SystemRoot) -join ';'
                     }
                     [void](Invoke-Check 'Playwright browser tests' $node @((Join-Path $workspaceRoot 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.config.ts') -ProcessPath $browserPath)
-                } else { Write-Result 'Playwright browser tests' 'SKIP' 'One or both Vite builds failed.' }
+                } else { Write-Result 'Playwright browser tests' 'SKIP' 'A required Vite build failed.' }
             } else { Write-Result 'Frontend builds / browser' 'SKIP' 'Type check failed.' }
         } else { Write-Result 'Frontend builds / browser' 'SKIP' 'Dependencies or Node are unavailable. This is not a successful frontend verification.' }
     }

@@ -19,11 +19,24 @@ public static class KnowledgeEndpoints
         builder.Services.TryAddSingleton<PostgresKnowledgeStore>();
         builder.Services.TryAddSingleton<IKnowledgeStore>(p => p.GetRequiredService<PostgresKnowledgeStore>());
         builder.Services.TryAddSingleton<IKnowledgeJobStore>(p => p.GetRequiredService<PostgresKnowledgeStore>());
+        builder.Services.TryAddSingleton<IKnowledgeIndexStore>(p => p.GetRequiredService<PostgresKnowledgeStore>());
+        builder.Services.TryAddSingleton<IKnowledgeSearchStore>(p => p.GetRequiredService<PostgresKnowledgeStore>());
+        builder.Services.TryAddSingleton<IKnowledgeBrokerStore>(p => p.GetRequiredService<PostgresKnowledgeStore>());
+        builder.Services.TryAddSingleton<KnowledgeDelegationRegistry>();
+        builder.Services.TryAddSingleton<KnowledgeSearchAdmission>();
         builder.Services.AddKnowledgeObjects(builder.Configuration);
         builder.Services.AddHttpClient<KnowledgeParserClient>(http => http.Timeout = TimeSpan.FromSeconds(25))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, ConnectTimeout = TimeSpan.FromSeconds(3) })
             .RemoveAllLoggers();
-        if (options.Enabled && options.WorkerEnabled) builder.Services.AddHostedService<KnowledgeWorker>();
+        builder.Services.AddHttpClient<KnowledgeEmbeddingClient>(http => http.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, ConnectTimeout = TimeSpan.FromSeconds(3) })
+            .RemoveAllLoggers();
+        if (options.Enabled && options.WorkerEnabled)
+        {
+            builder.Services.TryAddSingleton<KnowledgeWorker>();
+            if (options.BrokerEnabled) builder.Services.AddHostedService<KnowledgeBrokerWorker>();
+            else builder.Services.AddHostedService(p => p.GetRequiredService<KnowledgeWorker>());
+        }
         return builder;
     }
     public static WebApplication MapKnowledgeEndpoints(this WebApplication app)
