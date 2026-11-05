@@ -98,6 +98,8 @@ def main() -> int:
     parser.add_argument("--portal-browser", action="store_true", help="Also verify the built portal with real OIDC/BFF and PostgreSQL in Chromium.")
     parser.add_argument("--application-browser", action="store_true", help="Also verify SDK, independently built applications and real FastAPI through OIDC/BFF/YARP in Chromium.")
     parser.add_argument("--registry-browser", action="store_true", help="Also verify multi-user registry management and in-flight gateway policies through the real browser UI.")
+    parser.add_argument("--identity-browser", action="store_true", help="Also verify identity administration with real OIDC/BFF, PostgreSQL and browser pages.")
+    parser.add_argument("--identity-only", action="store_true", help="Focus on migrations, bootstrap, identity administration and readiness; add --identity-browser for the actual pages.")
     parser.add_argument("--model-application", action="store_true", help="Verify real OIDC/PG/YARP/FastAPI model delegation with a local protocol fixture.")
     parser.add_argument("--real-model", action="store_true", help="Also make one JSON and one SSE call using an explicit operator model acceptance configuration.")
     parser.add_argument("--chatbi-browser", action="store_true", help="Verify ChatBI through real OIDC, browser, Python, model protocol and PostgreSQL connectors.")
@@ -124,6 +126,7 @@ def main() -> int:
     portal_browser = args.portal_browser or os.environ.get("ASSEMBLEAI_PORTAL_BROWSER_TESTS") == "1"
     application_browser = args.application_browser or os.environ.get("ASSEMBLEAI_APPLICATION_BROWSER_TESTS") == "1"
     registry_browser = args.registry_browser or os.environ.get("ASSEMBLEAI_REGISTRY_BROWSER_TESTS") == "1"
+    identity_browser = args.identity_browser or os.environ.get("ASSEMBLEAI_IDENTITY_BROWSER_TESTS") == "1"
     real_model = args.real_model or os.environ.get("ASSEMBLEAI_REAL_MODEL_TESTS") == "1"
     model_application = args.model_application or real_model or os.environ.get("ASSEMBLEAI_MODEL_APPLICATION_TESTS") == "1"
     chatbi_real_model = args.chatbi_real_model or os.environ.get("ASSEMBLEAI_CHATBI_REAL_MODEL_TESTS") == "1"
@@ -131,16 +134,20 @@ def main() -> int:
     knowledge_real_model = args.knowledge_real_model
     knowledge_browser = args.knowledge_browser or knowledge_real_model
     knowledge = knowledge_browser or args.knowledge_index_only
-    if knowledge and (args.interactive_demo or chatbi_browser or args.chatbi_only or real_model or model_application or portal_browser or application_browser or registry_browser):
+    if args.identity_only and (knowledge or args.interactive_demo or chatbi_browser or args.chatbi_only or real_model or model_application or portal_browser or application_browser or registry_browser):
+        parser.error("--identity-only cannot be combined with other application verification scopes")
+    if knowledge and (args.interactive_demo or chatbi_browser or args.chatbi_only or real_model or model_application or portal_browser or application_browser or registry_browser or identity_browser):
         parser.error("Knowledge acceptance is an isolated scope; do not combine it with another application scope")
     if args.knowledge_index_only and knowledge_browser:
         parser.error("--knowledge-index-only cannot be combined with browser/model acceptance")
     if args.interactive_demo:
         if args.real_model or args.chatbi_real_model:
             parser.error("--interactive-demo cannot call a real model")
-        portal_browser = application_browser = registry_browser = model_application = False
+        portal_browser = application_browser = registry_browser = identity_browser = model_application = False
         real_model = chatbi_real_model = False
         chatbi_browser = args.chatbi_only = True
+    if args.chatbi_only and identity_browser:
+        parser.error("--identity-browser cannot be combined with --chatbi-only")
     if args.chatbi_only and not chatbi_browser:
         parser.error("--chatbi-only requires --chatbi-browser or --chatbi-real-model")
     model_secrets: tuple[str, ...] = ()
@@ -168,7 +175,9 @@ def main() -> int:
         if not smoke.is_file() or not dotnet:
             raise RuntimeError("Build AssembleAI.slnx before running PostgreSQL acceptance.")
         node = os.environ.get("ASSEMBLEAI_NODE") or shutil.which("node.exe")
-        if (portal_browser or application_browser or registry_browser or chatbi_browser or knowledge_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
+        if not node and not knowledge and not args.chatbi_only:
+            raise RuntimeError("Node is required for the production first-administrator bootstrap verification.")
+        if (portal_browser or application_browser or registry_browser or identity_browser or chatbi_browser or knowledge_browser) and (not node or not (ROOT / "apps/portal/dist/index.html").is_file()):
             raise RuntimeError("Build the portal and install its locked browser dependencies before browser acceptance.")
         application_python = Path(os.environ.get("ASSEMBLEAI_PYTHON", ROOT / "apps/sample/backend/.venv/Scripts/python.exe")).resolve()
         if (application_browser or model_application or chatbi_browser) and not application_python.is_file():
@@ -295,9 +304,14 @@ def main() -> int:
         if args.interactive_demo:
             test_environment.pop("ASSEMBLEAI_MODEL_ACCEPTANCE_CONFIG", None)
         test_environment["ASSEMBLEAI_POSTGRES_TEST_CONFIG"] = str(config_path)
+        test_environment["ASSEMBLEAI_POSTGRES_PSQL"] = str(binaries["psql"])
+        if node:
+            test_environment["ASSEMBLEAI_NODE"] = str(node)
         test_environment["ASSEMBLEAI_PORTAL_BROWSER_TESTS"] = "1" if portal_browser else "0"
         test_environment["ASSEMBLEAI_APPLICATION_BROWSER_TESTS"] = "1" if application_browser else "0"
         test_environment["ASSEMBLEAI_REGISTRY_BROWSER_TESTS"] = "1" if registry_browser else "0"
+        test_environment["ASSEMBLEAI_IDENTITY_BROWSER_TESTS"] = "1" if identity_browser else "0"
+        test_environment["ASSEMBLEAI_IDENTITY_ONLY"] = "1" if args.identity_only else "0"
         test_environment["ASSEMBLEAI_MODEL_APPLICATION_TESTS"] = "1" if model_application else "0"
         test_environment["ASSEMBLEAI_REAL_MODEL_TESTS"] = "1" if real_model else "0"
         test_environment["ASSEMBLEAI_CHATBI_BROWSER_TESTS"] = "1" if chatbi_browser else "0"
@@ -320,12 +334,13 @@ def main() -> int:
             test_environment["ASSEMBLEAI_PYTHON"] = str(knowledge_python)
         if application_browser or model_application or chatbi_browser:
             test_environment["ASSEMBLEAI_PYTHON"] = str(application_python)
-        if portal_browser or application_browser or registry_browser or chatbi_browser or knowledge_browser:
+        if portal_browser or application_browser or registry_browser or identity_browser or chatbi_browser or knowledge_browser:
             test_environment["ASSEMBLEAI_NODE"] = str(node)
         print(f"Starting local interactive ChatBI; readiness: {run_dir / 'demo-ready.json'}" if args.interactive_demo else
               "Running isolated knowledge contracts with real pgvector and explicitly selected native services..." if knowledge else
               "Running focused ChatBI contracts against the verified isolated PostgreSQL instance..." if args.chatbi_only else
-              "Running real PostgreSQL authorization, session, registry, gateway, model, read-only connector and authorized-catalog contracts...", flush=True)
+              "Running focused identity administration, bootstrap, requested browser pages and readiness contracts..." if args.identity_only else
+              "Running real PostgreSQL identity administration/bootstrap, authorization, session, registry, gateway, model, connector and catalog contracts...", flush=True)
         tested = execute([dotnet, str(smoke), "--postgres-integration"], test_environment,
                          artifact_dir / "integration.log", timeout=14700 if args.interactive_demo else 1500 if knowledge_real_model else 1200 if chatbi_real_model or knowledge_browser else 900 if real_model or chatbi_browser else 600, sensitive=secrets_to_hide)
         for line in tested.stdout.splitlines():
@@ -382,6 +397,8 @@ def main() -> int:
                 "portalBrowserRequested": portal_browser,
                 "applicationBrowserRequested": application_browser,
                 "registryBrowserRequested": registry_browser,
+                "identityBrowserRequested": identity_browser,
+                "identityOnly": args.identity_only,
                 "modelApplicationRequested": model_application,
                 "realModelRequested": real_model,
                 "chatbiBrowserRequested": chatbi_browser,
@@ -390,7 +407,7 @@ def main() -> int:
                 "knowledgeBrowserRequested": knowledge_browser,
                 "knowledgeRealModelRequested": knowledge_real_model,
                 "knowledgeIndexOnly": args.knowledge_index_only,
-                "scope": "interactive local demo with synthetic data and fixed example plans; not acceptance" if args.interactive_demo else "knowledge indexing and ACL with real pgvector, plus native services/browser when requested" if knowledge else "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
+                "scope": "interactive local demo with synthetic data and fixed example plans; not acceptance" if args.interactive_demo else "knowledge indexing and ACL with real pgvector, plus native services/browser when requested" if knowledge else "core migrations, instance safety and ChatBI chain only; vector absent" if args.chatbi_only else "core migrations, identity bootstrap, administration, requested browser pages and readiness only; broader platform contracts not run" if args.identity_only else "core migrations, identity administration and bootstrap, authorization, protected tickets, registry, runtime leases, production gateway HTTP chain, tenant model configuration and call history, read-only data connector HTTP chain and audit, authorized catalog; vector absent"}, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:
         print("Local demo stopped; isolated cluster and temporary credentials removed." if args.interactive_demo else

@@ -10,3 +10,4 @@
 \ir 0009_connector_call_source.sql
 \ir 0010_knowledge.sql
 \ir 0011_knowledge_index.sql
+\ir 0012_identity_management.sql

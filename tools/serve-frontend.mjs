@@ -38,6 +38,8 @@ export function previewServer({ portalRoot, sampleRoot, chatbiRoot, knowledgeRoo
       if (!extname(relative) && (pathname === '/' || pathname.startsWith('/workspace/')
         || /^\/applications\/[a-z][a-z0-9-]{0,63}(?:\/run)?\/?$/.test(pathname)
         || /^\/manage\/applications(?:\/[a-z][a-z0-9-]{0,63})?\/?$/.test(pathname)
+        || /^\/manage\/(?:users|tenants|members|organizations|roles)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\/?$/i.test(pathname)
+        || /^\/manage\/tenants\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(?:members|organizations|roles)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\/?$/i.test(pathname)
         || pathname === '/reference-ui' || pathname.startsWith('/reference-ui/'))) filename = resolve(root, 'index.html');
     }
     try {

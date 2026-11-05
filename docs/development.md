@@ -323,3 +323,21 @@ FastAPI 一问只生成一次计划，拒绝任意 SQL、额外字段、越权�
 最终 `tools/verify-postgres.py --knowledge-real-model` 返回0：`.artifacts/postgres/run-e868293794b24e83ab32619f4a01d81c/result.json` 的 passed / cleanupComplete / knowledgeRealModelRequested 均 true。该轮再次通过本地完整链路与浏览器，然后使用已配置 **DeepSeek deepseek-flash** 每题一次验证三题：轴承过热先停机（DOCX）、切削前冷却液压力0.35 MPa（PDF）、资料未包含的火星班车票价明确拒答。两种原文引用、全部授权上下文和同一网关调用的审计关联均核对。凭据仅由平台环境读取，不传给业务 / 解析服务或浏览器，不记录问题、模型正文或密钥。
 
 T12完成，下一任务T13管理与审计。本轮为普通原生进程，无Docker；效果结论只覆盖合成题集，不等同于真实制造业务准确率或生产部署。未重跑独立Keycloak产品验收；联合登录使用既有真实OidcFixture协议交换。大规模向量性能、组织管理体验、历史治理、多实例回调与完整生产交付继续归后续任务。原文提取状态extracted不自动回填索引，启用后需重新上传；缓存 / 编译包保留情况见原生依赖说明。
+
+## 2026-11-05 T13 第一批：身份管理功能与页面
+
+按用户确认的平台优先方向，保留 ChatBI 与知识库两个用例，不新增业务应用。新增用户、租户、成员、组织、角色权限五类正式管理页，提供列表 / 搜索 / 深链详情、创建 / 编辑 / 启停、成员角色分配、精确资源与平面组织范围及最近操作。全局管理无需业务成员关系；页头显示实际管理租户，业务租户选择保持独立。新增授权默认无范围，须明确选择组织或整个租户；双主题、窄屏横滚导航与键盘可达均检查。详见[身份管理合同](architecture/identity-management.md)。
+
+迁移12增加显式平台 / 租户身份管理员、独立修订号与审计。既有developer / reviewer与业务角色不取得身份管理权；全局身份管理员也不自动获得业务数据。严格请求类型、CSRF、真实BFF、锁后会话复核、当前授权及CAS保护写入；最后管理员不可停用，OIDC绑定不可改绑。变更 / 授权版本 / 审计同事务，失败不留下成功审计。正式初始化入口使用Node内置模块和原生psql，安全传入中文 / 引号，精确重跑不覆盖身份，不种默认账号。
+
+管理集合上限500，完整响应上限4MiB。新增在事务内检查数量，所有新增与编辑还检查含Unicode转义、UUID关系及审计预留的保守响应预算；超限返回明确容量错误并回滚。页面对容量拒绝保留可编辑输入，用户可缩减后手动保存；修订冲突保留输入并要求重新读取。保存成功但回读失败明确提示已提交，不自动重试。独立复核发现并修正类型自动转换、数量与聚合预算问题；锁等待竞态、深链、checkbox及Windows参数编码根因记录在SPEC B82–B88。
+
+`tools/verify.ps1 -Scope All`返回0，日志`.artifacts/t13-all.log`：53项Node、201项原有Python、109项知识库Python、56项Playwright、Vue类型检查、四个前端构建、.NET完整HTTP及真实FastAPI→YARP通过；真实本机ONNX测试显式设置模型目录，没有跳过。随后聚合预算修正后的完整Node再验**56项通过**（`.artifacts/t13-final-node.log`），类型检查 / 门户构建和身份管理最终**12项浏览器专项**通过。56项全套浏览器与新增后12项专项是分别执行，不声称一次57项全跑；后续改动限定身份管理预算与容量错误交互，既有两个用例代码未修改。
+
+原生专项`--identity-only --identity-browser`最终返回0：`.artifacts/postgres/run-90a91b706be64acb80015c0fa2e1766c/result.json`的passed / cleanupComplete / identityBrowserRequested / identityOnly均true。真实OIDC / BFF / PostgreSQL / Chromium覆盖五类管理操作、普通 / 开发审核 / 租户 / 全局角色隔离、CSRF与错误输入、并发CAS、审计故障原子回滚、同会话撤权，以及在pg_locks确认等待后切租户 / 退出均拒写。数量边界和低于单请求64KiB但聚合超4MiB的长授权、Unicode资料及已有角色扩容回滚均有实库红绿；引导执行实际Node / psql，没有替换生产接口或拦截浏览器API。
+
+最终完整`--identity-browser`返回0：`.artifacts/postgres/run-922273e9fab941c1ba3f80992f4c9cb8/result.json`中passed / cleanupComplete / identityBrowserRequested为true，identityOnly为false。该轮使用最终代码和构建产物，包含上述身份 / 数量 / 聚合预算及浏览器验收，同时通过全部既有PG授权、会话、注册、目录、模型、连接器、知识仓储及正式网关链路；迁移1–12重放和缺迁移readiness拒绝均通过。隔离数据库和临时凭据清理完成。
+
+浅 / 暗 / 390px的正式页面截图已目视：`.artifacts/t13-identity-ui/`及真实链路`.artifacts/identity-postgres/f4876e37-4cd5-4ffb-b5e5-5cc2a5339ef2/`；最终完整复验截图在`.artifacts/identity-postgres/3d7dd7b7-43e1-4cbc-8973-466fce30f50f/`。本批完成独立代码复核；数量与响应预算修复后无审查阻塞项。迁移不包含默认身份，现有ChatBI临时体验启动器也不自动授予身份管理员；真实部署需按合同显式初始化。
+
+T13保持进行中，下一批为模型 / 数据连接管理页，再推进统一调用 / 审计 / 异常、任务诊断和D9留存 / 导出。最近50条身份操作记录不等于统一审计已交付。本轮未重跑真实模型问答或独立Keycloak产品验收，未部署生产服务；原生进程开发仍不要求Docker。

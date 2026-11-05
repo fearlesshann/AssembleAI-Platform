@@ -30,6 +30,15 @@ test('V2/V19: release assets, deep links and source isolation', async (t) => {
   assert.match(await (await fetch(`${base}/applications/quality/run`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/manage/applications`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/manage/applications/quality`)).text(), /Portal/);
+  const identityId = '11111111-1111-4111-8111-111111111111';
+  for (const section of ['users', 'tenants', 'members', 'organizations', 'roles']) {
+    assert.match(await (await fetch(`${base}/manage/${section}`)).text(), /Portal/);
+    assert.match(await (await fetch(`${base}/manage/${section}/${identityId}`)).text(), /Portal/);
+  }
+  for (const section of ['members', 'organizations', 'roles']) {
+    assert.match(await (await fetch(`${base}/manage/tenants/${identityId}/${section}/${identityId}`)).text(), /Portal/);
+  }
+  for (const path of ['/manage/users/not-a-uuid', '/manage/unknown', `/manage/tenants/${identityId}/users`, '/manage/users/missing.js']) assert.equal((await fetch(base + path)).status, 404);
   assert.equal((await fetch(`${base}/manage/applications/quality/missing.js`)).status, 404);
   assert.match(await (await fetch(`${base}/reference-ui/`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/apps/sample/0.1.0/details`)).text(), /Sample/);

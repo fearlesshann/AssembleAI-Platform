@@ -12,6 +12,13 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Xml.Linq;
 using AssembleAI.Platform.SmokeTests;
 
+if (args.Contains("--identity-management-tests", StringComparer.Ordinal))
+{
+    IdentityManagementValidationTests.Run();
+    await IdentityManagementHttpTests.RunAsync();
+    return;
+}
+
 if (args.Contains("--knowledge-tests", StringComparer.Ordinal))
 {
     await KnowledgeObjectTests.RunAsync();
@@ -182,6 +189,8 @@ try
     await RegistryManagementHttpTests.RunAsync();
     await RegistryBoundaryTests.RunAsync();
     await CatalogHttpTests.RunAsync();
+    IdentityManagementValidationTests.Run();
+    await IdentityManagementHttpTests.RunAsync();
     await GatewayDeadlineTests.RunAsync();
     await GatewayAdmissionTests.RunAsync();
     await GatewayHttpTests.RunAsync();

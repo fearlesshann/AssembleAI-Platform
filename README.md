@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-平台核心身份、权限、应用注册、门户、网关及公共模型 / 数据能力已建立。正式平台当前主要包含应用中心与应用管理；用户 / 成员、租户 / 组织、角色权限、模型 / 数据源、统一调用 / 审计 / 异常等管理功能与页面仍需补齐。T1–T12按各自任务范围完成，不代表平台管理与生产交付已经完成。
+平台核心身份、权限、应用注册、门户、网关及公共模型 / 数据能力已建立。正式平台已提供应用中心、应用管理，以及T13首批用户、租户、成员、组织、角色权限管理页面；首批支持真实读写、权限隔离、修订冲突保护与操作审计。模型 / 数据源管理页、统一调用 / 审计 / 异常及任务诊断继续推进，T13整体尚未完成；T1–T12按各自任务范围完成，不代表平台管理与生产交付已经完成。
 
 两个AI示范用例已交付：ChatBI支持授权数据查询、结果与依据；企业知识库支持PDF / DOCX / TXT / Markdown摄取、真实MinIO / RabbitMQ / 本机embedding / pgvector链路、问答与原文引用。两者均支持独立 / 门户运行，并通过实际DeepSeek合成题集及隔离 / 撤权验收，结果见[开发记录](docs/development.md)。当前使用本机进程；实际业务效果与生产部署仍待后续验收。
 
@@ -23,6 +23,7 @@
 - [T11 ChatBI 接入、查询链与题集验收](docs/architecture/chatbi.md)
 - [T12 文档摄取、解析与删除边界](docs/architecture/knowledge-ingestion.md)
 - [T12 知识库索引、问答与引用](docs/architecture/knowledge-qa.md)
+- [T13 身份管理、页面与管理员初始化](docs/architecture/identity-management.md)
 - [知识库原生服务与验收](docs/native-knowledge.md)
 - [内部调用身份与权限契约](docs/architecture/t3-internal-calls.md)
 - [原生 Keycloak 验收入口](docs/native-identity.md)
@@ -49,8 +50,8 @@ Vue 3 + TypeScript + Element Plus + Vite + qiankun；ASP.NET Core + YARP；独�
 
 ## 下一里程碑
 
-T13：优先补齐平台管理功能及页面。按用户 / 成员、租户 / 组织、角色权限与管理导航，模型 / 数据连接管理，调用 / 审计 / 异常与任务诊断的顺序逐功能交付；已有应用管理持续回归。T14 / T15继续落实稳定交付、备份恢复和性能 / 可用性验收。完整清单与完成标准见[SPEC C8](SPEC.md#c8-平台功能与页面交付清单)。
+T13首批身份管理已落地，下一批补齐模型 / 数据连接管理，随后统一调用 / 审计 / 异常与任务诊断；已有应用管理与身份管理持续回归。T14 / T15继续落实稳定交付、备份恢复和性能 / 可用性验收。完整清单与完成标准见[SPEC C8](SPEC.md#c8-平台功能与页面交付清单)。
 
-模型网关与数据连接器默认关闭；由部署者声明目标和环境变量凭据引用，再按租户启用并授权，见[模型接入](docs/architecture/model-gateway.md)和[数据接入](docs/architecture/connectors.md)。正式门户需配置身份、数据库和应用授权，见[T6本机登录配置](docs/architecture/portal.md)；子应用按[T7接入模板](docs/architecture/application-template.md)配置。管理工作区入口 `/manage/applications`，旧演示模板保留在 `/reference-ui/`。Docker是可选部署方式，开发使用本机进程。
+模型网关与数据连接器默认关闭；由部署者声明目标和环境变量凭据引用，再按租户启用并授权，见[模型接入](docs/architecture/model-gateway.md)和[数据接入](docs/architecture/connectors.md)。正式门户需配置身份、数据库和应用授权，见[T6本机登录配置](docs/architecture/portal.md)；子应用按[T7接入模板](docs/architecture/application-template.md)配置。应用管理入口 `/manage/applications`；身份管理入口 `/manage/users`、`/manage/tenants`、`/manage/members`、`/manage/organizations`、`/manage/roles`，导航按实际管理权展示。先应用迁移12，再按[身份管理合同](docs/architecture/identity-management.md#初始化)显式初始化首个管理员；普通登录和原有开发 / 审核角色不自动取得管理权。旧演示模板保留在 `/reference-ui/`。Docker是可选部署方式，开发使用本机进程。
 
 `references/ui-v1` 中的模拟登录、模拟数据和占位测试不属于正式平台实现。该目录保留来源仓库的 LICENSE；源码未改写。

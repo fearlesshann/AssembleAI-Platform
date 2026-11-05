@@ -2,7 +2,9 @@
 
 Target: .NET 10. SDK and dependencies are pinned by the root global.json / Directory.Packages.props and project lockfiles.
 
-Identity / authorization and T4 application registry APIs are implemented. The registry includes immutable releases, independent review, tenant activation, revision checks and transactional audit. See [registry configuration and contracts](../../docs/architecture/registry.md), [SPEC](../../SPEC.md) and [current verification records](../../docs/development.md). T5 provides a [protected dynamic gateway](../../docs/architecture/gateway.md), durable pinned runs, SSE cancellation, bounded admission and transport audit. T6 adds the [authorized application catalog and portal](../../docs/architecture/portal.md), with real BFF login / tenant selection and PostgreSQL browser acceptance. Complete application SDK integration continues in T7.
+The control plane provides BFF identity and tenant authorization, application lifecycle and gateway, shared model / connector access, and knowledge ingestion / retrieval. T13 adds [identity administration](../../docs/architecture/identity-management.md): explicit platform and tenant administrators, user / tenant / member / organization / role management, revision checks, transactional audit and corresponding portal pages. Identity management authority does not grant business data access. See [SPEC](../../SPEC.md) and [verification records](../../docs/development.md) for completed scope and remaining management / deployment work.
+
+Apply migrations 1–12 before starting this version. The first identity administrator is explicitly provisioned through `tools/bootstrap-identity-admin.mjs`; migrations never seed an account or privilege. Management APIs use `/api/platform/v1/identity-management` with real BFF sessions, CSRF for writes, and current server-side authorization. The [identity contract](../../docs/architecture/identity-management.md) documents initialization, exact routes, capacity and recovery behavior.
 
 From repository root:
 

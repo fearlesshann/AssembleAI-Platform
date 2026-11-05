@@ -53,7 +53,7 @@ public static class PostgresIntegrationTests
                 await using var role = new NpgsqlCommand("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls FROM pg_roles WHERE rolname=current_user", connection);
                 Assert(await role.ExecuteScalarAsync() is false, "The application role must not have elevated cluster privileges.");
                 await using var migrated = new NpgsqlCommand("SELECT array_agg(version ORDER BY version) FROM public.platform_schema_migrations", connection);
-                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) == true,
+                Assert((await migrated.ExecuteScalarAsync() as int[])?.SequenceEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) == true,
                     "All real core migrations must have completed exactly once.");
                 await using var empty = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.platform_users)+(SELECT count(*) FROM public.platform_tenants)+(SELECT count(*) FROM public.platform_bff_sessions)+(SELECT count(*) FROM public.platform_registry_operators)+(SELECT count(*) FROM public.platform_applications)+(SELECT count(*) FROM public.tenant_models)+(SELECT count(*) FROM public.platform_model_configuration_audit)+(SELECT count(*) FROM public.platform_model_calls)", connection);
                 Assert(await empty.ExecuteScalarAsync() is 0L, "Core migrations must not seed accounts, tenants, sessions or model configuration/history.");
@@ -61,6 +61,8 @@ public static class PostgresIntegrationTests
                 Assert(await emptyConnectors.ExecuteScalarAsync() is 0L, "Connector migrations must not seed configuration or audit.");
                 await using var emptyKnowledge = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.knowledge_documents)+(SELECT count(*) FROM public.knowledge_jobs)+(SELECT count(*) FROM public.knowledge_chunks)+(SELECT count(*) FROM public.knowledge_embeddings)+(SELECT count(*) FROM public.platform_knowledge_searches)+(SELECT count(*) FROM public.platform_knowledge_audit)", connection);
                 Assert(await emptyKnowledge.ExecuteScalarAsync() is 0L, "Knowledge migration must not seed documents, jobs, chunks or audit.");
+                await using var emptyIdentity = new NpgsqlCommand("SELECT (SELECT count(*) FROM public.platform_identity_administrators)+(SELECT count(*) FROM public.tenant_identity_administrators)+(SELECT count(*) FROM public.platform_identity_audit)", connection);
+                Assert(await emptyIdentity.ExecuteScalarAsync() is 0L, "Identity migration must not silently provision administrators or audit.");
                 await using var vector = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='vector')", connection);
                 Assert(await vector.ExecuteScalarAsync() is bool present && present == (Environment.GetEnvironmentVariable("ASSEMBLEAI_KNOWLEDGE_ONLY") == "1"),
                     "The explicitly selected acceptance scope must match vector availability.");
@@ -93,8 +95,30 @@ public static class PostgresIntegrationTests
                     : "PASS: focused ChatBI chain with verified instance marker and complete unseeded migrations; broader platform contracts are a separate run.");
                 return;
             }
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_IDENTITY_ONLY") == "1")
+            {
+                phase = "focused identity administration and bootstrap";
+                await PostgresIdentityManagementTests.RunAsync(connectionString);
+                await PostgresIdentityCapacityTests.RunAsync(connectionString);
+                await PostgresIdentityResponseBudgetTests.RunAsync(connectionString);
+                if (Environment.GetEnvironmentVariable("ASSEMBLEAI_IDENTITY_BROWSER_TESTS") == "1")
+                {
+                    phase = "focused identity administration browser";
+                    await PostgresIdentityManagementBrowserTests.RunAsync(connectionString, runDirectory);
+                }
+                phase = "identity migration readiness boundaries";
+                await VerifyReadiness(connectionString, requireVector: false, "ready");
+                await VerifyMissingKnowledgeMigration(connectionString);
+                await VerifyMissingIdentityMigration(connectionString);
+                Console.WriteLine("PASS: focused identity administration/bootstrap, requested browser pages and readiness; broader platform contracts are a separate run.");
+                return;
+            }
             phase = "authorization store";
             await PostgresAuthorizationTests.RunAsync(connectionString);
+            phase = "identity administration and live authorization";
+            await PostgresIdentityManagementTests.RunAsync(connectionString);
+            await PostgresIdentityCapacityTests.RunAsync(connectionString);
+            await PostgresIdentityResponseBudgetTests.RunAsync(connectionString);
             phase = "session store";
             await PostgresSessionTests.RunAsync(connectionString, runDirectory);
             phase = "login, tenant and downstream trust chain";
@@ -139,10 +163,16 @@ public static class PostgresIntegrationTests
                 phase = "registry lifecycle browser and real gateway";
                 await PostgresRegistryBrowserTests.RunAsync(connectionString, runDirectory);
             }
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_IDENTITY_BROWSER_TESTS") == "1")
+            {
+                phase = "identity administration real browser and PostgreSQL";
+                await PostgresIdentityManagementBrowserTests.RunAsync(connectionString, runDirectory);
+            }
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");
             await VerifyReadiness(connectionString, requireVector: true, "unavailable");
             await VerifyMissingKnowledgeMigration(connectionString);
+            await VerifyMissingIdentityMigration(connectionString);
             Console.WriteLine("PASS: PostgreSQL instance marker, non-superuser role, complete/idempotent unseeded core schema and explicit vector readiness boundary.");
         }
         catch (Exception exception)
@@ -155,6 +185,20 @@ public static class PostgresIntegrationTests
             // fields, inner exceptions, credentials or statement parameter values.
             Console.Error.WriteLine(exception.StackTrace);
             Environment.ExitCode = 1;
+        }
+    }
+
+    private static async Task VerifyMissingIdentityMigration(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var hide = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=-12 WHERE version=12", connection);
+        Assert(await hide.ExecuteNonQueryAsync() == 1, "Identity migration must exist before checking its readiness boundary.");
+        try { await VerifyReadiness(connectionString, requireVector: false, "unavailable"); }
+        finally
+        {
+            await using var restore = new NpgsqlCommand("UPDATE public.platform_schema_migrations SET version=12 WHERE version=-12", connection);
+            Assert(await restore.ExecuteNonQueryAsync() == 1, "The isolated migration ledger must be restored.");
         }
     }
 

@@ -56,8 +56,7 @@ internal sealed class DependencyReadinessCheck(
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
-            "SELECT EXISTS (SELECT 1 FROM public.platform_schema_migrations WHERE version = $1)", connection);
-        command.Parameters.AddWithValue(11);
+            "SELECT count(*) = 12 FROM public.platform_schema_migrations WHERE version BETWEEN 1 AND 12", connection);
         if (await command.ExecuteScalarAsync(cancellationToken) is not true)
             throw new IOException("Platform migration has not been applied.");
 
