@@ -39,6 +39,24 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 try {
+  // A painted static canvas does not prove that the source effects are moving.
+  // Match the example's default on machines whose OS animation setting is off.
+  for (const mode of ['', 'system', 'reduced']) {
+    const context = await browser.newContext({ reducedMotion: 'reduce' });
+    const page = await context.newPage();
+    await page.goto(`${origin}/login${mode ? '?motion=' + mode : ''}`);
+    assert.equal(await page.locator('html').getAttribute('data-motion'), mode ? 'reduced' : 'full');
+    const changed = await page.evaluate(async () => {
+      const canvases = ['#loginWavesCanvas', '#loginEther', '#loginSubmitEffect canvas'].map(selector => document.querySelector(selector));
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      const before = canvases.map(canvas => canvas.toDataURL());
+      for (let i = 0; i < 12; i++) await new Promise(requestAnimationFrame);
+      return canvases.map((canvas, i) => canvas.toDataURL() !== before[i]);
+    });
+    assert.deepEqual(changed, mode ? [false, false, false] : [true, true, true], 'All three login canvases follow the selected motion policy');
+    await context.close();
+    console.log(`PASS login ${mode || 'default full'}: actual canvas frame changes under OS reduced motion`);
+  }
   const selectors = ['.login-screen', '.login-hero', '.login-hero-inner', '.login-brand-mark', '.login-brand-text', '.login-hero-title', '.login-hero-sub', '.login-proof', '.login-shot-deck', '.login-shot.is-front', '.login-card', '.login-card-inner', '.login-form-heading', '.login-form-title', '.login-form-desc', '.login-field', '.login-label', '#loginAccount', '#loginPassword', '.login-row', '.login-check', '#loginRemember', '#loginForgot', '#loginSubmit', '.login-security-note', '#loginThemeToggle'];
   const styles = ['display', 'position', 'backgroundColor', 'color', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'padding', 'gap', 'border', 'borderRadius', 'boxShadow', 'gridTemplateColumns', 'gridTemplateRows'];
   const measure = async page => page.evaluate(({ selectors, styles }) => Object.fromEntries(selectors.map(selector => {
@@ -61,7 +79,7 @@ try {
       await context.route('https://static.linear.app/fonts/**', async route => route.fulfill({ body: await readFile(new URL('InterVariable.woff2', assets)), contentType: 'font/woff2' }));
       const original = await context.newPage(); const actual = await context.newPage();
       const errors = []; actual.on('pageerror', error => errors.push(error.message));
-      await original.goto(`${origin}/reference/index.html`); await actual.goto(`${origin}/login`);
+      await original.goto(`${origin}/reference/index.html?motion=reduced`); await actual.goto(`${origin}/login?motion=reduced`);
       await Promise.all([original.evaluate(() => document.fonts.ready), actual.evaluate(() => document.fonts.ready)]);
       // Business copy may differ. Normalize only those two text nodes in the
       // reference DOM so content wrapping cannot masquerade as a style mismatch.

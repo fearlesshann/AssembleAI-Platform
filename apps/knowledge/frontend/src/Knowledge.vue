@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vReferenceSurface } from '../../../portal/src/components/reference/reference-motion';
 import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
 import '../../../portal/src/reference-tokens.css';
 import '../../../portal/src/reference-source.css';
@@ -213,7 +214,7 @@ onBeforeUnmount(() => { disposed = true; reset(); window.removeEventListener('fo
 </script>
 
 <template>
-  <article class="reference-ui knowledge-app" :data-theme="theme" :data-mode="context.mode" data-testid="knowledge-app">
+  <article v-reference-surface class="reference-ui knowledge-app" :data-theme="theme" :data-mode="context.mode" data-testid="knowledge-app">
     <header class="knowledge-header">
       <div><h1>企业知识库</h1><p>从授权文档中查找答案，回到原文核对依据。</p></div>
       <div class="knowledge-header-actions"><span>{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span><ReferenceButton v-if="context.mode === 'standalone'" type="button" @click="localTheme = theme === 'light' ? 'dark' : 'light'">{{ theme === 'light' ? '切换暗色' : '切换浅色' }}</ReferenceButton></div>

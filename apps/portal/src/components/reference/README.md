@@ -9,9 +9,14 @@
 | ReferenceInput | app.css 1503–1533 的 ui-input |
 | ReferenceButton | app.css 612–663、1699–1721 的 pill-btn/icon-btn/is-primary/is-danger；3049 link-btn |
 | ReferencePagination | index.html 783–812，data-grid__footer/pager/page-size+ui-select--sm+icon-btn；app.css 3075–3130 |
+| reference-wheel.js | tools/sync-reference-wheel.mjs从原inertialWheelScroll.js生成；只替换IIFE导出，不改变算法 |
+| reference-motion.ts | app.js的switchView、content-fade-in和openUserMenu；原CSS负责轨迹 / 时长，Vue指令负责触发；文档共享滚轮控制器按界面根生命周期释放 |
+| useReferenceOverlay | app.js initOverlays；原开关类名、强制布局和220ms退出，Vue Transition只管理DOM保留，native dialog提供模态焦点 |
 
 reference-controls.css直接提取相关原rules，仅增加零特异性作用域，未重新设计样式。reference-runtime.js直接提取两个原控件模块，调整命名空间和选择器作用域，增加Vue卸载清理、禁用守卫、焦点返回及滚轮键盘操作。通过 document 级 Symbol 共享运行时，门户和各微应用的独立 bundle 只注册一次委托监听；卸载清理当前控件拖拽监听、延迟与动画，不持有已销毁DOM。下拉菜单保留原 4px 间距与宽度，定位改为 fixed，避免 table/drawer 的滚动容器裁切；Escape 仅关闭当前控件，防止同时关闭父模态抽屉。
 
 日期与原示例一致以本地分钟为选择精度；接收秒级输入时不静默改写父状态，只有用户真实选择才发布分钟字符串。服务查询仍由调用方转换UTC并校验时间窗。分页未知总数使用cursor模式的当前页 / …，不伪造总条数或可跳转页。
 
 MIT原许可见本目录LICENSE，完整声明也保留在复制运行时头部。
+
+默认动效full与原示例一致；显式`?motion=system`跟随OS偏好，`?motion=reduced`禁用。必须在正常动效下测试真实帧、退出完成后移除和滚轮轨迹，静态样式测试不覆盖这些行为。ReferenceDrawer调用方用`:open`控制，不能用父级`v-if`提前销毁而跳过leave；父页面整体卸载时仍清理模态与计时器。

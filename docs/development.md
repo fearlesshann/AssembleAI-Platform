@@ -403,3 +403,18 @@ JSON导出最多1000条，保留truncated与exportedAt；记录仍逐条按查�
 本轮未调用外部真实模型、未部署生产环境；Keycloak使用隔离H2和BFF开发内存会话，PostgreSQL浏览器使用真实OIDC协议夹具，二者不合并宣称生产HTTPS / PG联合身份验收。全部验收服务、数据库、邮件令牌和临时凭据均按所属运行清理。
 
 最后单独重启4180本机展示预览时，实际浏览器发现测试身份服务的`form-action 'self'`拦截跨回环端口的BFF重定向（B112）；仅允许已校验callback origin后，重新构建0警告 / 0错误、`--bff-tests`全部通过。新预览`run-35b8f17d80a44bd5b0403e1d040bc327`实际浏览器验证原表单账号密码登录、显式初始化管理员、选择租户、10个平台页面、日期面板及退出后401通过，日志`.artifacts/reference-preview-verify.log`，截图`.artifacts/reference-preview/`。没有拦截业务API。此展示进程另外保留最多四小时，使用隔离制造业测试数据与固定3个查询规划；管理员和业务授权在该次临时数据库显式配置，启动器不自动授予正式管理权。
+
+## 2026-11-05 原示例动效与整页滚轮补齐
+
+用户指出仍缺动效和平滑滚动。复查确认上一轮90项测试主要验证静态 / 减少动效及控件状态，不能证明整页运动行为完整：原全局滚轮脚本只在参考路由加载；正式视图 / 刷新未触发原动画类，modal被立即移除，门户和登录还有无条件OS减少动效覆盖。SPEC B114 / V37补充正常动效验收，不再把静态像素相同视作动效已接入。
+
+`sync-reference-wheel.mjs`把原`inertialWheelScroll.js`生成ES模块，仅改变导出边界；速度、阻尼、反向、输入识别及嵌套边界算法保持。门户、管理表格 / 抽屉、两个AI和sample通过共享文档运行时接入，卸载停止RAF并释放最后一个所有者的监听。切页、实际请求完成后的内容淡入、用户菜单按原类名和时序触发；抽屉 / 确认用Vue leave保留220ms退出阶段，父组件改用open状态。无新动效库、无模拟加载等待。登录和门户统一原示例的默认full，显式system跟随系统、reduced禁用；三个登录Canvas恢复原动态判断，Keycloak资源同步。
+
+本轮验证：
+
+- 正常滚轮先失败、修复后与原页面逐帧轨迹比较通过；新增7项浏览器测试覆盖真实鼠标、连续减速、嵌套边界、行 / 页单位、反向、停止、精细输入 / 横向 / 缩放 / 时间轮所有权、系统偏好、切页 / 刷新 / 菜单及弹层实际进出。已有qiankun测试增加独立bundle只响应一次及微应用卸载后主界面继续滚动。最终完整浏览器**97项通过，exit 0**，`.artifacts/reference-motion-frontend.log`。
+- Vue类型检查、四个Vite构建及**66项Node**通过，日志`.artifacts/reference-motion-typecheck.log`、`reference-motion-build-{portal,sample,chatbi,knowledge}.log`、`reference-motion-node.log`。保留既有Vite体积提示。未改后端合同，本轮未重复无关后端 / 模型验收。
+- 登录新增正常 / system / reduced连续帧验证，OS减少动效下默认三个Canvas均持续变化，明确减少动效则静止；六组原版浅暗 / 视口 / 几何 / 焦点 / 像素及真实表单POST验证仍通过，`.artifacts/reference-motion-login.log`。资源同步不等同本轮重新运行完整Keycloak产品验收。
+- 旧4180预览已按所属run清理，新`run-2c6e371c77644140bc5f8fc78c6195f7`使用最新构建，真实BFF / 测试OIDC / PostgreSQL登录、10个平台页面、日期面板和退出401通过。另在OS减少动效环境实测登录Canvas、切页、真实数据源抽屉入场 / 退出与鼠标连续滚动，无业务API拦截、无浏览器运行错误。日志`.artifacts/reference-motion-preview-bootstrap.log`、`reference-motion-preview.log`；截图`.artifacts/reference-motion-preview/`已目视检查。脚本同步误判记B116，未改变产品并发保护。
+
+预览保留至2026-11-05约21:25（上海时间），仍为隔离制造业测试数据与固定查询规划；测试账号demo / AssembleAI-2026!，管理员与业务授权只在该临时实例显式配置。原始快照不改，T13继续进行中，未增加AI用例或部署生产。

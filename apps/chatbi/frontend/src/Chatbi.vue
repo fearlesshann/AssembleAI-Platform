@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vReferenceSurface } from '../../../portal/src/components/reference/reference-motion';
 import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
 import '../../../portal/src/reference-tokens.css';
 import '../../../portal/src/reference-source.css';
@@ -98,7 +99,7 @@ onBeforeUnmount(() => { disposed = true; catalogGeneration++; catalogController?
 </script>
 
 <template>
-  <article class="reference-ui chatbi-app" :data-theme="theme" :data-mode="context.mode" data-testid="chatbi-app">
+  <article v-reference-surface class="reference-ui chatbi-app" :data-theme="theme" :data-mode="context.mode" data-testid="chatbi-app">
     <header class="chatbi-header">
       <div><h1>ChatBI <span>数据分析</span></h1><p>用自然语言查询数据，并查看每次结果的查询依据。</p></div>
       <div class="chatbi-header-actions"><span class="chatbi-mode">{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span><ReferenceButton v-if="context.mode === 'standalone'" type="button" @click="localTheme = theme === 'light' ? 'dark' : 'light'">{{ theme === 'light' ? '切换暗色' : '切换浅色' }}</ReferenceButton></div>

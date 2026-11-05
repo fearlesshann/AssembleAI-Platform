@@ -24,6 +24,7 @@
 | 分页 | data-grid__pager及每页条数原下拉 | ReferencePagination；接真实有界集合或服务端游标，不能假翻页 |
 | 抽屉 / 确认 | overlay / drawer.subwindow / subwindow-foot与dialog | ReferenceDrawer / ReferenceConfirm；native dialog仅提供焦点限制，视觉仍原结构 |
 | AI用例控件 | 同上表格 / 输入 / 下拉 / 按钮及composer | ChatBI、知识库共享组件；业务流程与API保持原合同 |
+| 全局滚轮 / 动效 | inertialWheelScroll.js、app.js switchView / initOverlays / content-fade-in / openUserMenu | sync-reference-wheel.mjs原算法转ES模块；reference-motion.ts共享文档监听、Vue指令；useReferenceOverlay保留220ms退出后移除 |
 
 原快照不可修改。生成文件应可从源码重复生成；适配仅限Vue生命周期、作用域、语义标签、真实数据和必要响应式布局，不能改源组件的圆角、尺寸、颜色、字体或展开层外观。新增组件须先检索原HTML / CSS / JS并记录无对应实现的理由。
 
@@ -96,7 +97,9 @@
 
 选中通过背景差异表达，无侧边品牌色条。hover由对应nav/control/table token表达。焦点保持可辨识，错误/停用/空态/加载使用同一字体与层次；不得只校准默认截图。
 
-示例motion-instant100ms、fast160ms、正常220ms，`ease-out-soft:cubic-bezier(.2,.8,.2,1)`；复用对应组件的缩放、弹层和滚轮交互，登录保留原背景效果，遵循prefers-reduced-motion。不能以旧的100–160ms约束为由删掉用户明确要求的既有交互；不另加装饰。
+示例motion-instant100ms、fast160ms、正常220ms，`ease-out-soft:cubic-bezier(.2,.8,.2,1)`；复用对应组件的缩放、弹层和滚轮交互，登录保留原背景效果。默认与示例相同为full；`?motion=system`跟随系统减少动效偏好，`?motion=reduced`关闭动效。不能用无条件的OS媒体规则覆盖full，也不能以旧的100–160ms约束删掉原交互。
+
+整页滚轮直接生成并调用原算法：粗滚轮阈值40px、impulse .0025、最大速度1.8px/ms、指数阻尼150ms、停止速度.015；保留行 / 页单位、反向输入与边界规则。最近可滚动容器接收滚动，contain边界不穿透；精细触控板、横向滚动、Ctrl缩放和日期时间列仍由各自处理。门户、表格、抽屉与独立 / 嵌入用例共用一个文档级控制器，最后一个界面卸载销毁监听和RAF。抽屉保留Vue leave阶段，不能在移除is-open的同时卸载DOM。刷新只绑定实际请求完成，不复制示例的700ms假加载延迟。
 
 ## 历史偏差与本次纠正
 
@@ -109,3 +112,5 @@
 `tests/frontend/e2e/reference-design.spec.ts`与`reference-controls.spec.ts`运行原示例和正式页面，对照完整组件实际computed styles、几何及交互；覆盖light / dark、选中 / hover / 焦点、展开下拉、日期时间面板、抽屉与确认框，保存双方截图。`reference-lifecycle.spec.ts`验证真实qiankun卸载重挂与独立发布字体。`tools/verify-reference-login.mjs`对照原登录整页在两主题与1440 / 1366 / 390视口的26个区域、焦点、复选框及真实表单POST；固定测试噪声种子后，三个canvas必须已绘制且像素逐字节一致。Keycloak原生验收独立验证实际身份服务。协议夹具不代替Keycloak。正式字体本地自托管或内联至独立发布物，参考远程字体仅在测试内映射同版本本地文件。
 
 最终截图仍需目视检查层次、密度与窄屏；CSS变量数值相同不能代替真实布局验收。旧[复用评估](ui-reuse-audit.md)记载的是2026-11-02按当时SPEC重新映射的决定；本次用户更严格的要求以此合同及更新后的SPEC为准。
+
+用户再次指出动效 / 平滑滚动遗漏后，补`reference-motion.spec.ts`正常动效验收：实际鼠标滚轮逐帧轨迹与原版比较，滚动边界 / 单位 / 反向 / 取消 / 输入所有权，view-enter、content-in、菜单与drawer / dialog实际进出过渡。`reference-lifecycle.spec.ts`同时验证qiankun独立bundle只响应一次、卸载后主应用继续滚动。登录验证连续帧变化和减少动效时静止，已有静态像素对照不能证明动画在运行。

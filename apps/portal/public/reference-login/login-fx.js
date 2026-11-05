@@ -1,5 +1,5 @@
 /* Preserved drawing implementation from references/ui-v1/app.js login FX and specular rim.
-   Only DOM scoping, reduced-motion detection, and mount/unmount ownership are adapted. */
+   Only DOM scoping and mount/unmount ownership are adapted. */
 export function mountReferenceLoginFx(root) {
   const cleanups = [];
   const shared = {};
@@ -93,7 +93,7 @@ export function mountReferenceLoginFx(root) {
     var noise = new Noise(Math.random());
 
     function motionOn() {
-      return document.documentElement.dataset.motion !== "reduced" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      return document.documentElement.dataset.motion !== "reduced";
     }
     function isLight() {
       return document.documentElement.getAttribute("data-theme") === "light";
@@ -449,7 +449,7 @@ export function mountReferenceLoginFx(root) {
     var BASE = [1, 1, 1]; // neutral specular rim
 
     function motionOn() {
-      return document.documentElement.dataset.motion !== "reduced" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      return document.documentElement.dataset.motion !== "reduced";
     }
 
     function resize() {

@@ -10,3 +10,9 @@
 涉及apps/portal/src、两个AI前端、deploy/keycloak主题、OIDC测试夹具和相应浏览器用例。回归命令：tools/verify.ps1 -Scope All、tools/verify-reference-login.mjs、tools/verify-keycloak.py、tools/verify-postgres.py管理浏览器专项。SPEC B100记录此前误判，B101记录退出后SSO自动重建。
 
 验收只报告本轮实际结果；旧token对照通过不当作本次完整复用通过。
+
+## 用户补充：动效与滚轮遗漏
+
+V19 / V25 / V36 / V37，接口I.portal及现有管理读写保持。根因：原全局滚轮脚本只在参考页加载；正式视图未触发is-enter / content-fade-in；modal立即show/close且父级v-if提前移除；OS规则无条件关闭门户与登录动画。先用真实滚轮和正常动效测试复现，再从原脚本生成模块、接Vue生命周期；不增加动效库、不修改原快照、不增加假等待。
+
+涉及门户和四个管理Workspace、两个AI及sample根、reference共享动效 / overlay、登录资源与Keycloak同源资源。验收vue-tsc、四个Vite构建、完整Playwright、原登录像素 / 连续帧、真实4180预览；微应用卸载重挂后主页面滚动仍可用，日期轮 / 精细触控板 / Ctrl缩放不被抢占。SPEC B114记录此前静态验收漏项；T13剩余功能状态不变。

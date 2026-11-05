@@ -15,19 +15,25 @@ async function bundle(contents: string, globalName: string) {
 }
 
 test('V19/V37: a qiankun parcel can install, unmount and remount the shared original controls', async ({ page }) => {
-  const parcel = await bundle(`import {createApp,h,ref} from 'vue';
+  const parcel = await bundle(`import {createApp,h,ref,withDirectives} from 'vue';
+    import {vReferenceSurface} from './apps/portal/src/components/reference/reference-motion';
     import Select from './apps/portal/src/components/reference/ReferenceSelect.vue';
     import DateTime from './apps/portal/src/components/reference/ReferenceDateTime.vue';
     let app;
     export async function bootstrap(){}
-    export async function mount(props){ app=createApp({setup(){const value=ref('alpha'),date=ref('2026-11-02T09:15');return ()=>h('section',{style:'width:180px;margin-left:auto'},[
+    export async function mount(props){ app=createApp({setup(){const value=ref('alpha'),date=ref('2026-11-02T09:15');return ()=>withDirectives(h('section',{style:'width:180px;margin-left:auto'},[
+      h('div',{id:'parcel-scroll',style:'height:80px;overflow:auto'},[h('div',{style:'height:2000px'},'微应用滚动')]),
       h(Select,{label:'微应用选项',modelValue:value.value,options:[{value:'alpha',label:'第一项'},{value:'beta',label:'第二项'}],'onUpdate:modelValue':v=>value.value=v}),
-      h(DateTime,{label:'微应用日期',modelValue:date.value,'onUpdate:modelValue':v=>date.value=v})]);}});app.mount(props.container.querySelector('#control-root'));}
+      h(DateTime,{label:'微应用日期',modelValue:date.value,'onUpdate:modelValue':v=>date.value=v})]),[[vReferenceSurface]]);}});app.mount(props.container.querySelector('#control-root'));}
     export async function unmount(){app.unmount();app=null;}`, 'ReferenceControlParcel');
-  const host = await bundle(`import {loadMicroApp} from 'qiankun';let parcel;
+  const host = await bundle(`import {loadMicroApp} from 'qiankun';
+    import {createApp,h,withDirectives} from 'vue';
+    import {vReferenceSurface} from './apps/portal/src/components/reference/reference-motion';
+    createApp({render:()=>withDirectives(h('div',{},[
+      h('div',{id:'host-scroll',style:'height:80px;overflow:auto'},[h('div',{style:'height:2000px'},'主应用滚动')]),h('div',{id:'host'})]),[[vReferenceSurface]])}).mount('#motion-host');let parcel;
     document.getElementById('mount').onclick=async()=>{parcel=loadMicroApp({name:'source-controls',entry:'/parcel/',container:'#host'},{sandbox:true,singular:false});await parcel.mountPromise;document.getElementById('status').textContent='已挂载';};
     document.getElementById('unmount').onclick=async()=>{await parcel.unmount();document.getElementById('status').textContent='已卸载';};`, 'ReferenceControlHost');
-  await page.route('**/lifecycle-host', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<button id="mount">挂载控件</button><button id="unmount">卸载控件</button><p id="status"></p><div id="host"></div><script src="/host.js"></script>' }));
+  await page.route('**/lifecycle-host', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<button id="mount">挂载控件</button><button id="unmount">卸载控件</button><p id="status"></p><div id="motion-host"></div><script src="/host.js"></script>' }));
   await page.route('**/host.js', route => route.fulfill({ contentType: 'text/javascript', body: host.outputFiles.find(file => file.path.endsWith('.js'))!.text }));
   await page.route('**/parcel/', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<link rel="stylesheet" href="/parcel.css"><div id="control-root"></div><script src="/parcel.js" entry></script>' }));
   await page.route('**/parcel.js', route => route.fulfill({ contentType: 'text/javascript', body: parcel.outputFiles.find(file => file.path.endsWith('.js'))!.text + '\nwindow.ReferenceControlParcel = ReferenceControlParcel;'  }));
@@ -37,6 +43,18 @@ test('V19/V37: a qiankun parcel can install, unmount and remount the shared orig
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.getByRole('button', { name: '挂载控件', exact: true }).click();
     await expect(page.locator('#status')).toHaveText('已挂载');
+    const scroll = async (selector: string) => {
+      expect(await page.locator(selector).evaluate(node => {
+        node.scrollTop = 0;
+        const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 });
+        node.dispatchEvent(event); return event.defaultPrevented;
+      })).toBe(true);
+      await expect.poll(() => page.locator(selector).evaluate(node => node.scrollTop)).toBeGreaterThan(10);
+      // One controller across independent bundles: doubled impulses would exceed this range.
+      await expect(page.locator('html')).not.toHaveAttribute('data-wheel-scrolling');
+      expect(await page.locator(selector).evaluate(node => node.scrollTop)).toBeLessThan(70);
+    };
+    await scroll('#parcel-scroll');
     await chooseReferenceOption(page, '微应用选项', 'beta'); await expectReferenceValue(page, '微应用选项', 'beta');
     await page.getByRole('button', { name: '微应用日期', exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
@@ -45,6 +63,7 @@ test('V19/V37: a qiankun parcel can install, unmount and remount the shared orig
     await expect.poll(async () => { const box = await panel.boundingBox(); return box!.x + box!.width; }).toBeLessThanOrEqual(390);
     await page.getByRole('button', { name: '卸载控件', exact: true }).click();
     await expect(page.locator('#status')).toHaveText('已卸载'); await expect(page.getByRole('combobox')).toHaveCount(0);
+    await scroll('#host-scroll');
   }
 });
 

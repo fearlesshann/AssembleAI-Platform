@@ -68,4 +68,3 @@ body { background: var(--plate-bg); }
   .portal-list-footer { flex-wrap: wrap; }
   .reference-ui .app-row-meta { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 }
-@media(prefers-reduced-motion: reduce) { .reference-ui *, .reference-ui *::before, .reference-ui *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

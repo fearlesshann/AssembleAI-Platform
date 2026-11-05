@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vReferenceSurface } from '../../../portal/src/components/reference/reference-motion';
 import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
 import '../../../portal/src/reference-tokens.css';
 import '../../../portal/src/reference-source.css';
@@ -61,7 +62,7 @@ onBeforeUnmount(() => { disposed = true; stop(); window.removeEventListener('ass
 </script>
 
 <template>
-  <article class="reference-ui sample-app" :data-theme="context.theme" data-testid="sample-app">
+  <article v-reference-surface class="reference-ui sample-app" :data-theme="context.theme" data-testid="sample-app">
     <header class="sample-header"><span class="sample-icon" aria-hidden="true">S</span><div><h2>应用已就绪</h2><p>这是用于验证平台接入能力的样例，不连接业务数据。</p></div><span class="sample-mode">{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span></header>
     <dl class="sample-details"><div><dt>应用</dt><dd>{{ context.appId }}</dd></div><div><dt>发布版本</dt><dd>{{ releaseVersion }}</dd></div><div><dt>外观</dt><dd>{{ context.theme === 'dark' ? '暗色' : '浅色' }}</dd></div></dl>
     <StandaloneAccess v-if="context.mode === 'standalone'" @connection="standalone = $event" />
