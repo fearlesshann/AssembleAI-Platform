@@ -6,6 +6,8 @@ The control plane provides BFF identity and tenant authorization, application li
 
 Apply migrations 1–12 before starting this version. The first identity administrator is explicitly provisioned through `tools/bootstrap-identity-admin.mjs`; migrations never seed an account or privilege. Management APIs use `/api/platform/v1/identity-management` with real BFF sessions, CSRF for writes, and current server-side authorization. The [identity contract](../../docs/architecture/identity-management.md) documents initialization, exact routes, capacity and recovery behavior.
 
+The portal also provides [model and data-source management](../../docs/architecture/resource-management.md) at `/manage/models` and `/manage/data-sources`. It uses the existing tenant model / connector APIs, with independent management and invocation/test permissions, deployment-limit metadata, revisioned writes, call history and cancellable verification. Configuration transactions recheck live authority after lock acquisition and again after audit insertion; rejection rolls back all writes. Providers, physical datasets and credentials remain deployment controlled. This batch needs no migration beyond 1–12.
+
 From repository root:
 
 ```powershell

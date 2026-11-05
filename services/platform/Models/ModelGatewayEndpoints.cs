@@ -66,6 +66,7 @@ public static class ModelGatewayEndpoints
                 return Problem(403, "model_access_denied");
             return result;
         }
+        catch (ModelConfigurationAccessDeniedException) { return Problem(403, "model_access_denied"); }
         catch (Exception error) when (Unavailable(error))
         { return Problem(503, "models_unavailable"); }
         catch (OperationCanceledException) when (!disconnected.IsCancellationRequested)
@@ -96,7 +97,9 @@ public static class ModelGatewayEndpoints
             var configuration = await store.ReadConfigurationAsync(tenantId, id, context.RequestAborted);
             items.Add(new { modelId = id, model.DisplayName, enabled = model.Enabled && configuration?.Enabled == true,
                 maximumOutputTokens = Math.Min(model.MaximumOutputTokens, configuration?.MaxOutputTokens ?? model.MaximumOutputTokens),
-                canManage = Allows(access, "model:manage", tenantId, id) });
+                canManage = Allows(access, "model:manage", tenantId, id),
+                canInvoke = Allows(access, "model:invoke", tenantId, id), deploymentEnabled = model.Enabled,
+                deploymentMaximumOutputTokens = model.MaximumOutputTokens, callTimeoutSeconds = catalog.Options.CallSeconds });
         }
         var fresh = await Access(context, tenantId, authorization);
         if (fresh is null || fresh.UserId != access.UserId || fresh.AuthorizationVersion != access.AuthorizationVersion)
@@ -110,7 +113,7 @@ public static class ModelGatewayEndpoints
         if (catalog.Find(modelId) is null) return Problem(404, "model_not_found");
         var value = await store.ReadConfigurationAsync(tenantId, modelId, context.RequestAborted);
         if (!Allows(await Access(context, tenantId, authorization), "model:manage", tenantId, modelId)) return Problem(403, "model_access_denied");
-        return Results.Ok(value);
+        return Results.Text(JsonSerializer.Serialize(value, new JsonSerializerOptions(JsonSerializerDefaults.Web)), "application/json");
     }
     private static async Task<IResult> SaveConfiguration(Guid tenantId, string modelId, HttpContext context,
         ModelGatewayCatalog catalog, IAuthorizationStore authorization, IModelStore store, IAntiforgery antiforgery, BffOptions settings)
@@ -126,13 +129,18 @@ public static class ModelGatewayEndpoints
             || !body.TryGetProperty("enabled", out var enabled) || enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
             || !body.TryGetProperty("maxOutputTokens", out var max) || max.ValueKind != JsonValueKind.Number || !max.TryGetInt32(out var limit)
             || limit < 1 || limit > model.MaximumOutputTokens || !body.TryGetProperty("expectedRevision", out var expected)
-            || expected.ValueKind != JsonValueKind.Number || !expected.TryGetInt64(out var revision) || revision < 0)
+            || expected.ValueKind != JsonValueKind.Number || !expected.TryGetInt64(out var revision) || revision is < 0 or > 9007199254740990L)
             return Problem(400, "invalid_model_request");
         var access = await Access(context, tenantId, authorization);
         if (!Allows(access, "model:manage", tenantId, modelId) || !await Session(context).CheckAsync(context.RequestAborted))
             return Problem(403, "model_access_denied");
         var result = await store.SaveConfigurationAsync(tenantId, modelId, enabled.GetBoolean(), limit, revision,
-            access!.UserId, Guid.NewGuid().ToString("N"), context.RequestAborted);
+            access!.UserId, Guid.NewGuid().ToString("N"), context.RequestAborted, async token =>
+            {
+                var fresh = await authorization.ReadAccessAsync(Session(context).Subject, tenantId, token);
+                return fresh is not null && fresh.UserId == access.UserId && fresh.AuthorizationVersion == access.AuthorizationVersion
+                    && Allows(fresh, "model:manage", tenantId, modelId) && await Session(context).CheckAsync(token);
+            });
         return result is null ? Problem(409, "model_configuration_conflict") : Results.Ok(result);
     }
     private static async Task<IResult> Calls(Guid tenantId, string modelId, HttpContext context,

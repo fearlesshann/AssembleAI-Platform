@@ -60,6 +60,7 @@ public static class ConnectorEndpoints
             if (!await session.CheckAsync(budget.Token)) return Problem(403,"connector_access_denied");
             return result;
         }
+        catch (ConnectorConfigurationAccessDeniedException) { return Problem(403,"connector_access_denied"); }
         catch (Exception error) when (error is ConnectorUnavailableException or AuthorizationStoreUnavailableException or BffSessionStoreException)
         { return Problem(503,"connectors_unavailable"); }
         catch (OperationCanceledException) when (!disconnected.IsCancellationRequested)
@@ -89,7 +90,11 @@ public static class ConnectorEndpoints
                     columns=pair.Value.Columns.Select(c=>new {name=c.Key,type=c.Value.Type}).ToArray()}).ToArray();
             if (!manage&&!ConnectorAuthorization.CanTest(access,id)&&datasets.Length==0) continue;
             var configuration=await store.ReadConfigurationAsync(tenantId,id,context.RequestAborted);
-            items.Add(new {sourceId=id,source.DisplayName,enabled=source.Enabled&&configuration?.Enabled==true,canManage=manage,datasets});
+            items.Add(new {sourceId=id,source.DisplayName,enabled=source.Enabled&&configuration?.Enabled==true,canManage=manage,
+                canTest=ConnectorAuthorization.CanTest(access,id),deploymentEnabled=source.Enabled,
+                maximumRows=Math.Min(source.MaximumRows,configuration?.MaxRows??source.MaximumRows),
+                timeoutSeconds=Math.Min(source.TimeoutSeconds,configuration?.TimeoutSeconds??source.TimeoutSeconds),
+                deploymentMaximumRows=source.MaximumRows,deploymentTimeoutSeconds=source.TimeoutSeconds,datasets});
         }
         if (!Same(await Access(context,tenantId,authorization),access)) return Problem(403,"connector_access_denied");
         return Results.Ok(new {items});
@@ -119,12 +124,16 @@ public static class ConnectorEndpoints
             || !Integer(body,"maxRows",1,source.MaximumRows,out var maxRows)
             || !Integer(body,"timeoutSeconds",1,source.TimeoutSeconds,out var timeout)
             || !body.TryGetProperty("expectedRevision",out var revision)||revision.ValueKind!=JsonValueKind.Number
-            || !revision.TryGetInt64(out var expected)||expected is <0 or long.MaxValue) return Problem(400,"invalid_connector_request");
+            || !revision.TryGetInt64(out var expected)||expected is <0 or >9007199254740990L) return Problem(400,"invalid_connector_request");
         var fresh=await Access(context,tenantId,authorization);
         if (!Same(fresh,access)||!Manage(fresh,sourceId)||!await Session(context).CheckAsync(context.RequestAborted))
             return Problem(403,"connector_access_denied");
         var configuration=await store.SaveConfigurationAsync(tenantId,sourceId,enabled.GetBoolean(),maxRows,timeout,expected,
-            access!.UserId,Guid.NewGuid().ToString("N"),context.RequestAborted);
+            access!.UserId,Guid.NewGuid().ToString("N"),context.RequestAborted,async token =>
+            {
+                var current=await authorization.ReadAccessAsync(Session(context).Subject,tenantId,token);
+                return Same(current,access)&&Manage(current,sourceId)&&await Session(context).CheckAsync(token);
+            });
         return configuration is null ? Problem(409,"connector_configuration_conflict") : Results.Ok(new {configuration});
     }
     private static async Task<IResult> Calls(Guid tenantId,string sourceId,HttpContext context,IAuthorizationStore authorization,IConnectorStore store)

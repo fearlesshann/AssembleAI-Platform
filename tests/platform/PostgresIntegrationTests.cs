@@ -95,6 +95,15 @@ public static class PostgresIntegrationTests
                     : "PASS: focused ChatBI chain with verified instance marker and complete unseeded migrations; broader platform contracts are a separate run.");
                 return;
             }
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_RESOURCE_ONLY") == "1")
+            {
+                Assert(Environment.GetEnvironmentVariable("ASSEMBLEAI_RESOURCE_BROWSER_TESTS") == "1", "Focused resource acceptance requires browser verification.");
+                phase = "focused model/data-source management browser";
+                await PostgresResourceBrowserTests.RunAsync(connectionString, runDirectory);
+                await VerifyReadiness(connectionString, requireVector: false, "ready");
+                Console.WriteLine("PASS: focused resource management browser with real OIDC/BFF/PG and local model/source protocols; broader platform contracts are a separate run.");
+                return;
+            }
             if (Environment.GetEnvironmentVariable("ASSEMBLEAI_IDENTITY_ONLY") == "1")
             {
                 phase = "focused identity administration and bootstrap";
@@ -167,6 +176,11 @@ public static class PostgresIntegrationTests
             {
                 phase = "identity administration real browser and PostgreSQL";
                 await PostgresIdentityManagementBrowserTests.RunAsync(connectionString, runDirectory);
+            }
+            if (Environment.GetEnvironmentVariable("ASSEMBLEAI_RESOURCE_BROWSER_TESTS") == "1")
+            {
+                phase = "resource management real browser and PostgreSQL";
+                await PostgresResourceBrowserTests.RunAsync(connectionString, runDirectory);
             }
             phase = "readiness boundaries";
             await VerifyReadiness(connectionString, requireVector: false, "ready");

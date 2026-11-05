@@ -17,12 +17,35 @@ public sealed class PostgresModelStore(IConfiguration configuration) : IModelSto
         }, token);
 
     public Task<TenantModelConfiguration?> SaveConfigurationAsync(Guid tenantId, string modelId, bool enabled, int maxOutputTokens,
-        long expectedRevision, Guid actorUserId, string requestId, CancellationToken token) =>
+        long expectedRevision, Guid actorUserId, string requestId, CancellationToken token,
+        Func<CancellationToken, Task<bool>>? currentAccess = null) =>
         Run<TenantModelConfiguration?>(async (db, tx, budget) =>
         {
             ValidateIdentity(tenantId, modelId);
-            if (maxOutputTokens <= 0 || expectedRevision is < 0 or long.MaxValue || actorUserId == Guid.Empty || !ValidRequestId(requestId))
+            if (maxOutputTokens <= 0 || expectedRevision is < 0 or > 9007199254740990L || actorUserId == Guid.Empty || !ValidRequestId(requestId))
                 throw new ModelStoreUnavailableException();
+            // Same identity lock order as identity management. Acquire all write locks
+            // before the live BFF/grant check, so a queued save cannot use stale authority.
+            await Write(db, tx, """
+                LOCK TABLE public.platform_users,public.platform_tenants,public.tenant_memberships,
+                    public.tenant_organizations,public.tenant_roles,public.tenant_member_roles,
+                    public.role_permission_grants,public.grant_organizations IN SHARE MODE;
+                LOCK TABLE public.tenant_models IN SHARE ROW EXCLUSIVE MODE;
+                """, budget);
+            // A concurrent SELECT FOR UPDATE holds only ROW SHARE at table level.
+            // Resolve its row wait before checking authority as well.
+            await using (var current = Command(db, tx, "SELECT revision FROM public.tenant_models WHERE tenant_id=$1 AND model_id=$2 FOR UPDATE", tenantId, modelId))
+                await current.ExecuteScalarAsync(budget);
+            // Acquire identity rows before checking the session as well: a new
+            // tenant_models row takes a key-share lock for its tenant FK.
+            await using (var actor = Command(db, tx, """
+                SELECT u.user_id FROM public.platform_users u
+                JOIN public.tenant_memberships member ON member.user_id=u.user_id AND member.tenant_id=$1 AND member.enabled
+                JOIN public.platform_tenants t ON t.tenant_id=member.tenant_id AND t.enabled
+                WHERE u.user_id=$2 AND u.enabled FOR SHARE OF u,member,t
+                """, tenantId, actorUserId))
+                if (await actor.ExecuteScalarAsync(budget) is not Guid) throw new ModelStoreUnavailableException();
+            if (currentAccess is not null && !await currentAccess(budget)) throw new ModelConfigurationAccessDeniedException();
             long revision;
             if (expectedRevision == 0)
             {
@@ -46,6 +69,9 @@ public sealed class PostgresModelStore(IConfiguration configuration) : IModelSto
                 INSERT INTO public.platform_model_configuration_audit(event_id,actor_user_id,tenant_id,model_id,request_id,revision,enabled,max_output_tokens)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8)
                 """, budget, Guid.NewGuid(), actorUserId, tenantId, modelId, requestId, revision, enabled, maxOutputTokens);
+            // Audit insertion can itself wait for a database lock. A session
+            // invalidated during that wait must roll back both writes.
+            if (currentAccess is not null && !await currentAccess(budget)) throw new ModelConfigurationAccessDeniedException();
             return new(tenantId, modelId, enabled, maxOutputTokens, revision);
         }, token);
 

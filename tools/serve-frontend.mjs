@@ -35,7 +35,10 @@ export function previewServer({ portalRoot, sampleRoot, chatbiRoot, knowledgeRoo
       if ((await stat(filename)).isDirectory()) filename = resolve(filename, 'index.html');
     } catch {
       // Only known application routes have an HTML fallback; missing assets are 404.
-      if (!extname(relative) && (pathname === '/' || pathname.startsWith('/workspace/')
+      // Resource identifiers may contain dots. These exact routes remain HTML
+      // even when their ID resembles an extension; nested missing assets do not.
+      const resourceRoute = /^\/manage\/(?:models|data-sources)(?:\/[a-z][a-z0-9._-]{0,63})?\/?$/.test(pathname);
+      if (resourceRoute || !extname(relative) && (pathname === '/' || pathname.startsWith('/workspace/')
         || /^\/applications\/[a-z][a-z0-9-]{0,63}(?:\/run)?\/?$/.test(pathname)
         || /^\/manage\/applications(?:\/[a-z][a-z0-9-]{0,63})?\/?$/.test(pathname)
         || /^\/manage\/(?:users|tenants|members|organizations|roles)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\/?$/i.test(pathname)

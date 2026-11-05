@@ -30,6 +30,12 @@ test('V2/V19: release assets, deep links and source isolation', async (t) => {
   assert.match(await (await fetch(`${base}/applications/quality/run`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/manage/applications`)).text(), /Portal/);
   assert.match(await (await fetch(`${base}/manage/applications/quality`)).text(), /Portal/);
+  for (const section of ['models', 'data-sources']) {
+    for (const suffix of ['', '/', '/fixture', '/fixture.v1_test-2', '/fixture/'])
+      assert.match(await (await fetch(`${base}/manage/${section}${suffix}`)).text(), /Portal/);
+    for (const suffix of ['/Fixture', '/fixture/missing.js', '/_invalid', '/fixture/unknown', '/' + 'a'.repeat(65)])
+      assert.equal((await fetch(`${base}/manage/${section}${suffix}`)).status, 404);
+  }
   const identityId = '11111111-1111-4111-8111-111111111111';
   for (const section of ['users', 'tenants', 'members', 'organizations', 'roles']) {
     assert.match(await (await fetch(`${base}/manage/${section}`)).text(), /Portal/);

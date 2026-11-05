@@ -40,6 +40,17 @@ public static class ConnectorHttpTests
             using (var response = await anonymous.PostAsJsonAsync(path, Query())) Check(response.StatusCode == HttpStatusCode.Unauthorized, "Anonymous queries require real login.");
             using var browser = await Browser.Login(origin);
             await browser.Select(state.Tenant);
+            using (var listing = await browser.Send($"/api/platform/v1/tenants/{state.Tenant}/connectors", null, method: "GET"))
+            {
+                using var json = JsonDocument.Parse(await Expect(listing, 200));
+                var item = json.RootElement.GetProperty("items").EnumerateArray().Single();
+                Check(item.GetProperty("canManage").GetBoolean() && !item.GetProperty("canTest").GetBoolean()
+                    && item.GetProperty("deploymentEnabled").GetBoolean()
+                    && item.GetProperty("maximumRows").GetInt32() == 100
+                    && item.GetProperty("deploymentMaximumRows").GetInt32() >= 100
+                    && item.GetProperty("timeoutSeconds").GetInt32() == state.QueryTimeout,
+                    "Source discovery must expose effective/deployment limits without treating management as test authority.");
+            }
             using (var valid = await browser.Send(path, Query()))
             {
                 var body = await Expect(valid, 200);
@@ -170,9 +181,9 @@ public static class ConnectorHttpTests
             }
             catch { client.Dispose(); throw; }
         }
-        public async Task<HttpResponseMessage> Send(string path, object? body, bool csrf = true)
+        public async Task<HttpResponseMessage> Send(string path, object? body, bool csrf = true, string method = "POST")
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, path);
+            using var request = new HttpRequestMessage(new HttpMethod(method), path);
             request.Headers.Add("Origin", origin);
             if (csrf) request.Headers.Add("X-CSRF-TOKEN", csrfToken);
             if (body is not null) request.Content = body as HttpContent ?? JsonContent.Create(body);
@@ -210,7 +221,7 @@ public static class ConnectorHttpTests
         }
         public Task<TenantConnectorConfiguration?> ReadConfigurationAsync(Guid tenantId, string sourceId, CancellationToken token)
         { token.ThrowIfCancellationRequested(); return Task.FromResult<TenantConnectorConfiguration?>(tenantId == Tenant && sourceId == "manufacturing" ? new(Tenant, sourceId, true, 100, QueryTimeout, 1) : null); }
-        public Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows, int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token) => throw new NotSupportedException();
+        public Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows, int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token, Func<CancellationToken, Task<bool>>? currentAccess = null) => throw new NotSupportedException();
         public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token, AssembleAI.Platform.Models.ModelCallSource? source = null)
         {
             token.ThrowIfCancellationRequested(); if (FailBegin) throw new ConnectorUnavailableException();

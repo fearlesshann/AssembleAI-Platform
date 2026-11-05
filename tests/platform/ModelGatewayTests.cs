@@ -133,9 +133,32 @@ public static class ModelGatewayTests
                 using var browser = await Browser.Login(origin);
                 await browser.Expect("GET", models, 403);
                 await browser.Expect("POST", "/bff/tenant", 200, new { tenantId = state.Tenant });
+                using (var missing = await browser.Send("GET", configuration))
+                    Check(await Expect(missing, 200) == "null", "Unconfigured model management must return explicit JSON null.");
+                using (var listing = await browser.Send("GET", models))
+                {
+                    using var json = JsonDocument.Parse(await Expect(listing, 200));
+                    var item = json.RootElement.GetProperty("items").EnumerateArray().Single();
+                    Check(item.GetProperty("canInvoke").GetBoolean() && item.GetProperty("canManage").GetBoolean()
+                        && item.GetProperty("deploymentEnabled").GetBoolean() && !item.GetProperty("enabled").GetBoolean()
+                        && item.GetProperty("deploymentMaximumOutputTokens").GetInt32() == 128
+                        && item.GetProperty("callTimeoutSeconds").GetInt32() > 0,
+                        "Model management discovery must distinguish permissions, deployment limits and tenant enablement.");
+                }
+                foreach (var revision in new[] { 9007199254740991L, long.MaxValue })
+                    await browser.Expect("PUT", configuration, 400, Config(true, revision));
                 await browser.Expect("POST", chat, 403, Chat()); // No tenant configuration means disabled.
                 await browser.Expect("PUT", configuration, 403, Config(true, 0), csrf: false);
                 await browser.Expect("PUT", configuration, 200, Config(true, 0));
+                state.CanInvoke = false;
+                using (var listing = await browser.Send("GET", models))
+                {
+                    using var json = JsonDocument.Parse(await Expect(listing, 200));
+                    var item = json.RootElement.GetProperty("items").EnumerateArray().Single();
+                    Check(item.GetProperty("canManage").GetBoolean() && !item.GetProperty("canInvoke").GetBoolean(),
+                        "Model management authority must never imply invocation permission.");
+                }
+                state.CanInvoke = true;
                 await browser.Expect("PUT", configuration, 409, Config(true, 0));
                 await browser.Expect("PUT", configuration, 400, new { enabled = true, maxOutputTokens = 32, expectedRevision = 1, endpoint = "http://untrusted.invalid" });
                 await browser.Expect("POST", chat, 403, Chat(), csrf: false);
@@ -400,14 +423,15 @@ public static class ModelGatewayTests
         }
         public Task<TenantModelConfiguration?> ReadConfigurationAsync(Guid tenantId, string modelId, CancellationToken token)
         { token.ThrowIfCancellationRequested(); return Task.FromResult(Configuration is { } value && value.TenantId == tenantId && value.ModelId == modelId ? value : null); }
-        public Task<TenantModelConfiguration?> SaveConfigurationAsync(Guid tenantId, string modelId, bool enabled, int maxOutputTokens, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token)
+        public async Task<TenantModelConfiguration?> SaveConfigurationAsync(Guid tenantId, string modelId, bool enabled, int maxOutputTokens, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token, Func<CancellationToken, Task<bool>>? currentAccess = null)
         {
             token.ThrowIfCancellationRequested();
+            if (currentAccess is not null && !await currentAccess(token)) throw new ModelConfigurationAccessDeniedException();
             lock (Calls)
             {
-                if ((Configuration?.Revision ?? 0) != expectedRevision) return Task.FromResult<TenantModelConfiguration?>(null);
+                if ((Configuration?.Revision ?? 0) != expectedRevision) return null;
                 Configuration = new(tenantId, modelId, enabled, maxOutputTokens, expectedRevision + 1);
-                return Task.FromResult<TenantModelConfiguration?>(Configuration);
+                return Configuration;
             }
         }
         public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string modelId, string requestId, CancellationToken token, ModelCallSource? source = null)

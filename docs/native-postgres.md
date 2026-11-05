@@ -2,6 +2,8 @@
 
 本入口在 Windows x64 上启动一次性 PostgreSQL，验证真实控制面迁移、授权查询、加密 BFF 会话、注册发布事务及正式网关链路，不需要 Docker。数据库仅用于本次测试；已有开发数据库不会被复用或停止。
 
+T13模型与数据源管理可用`--resource-browser`加入真实页面验收；`--resource-only --resource-browser`只运行本批合同与readiness，不代表完整平台回归。前者可随完整核心实库测试运行，后者不得与其他专项模式组合。使用真实OIDC协议、BFF、PostgreSQL、本地模型协议服务和独立只读数据库角色，覆盖配置、冲突、锁等待中的撤权 / 切租户 / 退出、调用和审计、权限及主题 / 窄屏。前端需提前构建；不调用真实模型供应商。合同见[资源管理](architecture/resource-management.md)。
+
 ## 准备与运行
 
 从仓库根目录执行：

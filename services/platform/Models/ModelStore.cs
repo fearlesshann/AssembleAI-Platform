@@ -9,12 +9,16 @@ public sealed record ModelCallRecord(Guid CallId, Guid TenantId, Guid UserId, st
 public interface IModelStore
 {
     Task<TenantModelConfiguration?> ReadConfigurationAsync(Guid tenantId, string modelId, CancellationToken token);
-    /// <summary>Expected revision zero creates; a null result indicates a concurrent edit.</summary>
+    /// <summary>Expected revision zero creates; a null result indicates a concurrent edit.
+    /// HTTP callers supply currentAccess, checked after all identity/configuration locks
+    /// and before mutation. Null is reserved for trusted in-process seed/test callers.</summary>
     Task<TenantModelConfiguration?> SaveConfigurationAsync(Guid tenantId, string modelId, bool enabled, int maxOutputTokens,
-        long expectedRevision, Guid actorUserId, string requestId, CancellationToken token);
+        long expectedRevision, Guid actorUserId, string requestId, CancellationToken token,
+        Func<CancellationToken, Task<bool>>? currentAccess = null);
     Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string modelId, string requestId, CancellationToken token, ModelCallSource? source = null);
     Task CompleteCallAsync(Guid callId, string outcome, long elapsedMilliseconds, ModelUsage? usage, CancellationToken token);
     Task<IReadOnlyList<ModelCallRecord>> ListCallsAsync(Guid tenantId, string modelId, CancellationToken token);
 }
 
 public sealed class ModelStoreUnavailableException() : Exception("Model storage is unavailable.");
+public sealed class ModelConfigurationAccessDeniedException() : Exception("Model configuration access was revoked.");

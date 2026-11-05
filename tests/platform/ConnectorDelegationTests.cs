@@ -164,7 +164,7 @@ public static class ConnectorDelegationTests
             return Task.FromResult<TenantConnectorConfiguration?>(new(Tenant, sourceId, Enabled, 10, 5, Revision));
         }
         public Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows, int timeoutSeconds,
-            long expectedRevision, Guid actorUserId, string requestId, CancellationToken token) => throw new NotSupportedException();
+            long expectedRevision, Guid actorUserId, string requestId, CancellationToken token, Func<CancellationToken, Task<bool>>? currentAccess = null) => throw new NotSupportedException();
         public Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token, ModelCallSource? source = null)
         {
             var id = Guid.NewGuid(); Calls[id] = new(id, tenantId, userId, sourceId, datasetId, operation, requestId, "running", null, 0, DateTimeOffset.UtcNow, source); return Task.FromResult(id);

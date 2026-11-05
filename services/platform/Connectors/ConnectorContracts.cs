@@ -43,8 +43,11 @@ public sealed record ConnectorCallRecord(Guid CallId, Guid TenantId, Guid UserId
 public interface IConnectorStore
 {
     Task<TenantConnectorConfiguration?> ReadConfigurationAsync(Guid tenantId, string sourceId, CancellationToken token);
+    /// <summary>HTTP callers must supply currentAccess; stores recheck it after identity
+    /// and configuration locks, before the revisioned write and atomic audit.</summary>
     Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows,
-        int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token);
+        int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token,
+        Func<CancellationToken, Task<bool>>? currentAccess = null);
     Task<Guid> BeginCallAsync(Guid tenantId, Guid userId, string sourceId, string? datasetId, string operation, string requestId, CancellationToken token, ModelCallSource? source = null);
     Task CompleteCallAsync(Guid callId, string outcome, int? rowCount, long elapsedMilliseconds, CancellationToken token);
     Task<IReadOnlyList<ConnectorCallRecord>> ListCallsAsync(Guid tenantId, string sourceId, CancellationToken token);
@@ -63,3 +66,4 @@ public sealed class ConnectorLimitException : Exception
 {
     public ConnectorLimitException() : base("The data connector limit was exceeded.") { }
 }
+public sealed class ConnectorConfigurationAccessDeniedException() : Exception("Connector configuration access was revoked.");

@@ -40,6 +40,7 @@ public static class PostgresConnectorStoreTests
             Assert(edited.Count(item => item is not null) == 1 && edited.Single(item => item is not null)!.Revision == 2, "CAS must prevent lost updates.");
             Assert(await Scalar(db, "SELECT count(*) FROM public.platform_connector_configuration_audit WHERE tenant_id=$1 AND source_id=$2", tenant, source) is 2L, "Conflicts must not create successful audit records.");
             await AuditFailures(db, store, tenant, user, source, dataset);
+            await VerifyQueuedSaveRechecksAccess(connectionString, db, store, tenant, user, source);
 
             var callRequest = Id();
             var call = await store.BeginCallAsync(tenant, user, source, dataset, "query", callRequest, default);
@@ -192,6 +193,30 @@ public static class PostgresConnectorStoreTests
             catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.CheckViolation) { }
         }
     }
+    private static async Task VerifyQueuedSaveRechecksAccess(string connection, NpgsqlConnection db, IConnectorStore store, Guid tenant, Guid user, string source)
+    {
+        var before = await store.ReadConfigurationAsync(tenant, source, default);
+        var audited = await Scalar(db, "SELECT count(*) FROM public.platform_connector_configuration_audit WHERE tenant_id=$1 AND source_id=$2", tenant, source);
+        await using var blocker = new NpgsqlConnection(connection);
+        await blocker.OpenAsync();
+        await using var tx = await blocker.BeginTransactionAsync();
+        await Execute(blocker, "LOCK TABLE public.tenant_connectors IN ACCESS EXCLUSIVE MODE");
+        var allowed = true; var checks = 0;
+        var save = store.SaveConfigurationAsync(tenant, source, false, 10, 1, before!.Revision, user, Id(), default,
+            _ => { Interlocked.Increment(ref checks); return Task.FromResult(allowed); });
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        while (!(bool)(await Scalar(db, "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE relation='public.tenant_connectors'::regclass AND NOT granted)"))!)
+            await Task.Delay(10, wait.Token);
+        Assert(checks == 0, "Connector live-access check must follow lock acquisition, not precede the database wait.");
+        allowed = false;
+        await tx.RollbackAsync();
+        try { await save; throw new InvalidOperationException("A connector save queued before revocation must be denied."); }
+        catch (ConnectorConfigurationAccessDeniedException) { }
+        Assert(checks == 1 && await store.ReadConfigurationAsync(tenant, source, default) == before
+            && Equals(audited, await Scalar(db, "SELECT count(*) FROM public.platform_connector_configuration_audit WHERE tenant_id=$1 AND source_id=$2", tenant, source)),
+            "Revoked queued connector save cannot mutate configuration or append successful audit.");
+    }
+
     private static string Id() => Guid.NewGuid().ToString("N");
     private static async Task Unavailable(Func<Task> action)
     {

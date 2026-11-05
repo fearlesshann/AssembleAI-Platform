@@ -341,3 +341,22 @@ T12完成，下一任务T13管理与审计。本轮为普通原生进程，无Do
 浅 / 暗 / 390px的正式页面截图已目视：`.artifacts/t13-identity-ui/`及真实链路`.artifacts/identity-postgres/f4876e37-4cd5-4ffb-b5e5-5cc2a5339ef2/`；最终完整复验截图在`.artifacts/identity-postgres/3d7dd7b7-43e1-4cbc-8973-466fce30f50f/`。本批完成独立代码复核；数量与响应预算修复后无审查阻塞项。迁移不包含默认身份，现有ChatBI临时体验启动器也不自动授予身份管理员；真实部署需按合同显式初始化。
 
 T13保持进行中，下一批为模型 / 数据连接管理页，再推进统一调用 / 审计 / 异常、任务诊断和D9留存 / 导出。最近50条身份操作记录不等于统一审计已交付。本轮未重跑真实模型问答或独立Keycloak产品验收，未部署生产服务；原生进程开发仍不要求Docker。
+
+
+## 2026-11-05 T13 第二批：模型、数据源与数据集管理
+
+正式门户新增`/manage/models[/modelId]`和`/manage/data-sources[/sourceId]`，提供授权列表 / 搜索 / 深链详情、租户配置、受控数据集与逻辑字段、主动模型调用 / 连接测试、取消测试及近期50条调用记录。管理、模型调用、连接测试、业务查询权限分别校验；身份管理员不隐式获得资源权限。部署停用与租户配置分开显示，端点、物理表 / 列、凭据及环境变量引用不进入页面。合同与初始化说明见[资源管理](architecture/resource-management.md)。没有新增AI用例、依赖或迁移，继续使用迁移1–12与原生进程。
+
+列表增加独立能力、部署最大限额和实际生效限额的安全投影。配置CAS和原子审计沿用既有表，修订号保持浏览器安全整数范围。配置事务按固定顺序锁定身份与配置表、目标配置行及外键身份行，再检查当前授权版本、精确权限和真实BFF会话；审计写后、提交前再检查一次。等待期间的退出、切租户或撤权须使配置、修订与成功审计一并回滚。模型未配置时明确返回JSON null，避免合法空配置被有界客户端误判。
+
+页面覆盖未配置 / 空数据 / 无权 / 模块故障、未保存离开、修订冲突保留输入、已提交但回读失败、401清除、换租户及迟到响应。测试没有自动重试；取消后要求重新读取，调用结果只在页面内存。可访问字段名与部署范围说明分开，使用真实label定位回归；浅色、暗色与390px截图已目视检查。独立代码复核检查锁序、权限、会话与DTO边界，最终未发现新增P1/P2。
+
+最终代码回归`tools/verify.ps1 -Scope All`返回0，日志`.artifacts/t13-resources-all.log`：**61项Node、201项原有Python、109项知识库Python、67项Playwright**全部通过；Vue类型检查、四个前端构建、.NET完整HTTP及真实FastAPI→YARP通过。显式设置本机ONNX模型目录，知识库真实embedding测试没有跳过。.NET构建0警告 / 0错误；已有Vite包体积和Starlette测试库弃用提示保留，不通过增加依赖扩大本批范围。
+
+首轮原生专项`--resource-only --resource-browser`在`.artifacts/postgres/run-70575e7ef75a49c49df1bbea14756f67/result.json`记录passed / cleanupComplete为true；该轮验证真实OIDC协议/BFF/PostgreSQL、浏览器配置/CAS、一次loopback模型调用、独立只读角色连接测试、调用与配置审计、身份管理员与业务权限分离、租户隔离、退出及主题 / 窄屏。此专项不代表全量PG回归。随后增加外键父行及审计锁等待测试，旧实现于`run-f3767731e20943b889a00b55cbba3e82`失败，退出后返回并非预期403，已据此完善事务前后复核；失败轮次清理完成，不计作通过。
+
+模型空配置HTTP红证据为`.artifacts/t13-resources-backend-red.log`；资源标识含点导致静态深链404、表单帮助说明混入可访问名称、测试夹具Assert命名冲突等根因与修正见SPEC B89–B93。浏览器null协议夹具另修为真实JSON正文；不把空body夹具误判为后端再次失效。
+
+最终完整`tools/verify-postgres.py --resource-browser`返回0：`.artifacts/postgres/run-41a13bc7eba34e1cabf3634e87ea2d71/result.json`的passed / cleanupComplete / resourceBrowserRequested为true，resourceOnly为false。该轮使用最终程序集与门户构建，迁移1–12及重放、身份初始化 / 容量 / 聚合预算、授权、PG会话、注册、目录、网关、模型、连接器和知识仓储基线全部通过。模型 / 数据源各6项真实HTTP竞争测试（表锁退出、切租户、权限撤销、配置行锁退出、外键父行锁退出、审计锁退出），合计**12项**均403且配置 / 修订 / 审计无越权提交；最终资源页面的持久化、CAS、实际调用、权限、主题 / 390px / 深链 / 退出也通过。测试数据库、凭据与进程清理完成。
+
+最终截图在`.artifacts/resource-postgres/74b349dd-1021-4388-8623-3a6dd028b059/`（model-light / source-dark / source-mobile），另有前端状态专项`.artifacts/t13-resources/`。本批实际模型调用使用loopback协议夹具，数据源使用独立PostgreSQL只读角色；未重跑实际DeepSeek问答、真实Keycloak产品或生产部署验收。既有两个用例通过代码回归，未新增业务用例。T13仍保持进行中，下一批统一调用 / 审计 / 异常、任务诊断及D9留存 / 导出；T14 / T15生产交付与性能验收仍在后续范围。

@@ -18,14 +18,25 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
         }, token);
 
     public Task<TenantConnectorConfiguration?> SaveConfigurationAsync(Guid tenantId, string sourceId, bool enabled, int maxRows,
-        int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token) =>
+        int timeoutSeconds, long expectedRevision, Guid actorUserId, string requestId, CancellationToken token,
+        Func<CancellationToken, Task<bool>>? currentAccess = null) =>
         Run<TenantConnectorConfiguration?>(async (db, tx, budget) =>
         {
             ValidateIdentity(tenantId, sourceId);
-            if (maxRows is < 1 or > 500 || timeoutSeconds is < 1 or > 30 || expectedRevision is < 0 or long.MaxValue
+            if (maxRows is < 1 or > 500 || timeoutSeconds is < 1 or > 30 || expectedRevision is < 0 or > 9007199254740990L
                 || actorUserId == Guid.Empty || !ValidRequestId(requestId)) throw new ConnectorUnavailableException();
-            // Retain active identity rows until this configuration/audit transaction
-            // commits; a concurrent disable cannot slip between validation and write.
+            // Match identity-management lock order and wait for configuration writes
+            // before checking the live session and current resource grants.
+            await Write(db, tx, """
+                LOCK TABLE public.platform_users,public.platform_tenants,public.tenant_memberships,
+                    public.tenant_organizations,public.tenant_roles,public.tenant_member_roles,
+                    public.role_permission_grants,public.grant_organizations IN SHARE MODE;
+                LOCK TABLE public.tenant_connectors IN SHARE ROW EXCLUSIVE MODE;
+                """, budget);
+            await using (var current = Command(db, tx, "SELECT revision FROM public.tenant_connectors WHERE tenant_id=$1 AND source_id=$2 FOR UPDATE", tenantId, sourceId))
+                await current.ExecuteScalarAsync(budget);
+            // Resolve identity-row waits (including the tenant FK parent) before
+            // checking the live session, while table locks prevent identity edits.
             await using (var actor = Command(db, tx, """
                 SELECT u.user_id FROM public.platform_users u
                 JOIN public.tenant_memberships member ON member.user_id=u.user_id AND member.tenant_id=$1 AND member.enabled
@@ -33,6 +44,7 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
                 WHERE u.user_id=$2 AND u.enabled FOR SHARE OF u,member,t
                 """, tenantId, actorUserId))
                 if (await actor.ExecuteScalarAsync(budget) is not Guid) throw new ConnectorUnavailableException();
+            if (currentAccess is not null && !await currentAccess(budget)) throw new ConnectorConfigurationAccessDeniedException();
             long revision;
             if (expectedRevision == 0)
             {
@@ -56,6 +68,8 @@ public sealed class PostgresConnectorStore(IConfiguration configuration) : IConn
                 INSERT INTO public.platform_connector_configuration_audit(event_id,actor_user_id,tenant_id,source_id,request_id,revision,enabled,max_rows,timeout_seconds)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
                 """, budget, Guid.NewGuid(), actorUserId, tenantId, sourceId, requestId, revision, enabled, maxRows, timeoutSeconds);
+            // A late session change during audit locking rolls back the mutation.
+            if (currentAccess is not null && !await currentAccess(budget)) throw new ConnectorConfigurationAccessDeniedException();
             return new(tenantId, sourceId, enabled, maxRows, timeoutSeconds, revision);
         }, token);
 

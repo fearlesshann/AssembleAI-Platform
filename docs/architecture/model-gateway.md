@@ -1,6 +1,6 @@
 # T9：OpenAI 兼容模型网关
 
-用户选定 OpenAI 兼容协议，也支持显式配置的本地推理服务。当前实现文本 Chat Completions 的后端配置、租户授权、JSON / SSE、应用服务端委托和元数据审计。2026-11-04 用户提供 DeepSeek 官方 `deepseek-flash` 用于真实验收；本地协议夹具与实际供应商结果分开记录。模型管理界面归 T13。
+用户选定 OpenAI 兼容协议，也支持显式配置的本地推理服务。当前实现文本 Chat Completions 的后端配置、租户授权、JSON / SSE、应用服务端委托和元数据审计。2026-11-04 用户提供 DeepSeek 官方 `deepseek-flash` 用于真实验收；本地协议夹具与实际供应商结果分开记录。T13正式管理页为`/manage/models`，配置、调用验证及记录的页面合同见[资源管理](resource-management.md)。
 
 ## 部署配置
 
@@ -133,4 +133,4 @@ python tools/verify-postgres.py --model-application --real-model
 
 `--real-model` 先跑上述本地组合，再对显式供应商执行一次简短 JSON 和一次 SSE，无业务数据，不做真实供应商负例。配置文件仅含 `endpoint`、`upstreamModel`、`credentialEnvironmentVariable` 和可选 `reasoningEffort`；值为环境变量名，不存密钥。运行器不打印提示词、回答或凭据，Python 子应用进程也不接收供应商密钥。与三个浏览器参数可组合；具体验证记录见 [开发记录](../development.md)。
 
-模型界面、审计查询过滤和长期故障对账随 T13 完善；多副本委托路由、分布式额度、私有化出口与网络部署验收归 T14。当前不默认联系任何外部模型。
+模型界面已由T13第二批交付；统一审计查询过滤和长期故障对账继续随T13完善。多副本委托路由、分布式额度、私有化出口与网络部署验收归T14。当前不默认联系任何外部模型。

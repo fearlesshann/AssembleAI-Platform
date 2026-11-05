@@ -50,6 +50,7 @@ public static class PostgresModelTests
             Assert(await Scalar(db, "SELECT count(*) FROM public.platform_model_configuration_audit WHERE tenant_id=$1 AND model_id=$2", tenant, model) is 2L,
                 "Conflicting edits must not create successful management audit events.");
             await VerifyManagementAuditRollback(db, store, tenant, user, model);
+            await VerifyQueuedSaveRechecksAccess(connectionString, db, store, tenant, user, model);
 
             var callRequest = Id();
             var call = await store.BeginCallAsync(tenant, user, model, callRequest, default);
@@ -176,6 +177,30 @@ public static class PostgresModelTests
             finally { await Execute(db, "DROP TRIGGER fixture_model_call ON public.platform_model_calls"); }
         }
         finally { await Execute(db, "DROP FUNCTION test_support.fail_model_call()"); }
+    }
+
+    private static async Task VerifyQueuedSaveRechecksAccess(string connection, NpgsqlConnection db, IModelStore store, Guid tenant, Guid user, string model)
+    {
+        var before = await store.ReadConfigurationAsync(tenant, model, default);
+        var audited = await Scalar(db, "SELECT count(*) FROM public.platform_model_configuration_audit WHERE tenant_id=$1 AND model_id=$2", tenant, model);
+        await using var blocker = new NpgsqlConnection(connection);
+        await blocker.OpenAsync();
+        await using var tx = await blocker.BeginTransactionAsync();
+        await Execute(blocker, "LOCK TABLE public.tenant_models IN ACCESS EXCLUSIVE MODE");
+        var allowed = true; var checks = 0;
+        var save = store.SaveConfigurationAsync(tenant, model, false, 128, before!.Revision, user, Id(), default,
+            _ => { Interlocked.Increment(ref checks); return Task.FromResult(allowed); });
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        while (!(bool)(await Scalar(db, "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE relation='public.tenant_models'::regclass AND NOT granted)"))!)
+            await Task.Delay(10, wait.Token);
+        Assert(checks == 0, "Model live-access check must follow lock acquisition, not precede the database wait.");
+        allowed = false;
+        await tx.RollbackAsync();
+        try { await save; throw new InvalidOperationException("A model save queued before revocation must be denied."); }
+        catch (ModelConfigurationAccessDeniedException) { }
+        Assert(checks == 1 && await store.ReadConfigurationAsync(tenant, model, default) == before
+            && Equals(audited, await Scalar(db, "SELECT count(*) FROM public.platform_model_configuration_audit WHERE tenant_id=$1 AND model_id=$2", tenant, model)),
+            "Revoked queued model save cannot mutate configuration or append successful audit.");
     }
 
     private static string Id() => Guid.NewGuid().ToString("N");
