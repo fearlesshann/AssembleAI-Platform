@@ -236,10 +236,15 @@ public static class PostgresChatBiTests
 
     private static string InteractiveOrigin()
     {
-        using var socket = new TcpListener(IPAddress.Loopback, 4174) { ExclusiveAddressUse = true };
+        var configured = Environment.GetEnvironmentVariable("ASSEMBLEAI_DEMO_PORT");
+        var port = 4174;
+        if (configured is not null && (!int.TryParse(configured, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out port) || port is < 1024 or > 65535))
+            throw new InvalidOperationException("Local experience port must be an integer between 1024 and 65535.");
+        using var socket = new TcpListener(IPAddress.Loopback, port) { ExclusiveAddressUse = true };
         try { socket.Start(); }
-        catch (SocketException error) { throw new InvalidOperationException("Local experience port 4174 is already in use. Stop the existing experience before starting another.", error); }
-        return "http://127.0.0.1:4174";
+        catch (SocketException error) { throw new InvalidOperationException($"Local experience port {port} is already in use. Choose another port.", error); }
+        return $"http://127.0.0.1:{port}";
     }
 
     private static string InteractivePlan(JsonElement request)
