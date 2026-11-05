@@ -15,7 +15,7 @@ public static class IdentityManagementHttpTests
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
             var tenant = Guid.NewGuid(); var id = Guid.NewGuid();
             const string root = "/api/platform/v1/identity-management";
-            foreach (var path in new[] { root + "/workspace", root + $"/tenants/{tenant}" })
+            foreach (var path in new[] { root + "/workspace", root + $"/tenants/{tenant}", root + $"/tenants/{tenant}/permission-catalog" })
             {
                 using var response = await client.GetAsync(path);
                 Assert(response.StatusCode == HttpStatusCode.Unauthorized && response.Headers.CacheControl?.NoStore == true,

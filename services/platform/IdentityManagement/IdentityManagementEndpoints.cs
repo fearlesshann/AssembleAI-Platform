@@ -2,6 +2,8 @@ using System.Text.Json;
 using AssembleAI.Platform.Authorization;
 using AssembleAI.Platform.Identity;
 using AssembleAI.Platform.Identity.Sessions;
+using AssembleAI.Platform.Models;
+using AssembleAI.Platform.Connectors;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -25,6 +27,13 @@ public static class IdentityManagementEndpoints
             Result(await store.ReadWorkspaceAsync(Session(context).Subject, context.RequestAborted)));
         group.MapGet("/tenants/{tenantId:guid}", async (Guid tenantId, HttpContext context, IIdentityManagementStore store) => tenantId == Guid.Empty ? Invalid()
             : Result(await store.ReadTenantAsync(Session(context).Subject, tenantId, Selected(context), context.RequestAborted)));
+        group.MapGet("/tenants/{tenantId:guid}/permission-catalog", async (Guid tenantId, HttpContext context, IIdentityManagementStore store,
+            ModelGatewayCatalog models, ConnectorCatalog connectors) => {
+            if (tenantId == Guid.Empty) return Invalid();
+            var applications = await store.ReadGrantApplicationsAsync(Session(context).Subject, tenantId, Selected(context), context.RequestAborted);
+            return applications.Error != IdentityError.None ? Result(applications)
+                : Results.Ok(IdentityPermissionCatalog.Build(tenantId, applications.Value!, models.Options, connectors.Options));
+        });
         group.MapPut("/users/{userId:guid}", (Guid userId, HttpContext context, IIdentityManagementStore store) =>
             Save<SaveIdentityUser>(context, userId, (value, ct) => store.SaveUserAsync(Session(context).Subject, userId, value, context.TraceIdentifier, Session(context).CheckAsync, ct)));
         group.MapPut("/tenants/{tenantId:guid}", (Guid tenantId, HttpContext context, IIdentityManagementStore store) =>

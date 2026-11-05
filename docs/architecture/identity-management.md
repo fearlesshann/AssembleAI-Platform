@@ -32,6 +32,7 @@ Windows 原生 psql 的命令行参数编码可能与 UTF-8 连接不一致；�
 | --- | --- |
 | GET `/workspace` | `{actorUserId, platformAdministrator, tenants, users, audit}`；非全局管理员 users / audit.items 为空，tenants 仅包含其可管理租户；全局 audit 展示无租户的用户操作 |
 | GET `/tenants/{tenantId}` | `{actorUserId, platformAdministrator, tenant, members, organizations, roles, audit}` |
+| GET `/tenants/{tenantId}/permission-catalog` | `{tenantId, resources}`；具名资源、业务能力、组织范围支持与精确配套权限；同租户身份管理权 |
 | PUT `/users/{userId}` | `{expectedRevision, issuer, subject, displayName, enabled, platformAdministrator}`；全局管理 |
 | PUT `/tenants/{tenantId}` | `{expectedRevision, name, enabled}`；全局管理 |
 | PUT `/tenants/{tenantId}/members/{userId}` | `{expectedRevision, enabled, administrator, roleIds}` |
@@ -70,3 +71,15 @@ audit        = items, hasMore
 - 复用现有浅暗 token、紧凑列表及详情表单；列表可搜索，创建和编辑动作清晰，组织为平面集合。授权表单明确展示资源与组织范围，新增授权默认不扩大到全租户。
 - 覆盖加载、空态、拒绝、失败、保存中、修订冲突、写入成功但回读失败、未保存离开、身份 / 租户变化及迟到响应。无自动写重试；保存后列表与详情以重新读取的结果为准。
 - 验收包含键盘、窄屏、深链刷新、双主题和真实 OIDC / PostgreSQL 浏览器链路。
+
+## 角色权限工作区（2026-11-05）
+
+角色列表展示授权 / 资源数量和关联成员，详情进入独立工作区。编辑时从资源分类与搜索选择对象，一次勾选多项能力，再显式选整个租户或指定组织，加入右侧清单。相同资源的不同精确范围分开展示，不自动取并集。技术编码收进辅助信息，未知既有授权明确标注并完整保留；不要求管理员手填编码。
+
+应用访问 / 发布 / 调用观察、模型调用 / 配置、数据源测试 / 管理、连接测试工具和审计为租户级能力；数据源读取、数据集查询、查询工具、文档阅读 / 管理可按组织分配。目录仅描述能力，不改变服务端实时授权规则。既有不适用的组织范围明确提示，必须由管理员决定是否扩大或移除。
+
+配套权限由目录描述，例如查询数据集同时需要对应数据源读取和 connector.query 工具。明确选择“补齐”时只添加缺失权限，沿用对应范围；已存在但范围不足的权限保留原样并继续提示。多个角色权限叠加，不将本角色缺项解释为用户一定无权。
+
+保存前逐项展示新增、移除、范围调整与元数据变化，显示关联成员数，允许撤销单项。未加入清单的配置阻止保存和静默切换资源；离开沿用原确认框。保存协议、64KiB正文、100项权限、100组织 / 项、修订保护与原子审计保持。目录失败不丢授权，身份撤销清空管理数据。
+
+目录采用身份管理员权限读取，而非管理员个人的模型 / 数据业务权限。应用只取已发布信息或目标租户已分配版本，最多500项；不公开其他租户未公开版本、草稿、前端部署路径、后端服务名、供应商地址、环境变量名或物理表。模型 / 连接器由已验证部署目录构建具名元数据，停用项标记状态。目录整体最多1000资源 / 2MiB，超限明确503；现有浏览器4MiB上限继续有效。

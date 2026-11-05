@@ -5,6 +5,10 @@ export interface IdentityMember { userId: string; displayName: string; enabled: 
 export interface IdentityOrganization { organizationId: string; name: string; kind: string; enabled: boolean; revision: number }
 export interface IdentityGrant { permission: string; resourceType: string; resourceId: string; tenantWide: boolean; organizationIds: string[] }
 export interface IdentityRole { roleId: string; name: string; enabled: boolean; revision: number; grants: IdentityGrant[] }
+export interface PermissionReference { permission: string; resourceType: string; resourceId: string }
+export interface PermissionAction { permission: string; name: string; description: string; organizationScope: boolean; requires: PermissionReference[]; legacy?: boolean }
+export interface PermissionResource { resourceType: string; resourceId: string; name: string; category: string; status: string; actions: PermissionAction[]; legacy?: boolean }
+export interface PermissionCatalog { tenantId: string; resources: PermissionResource[] }
 export interface IdentityAudit { eventId: string; actorUserId: string; tenantId: string | null; entityType: string; entityId: string; action: string; result: string; requestId: string; occurredAt: string }
 export interface IdentityWorkspaceData { actorUserId: string; platformAdministrator: boolean; tenants: IdentityTenant[]; users: IdentityUser[]; audit: { items: IdentityAudit[]; hasMore: boolean } }
 export interface IdentityTenantData { actorUserId: string; platformAdministrator: boolean; tenant: IdentityTenant; members: IdentityMember[]; organizations: IdentityOrganization[]; roles: IdentityRole[]; audit: { items: IdentityAudit[]; hasMore: boolean } }
@@ -93,6 +97,7 @@ export function createIdentityApi(fetcher: typeof fetch = globalThis.fetch.bind(
   return {
     workspace: (signal: AbortSignal) => request<IdentityWorkspaceData>(`${root}/workspace`, signal),
     tenant: (tenantId: string, signal: AbortSignal) => request<IdentityTenantData>(`${root}/tenants/${encodeURIComponent(tenantId)}`, signal),
+    permissionCatalog: (tenantId: string, signal: AbortSignal) => request<PermissionCatalog>(`${root}/tenants/${encodeURIComponent(tenantId)}/permission-catalog`, signal),
     save: (section: IdentitySection, id: string, tenantId: string | null, body: unknown, signal: AbortSignal) => {
       const scope = section === 'users' || section === 'tenants' ? root : `${root}/tenants/${encodeURIComponent(tenantId ?? '')}`;
       return write<{ revision: number }>(`${scope}/${section}/${encodeURIComponent(id)}`, signal, 'PUT', body);

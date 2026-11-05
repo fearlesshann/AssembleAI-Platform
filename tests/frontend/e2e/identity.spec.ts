@@ -3,6 +3,20 @@ import { expect, test, type Page } from '@playwright/test';
 const tenant = '11111111-1111-4111-8111-111111111111';
 const user = '33333333-3333-4333-8333-333333333333';
 const roleId = '44444444-4444-4444-8444-444444444444';
+const permissionCatalog = { tenantId: tenant, resources: [
+  { resourceType: 'application', resourceId: 'chatbi', name: '智能数据问答', category: 'applications', status: '当前租户已启用', actions: [
+    { permission: 'chatbi:use', name: '打开与使用应用', description: '授予应用入口，数据权限另行分配。', organizationScope: false, requires: [] }] },
+  { resourceType: 'knowledge', resourceId: 'documents', name: '企业知识文档', category: 'knowledge', status: '当前租户文档', actions: [
+    { permission: 'knowledge:read', name: '阅读与问答', description: '检索与阅读授权组织内的文档。', organizationScope: true, requires: [] },
+    { permission: 'knowledge:manage', name: '管理文档', description: '上传、索引与删除授权组织内的文档。', organizationScope: true, requires: [] }] },
+  { resourceType: 'dataset', resourceId: 'production', name: '每日生产报表', category: 'data', status: '受控数据集', actions: [
+    { permission: 'dataset:read', name: '查询数据集', description: '查询工厂每日产量与不良数。', organizationScope: true, requires: [
+      { permission: 'datasource:read', resourceType: 'datasource', resourceId: 'manufacturing' }, { permission: 'tool:invoke', resourceType: 'tool', resourceId: 'connector.query' }] }] },
+  { resourceType: 'datasource', resourceId: 'manufacturing', name: '制造业务数据库', category: 'data', status: '部署已启用', actions: [
+    { permission: 'datasource:read', name: '读取数据源', description: '查询受控业务数据。', organizationScope: true, requires: [] }] },
+  { resourceType: 'tool', resourceId: 'connector.query', name: '数据查询工具', category: 'tools', status: '平台工具', actions: [
+    { permission: 'tool:invoke', name: '执行数据查询', description: '运行受控查询。', organizationScope: true, requires: [] }] },
+] };
 async function fixture(page: Page, administrator = true) {
   const state = { selected: administrator ? null as string | null : tenant, signedIn: true, status: 200, errorCode: 'identity_conflict', writes: [] as any[],
     workspace: { actorUserId: user, platformAdministrator: administrator,
@@ -13,7 +27,7 @@ async function fixture(page: Page, administrator = true) {
       tenant: { tenantId: tenant, name: '华东制造', enabled: true, revision: 1 },
       members: [{ userId: user, displayName: '管理用户', enabled: true, userEnabled: true, administrator: true, roleIds: [roleId], revision: 1 }],
       organizations: [{ organizationId: '55555555-5555-4555-8555-555555555555', name: '一号工厂', kind: 'factory', enabled: true, revision: 1 }],
-      roles: [{ roleId, name: '生产查看', enabled: true, revision: 1, grants: [{ permission: 'chatbi:use', resourceType: 'application', resourceId: 'chatbi', tenantWide: true, organizationIds: [] as string[] }] }],
+      roles: [{ roleId, name: '生产查看', enabled: true, revision: 1, grants: [{ permission: 'knowledge:read', resourceType: 'knowledge', resourceId: 'documents', tenantWide: true, organizationIds: [] as string[] }] }],
       audit: { items: [] as any[], hasMore: false } } };
   await page.route('**/bff/**', route => {
     const path = new URL(route.request().url()).pathname;
@@ -41,11 +55,138 @@ async function fixture(page: Page, administrator = true) {
       state.detail.audit.items.unshift({ eventId: String(state.writes.length), actorUserId: user, tenantId: tenant, entityType: section, entityId: id, action: 'save', result: 'success', requestId: 'identity-request', occurredAt: '2026-11-05T08:00:00Z' });
       return route.fulfill({ json: { revision: updated.revision } });
     }
+    if (path.endsWith(`/identity-management/tenants/${tenant}/permission-catalog`)) return route.fulfill({ json: permissionCatalog });
     if (path.endsWith(`/identity-management/tenants/${tenant}`)) return route.fulfill({ json: state.detail });
     return route.fulfill({ status: 404, json: {} });
   });
   return state;
 }
+
+test('V38: role permissions use a named resource workspace instead of technical tuple inputs', async ({ page }) => {
+  await fixture(page, false);
+  await page.goto(`/manage/roles/${roleId}`);
+  await expect(page.getByRole('region', { name: '角色授权工作区', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '已授权清单', exact: true })).toBeVisible();
+  await expect(page.getByLabel('权限名称', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('资源标识', { exact: true })).toHaveCount(0);
+});
+
+test('V38: batch capabilities share an explicit scope, review changes, undo, and preserve custom grants', async ({ page }) => {
+  const state = await fixture(page, false);
+  const custom = { permission: 'machine:inspect', resourceType: 'machine', resourceId: '旧设备', tenantWide: false, organizationIds: [state.detail.organizations[0].organizationId] };
+  state.detail.roles[0].grants.push(custom);
+  state.detail.organizations.push({ organizationId: '66666666-6666-4666-8666-666666666666', name: '二号工厂', kind: 'factory', enabled: true, revision: 1 });
+  await page.goto(`/manage/roles/${roleId}`);
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
+  await page.getByRole('button', { name: '调整 企业知识文档 整个租户 的范围', exact: true }).click();
+  await page.getByRole('checkbox', { name: '管理文档', exact: true }).check();
+  await chooseReferenceOption(page, '生效范围', 'organizations');
+  await page.getByLabel('一号工厂', { exact: true }).check();
+  await page.getByLabel('搜索组织', { exact: true }).fill('二号');
+  await page.getByLabel('二号工厂', { exact: true }).check();
+  await expect(page.getByText('已选择 2 个组织，搜索不会清除已有选择。')).toBeVisible();
+  await page.getByRole('button', { name: '更新授权范围', exact: true }).click();
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
+  const review = page.getByRole('table', { name: '本次权限变更', exact: true });
+  await expect(review).toContainText('调整范围'); await expect(review).toContainText('新增');
+  await review.getByRole('row').filter({ hasText: '新增' }).getByRole('button', { name: '撤销此项' }).click();
+  await expect(review).not.toContainText('新增');
+  await page.getByRole('button', { name: '保存变更', exact: true }).click();
+  await expect(page.getByRole('button', { name: '编辑权限', exact: true })).toBeEnabled();
+  expect(state.writes[0].body.grants).toContainEqual(custom);
+  expect(state.writes[0].body.grants).toContainEqual({ permission: 'knowledge:read', resourceType: 'knowledge', resourceId: 'documents', tenantWide: false, organizationIds: state.detail.organizations.map(org => org.organizationId) });
+  expect(state.writes[0].body.grants).toHaveLength(2);
+});
+
+test('V38: tenant-only actions, dependency disclosure and explicit completion use named resources', async ({ page }) => {
+  const state = await fixture(page, false);
+  await page.goto('/manage/roles');
+  await page.getByRole('button', { name: '新增角色', exact: true }).click();
+  await page.getByLabel('角色名称', { exact: true }).fill('装配数据分析员');
+  await page.getByRole('button', { name: '智能数据问答 · application', exact: true }).click();
+  await page.getByRole('checkbox', { name: '打开与使用应用', exact: true }).check();
+  await page.getByRole('combobox', { name: '生效范围', exact: true }).click();
+  await expect(page.getByRole('option', { name: '指定组织', exact: true })).toBeDisabled();
+  await page.getByRole('option', { name: '整个租户', exact: true }).click();
+  await page.getByRole('button', { name: '加入授权清单', exact: true }).click();
+  await page.getByLabel('搜索资源或能力', { exact: true }).fill('每日生产');
+  await page.getByRole('button', { name: '每日生产报表 · dataset', exact: true }).click();
+  await page.getByRole('checkbox', { name: '查询数据集', exact: true }).check();
+  const description = page.locator('.role-capability').filter({ has: page.getByRole('checkbox', { name: '查询数据集' }) });
+  const labelBox = await description.locator('label').boundingBox(); const descriptionBox = await description.locator('p').boundingBox();
+  expect(descriptionBox!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height);
+  await chooseReferenceOption(page, '生效范围', 'organizations');
+  await page.getByLabel('一号工厂', { exact: true }).check();
+  await page.getByRole('button', { name: '加入授权清单', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '配套权限待检查' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '已授权清单' })).toContainText('制造业务数据库 · 读取数据源');
+  expect(state.writes).toHaveLength(0);
+  await page.getByRole('button', { name: '补齐未分配的配套权限', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '配套权限待检查' })).toHaveCount(0);
+  await page.getByLabel('搜索资源或能力', { exact: true }).fill('');
+  if (await page.evaluate(() => document.documentElement.dataset.theme) !== 'light') await toggleReferenceTheme(page);
+  await page.screenshot({ path: '.artifacts/role-workspace-editor-light.png', fullPage: true });
+  await toggleReferenceTheme(page);
+  await page.screenshot({ path: '.artifacts/role-workspace-editor-dark.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '.artifacts/role-workspace-editor-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
+  await page.locator('.role-review').evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
+  const reviewHeading = await page.getByRole('heading', { name: '确认这次调整' }).boundingBox();
+  const reviewBounds = await page.locator('.role-review').boundingBox();
+  expect(reviewHeading!.y).toBeGreaterThanOrEqual(reviewBounds!.y);
+  await page.screenshot({ path: '.artifacts/role-workspace-review.png', fullPage: true });
+  await page.getByRole('button', { name: '保存变更', exact: true }).click();
+  await expect(page.getByRole('button', { name: '编辑权限', exact: true })).toBeEnabled();
+  expect(state.writes[0].body.grants).toHaveLength(4);
+  const business = state.writes[0].body.grants.filter((grant: any) => grant.resourceType !== 'application');
+  expect(business.every((grant: any) => !grant.tenantWide && grant.organizationIds[0] === state.detail.organizations[0].organizationId)).toBe(true);
+});
+
+test('V38: unfinished composition cannot be lost by resource selection, save or unconfirmed navigation', async ({ page }) => {
+  const state = await fixture(page, false);
+  await page.goto(`/manage/roles/${roleId}`);
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
+  await page.getByRole('button', { name: '智能数据问答 · application', exact: true }).click();
+  await page.getByRole('checkbox', { name: '打开与使用应用', exact: true }).check();
+  await page.getByRole('button', { name: '企业知识文档 · knowledge', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('当前授权尚未加入清单');
+  await expect(page.getByRole('checkbox', { name: '打开与使用应用', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: '检查并保存', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '← 角色列表', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: '打开与使用应用', exact: true })).toBeChecked();
+  await page.getByRole('button', { name: '取消本次配置', exact: true }).click();
+  await page.getByRole('button', { name: '← 角色列表', exact: true }).click();
+  await expect(page.getByRole('table', { name: '角色记录', exact: true })).toBeVisible();
+  expect(state.writes).toHaveLength(0);
+});
+
+test('V38: catalog failure preserves all existing grants and catalog revocation clears the workspace', async ({ page }) => {
+  const state = await fixture(page, false); let status = 503;
+  await page.route('**/permission-catalog', route => status === 200 ? route.fulfill({ json: permissionCatalog }) : route.fulfill({ status, json: {} }));
+  await page.goto(`/manage/roles/${roleId}`);
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('已有授权仍完整保留');
+  await expect(page.getByRole('region', { name: '已授权清单' })).toContainText('knowledge:read');
+  await page.getByLabel('角色名称', { exact: true }).fill('保留授权的改名');
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
+  await page.getByRole('button', { name: '保存变更', exact: true }).click();
+  await expect(page.getByRole('button', { name: '编辑权限', exact: true })).toBeEnabled();
+  expect(state.writes[0].body.grants).toEqual([{ permission: 'knowledge:read', resourceType: 'knowledge', resourceId: 'documents', tenantWide: true, organizationIds: [] }]);
+  status = 200;
+  await page.reload();
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
+  await expect(page.getByRole('region', { name: '已授权清单' })).toContainText('企业知识文档');
+  status = 403;
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '没有管理权限' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '角色授权工作区', exact: true })).toHaveCount(0);
+});
 test('T13: global administrator manages users and tenants without a membership selection', async ({ page }) => {
   const state = await fixture(page);
   await page.goto(`/manage/users/${user}`);
@@ -65,10 +206,13 @@ test('T13: tenant administrator edits role resource scopes and member assignment
   const state = await fixture(page, false);
   await page.goto(`/manage/roles/${roleId}`);
   await expect(page.getByRole('link', { name: '用户管理', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: '编辑资料', exact: true }).click();
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
   await page.getByLabel('角色名称', { exact: true }).fill('本厂生产查看');
-  await page.getByLabel('整个租户', { exact: true }).uncheck();
+  await page.getByRole('button', { name: '调整 企业知识文档 整个租户 的范围', exact: true }).click();
+  await chooseReferenceOption(page, '生效范围', 'organizations');
   await page.getByLabel('一号工厂', { exact: true }).check();
+  await page.getByRole('button', { name: '更新授权范围', exact: true }).click();
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('heading', { name: '本厂生产查看', exact: true })).toBeVisible();
   await expect(page.getByText('角色 · 保存 · 成功', { exact: true })).toBeVisible();
@@ -78,7 +222,7 @@ test('T13: tenant administrator edits role resource scopes and member assignment
   await toggleReferenceTheme(page);
   await page.screenshot({ path: '.artifacts/t13-identity-ui/role-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await closeReferenceDrawer(page);
+  await page.getByRole('button', { name: '← 角色列表', exact: true }).click();
   const navigation = page.getByRole('navigation', { name: '主导航' });
   expect((await navigation.boundingBox())!.height).toBeLessThan(80);
   expect(await navigation.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
@@ -134,14 +278,17 @@ test('T13: a new grant starts without scope and requires an explicit organizatio
   await page.goto('/manage/roles');
   await page.getByRole('button', { name: '新增角色', exact: true }).click();
   await page.getByLabel('角色名称', { exact: true }).fill('质检查看');
-  await page.getByRole('button', { name: '添加权限', exact: true }).click();
-  await page.getByLabel('权限名称', { exact: true }).fill('quality:read');
-  await page.getByLabel('资源标识', { exact: true }).fill('quality-report');
-  await expect(page.getByLabel('整个租户', { exact: true })).not.toBeChecked();
-  await page.getByRole('button', { name: '保存变更', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('选择整个租户或至少一个组织');
+  await page.getByRole('button', { name: '企业知识文档 · knowledge', exact: true }).click();
+  await page.getByRole('checkbox', { name: '阅读与问答', exact: true }).check();
+  await expectReferenceValue(page, '生效范围', '');
+  await expect(page.getByRole('button', { name: '加入授权清单', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '检查并保存', exact: true })).toBeDisabled();
   expect(state.writes).toHaveLength(0);
+  await chooseReferenceOption(page, '生效范围', 'organizations');
   await page.getByLabel('一号工厂', { exact: true }).check();
+  await page.getByRole('button', { name: '加入授权清单', exact: true }).click();
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
+  await expect(page.getByRole('table', { name: '本次权限变更' })).toContainText('新增');
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('heading', { name: '质检查看', exact: true })).toBeVisible();
   expect(state.writes[0].body.grants[0].tenantWide).toBe(false);
@@ -205,15 +352,18 @@ test('T13: an assigned disabled organization can be removed without silently wid
   state.detail.roles[0].grants[0].tenantWide = false;
   state.detail.roles[0].grants[0].organizationIds = [state.detail.organizations[0].organizationId];
   await page.goto(`/manage/roles/${roleId}`);
-  await page.getByRole('button', { name: '编辑资料', exact: true }).click();
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
+  await page.getByRole('button', { name: '调整 企业知识文档 一号工厂（已停用） 的范围', exact: true }).click();
   const organization = page.getByLabel('一号工厂（已停用）', { exact: true });
   await expect(organization).toBeEnabled();
   await organization.uncheck();
   await expect(organization).toBeDisabled();
-  await expect(page.getByLabel('整个租户', { exact: true })).not.toBeChecked();
-  await page.getByRole('button', { name: '移除权限 1', exact: true }).click();
+  await expectReferenceValue(page, '生效范围', 'organizations');
+  await page.getByRole('button', { name: '移除 企业知识文档 一号工厂（已停用） 的授权', exact: true }).click();
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('heading', { name: '生产查看', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '编辑权限', exact: true })).toBeEnabled();
   expect(state.writes[0].body.grants).toEqual([]);
 });
 test('T13: capacity includes disabled records and blocks creation while existing records remain editable', async ({ page }) => {
@@ -251,8 +401,9 @@ test('T13: management breadcrumb follows the explicit target without changing th
 test('T13: an explicit aggregate-capacity rejection preserves editable input and only retries after a manual save', async ({ page }) => {
   const state = await fixture(page, false); state.status = 409; state.errorCode = 'identity_capacity_reached';
   await page.goto(`/manage/roles/${roleId}`);
-  await page.getByRole('button', { name: '编辑资料', exact: true }).click();
+  await page.getByRole('button', { name: '编辑权限', exact: true }).click();
   await page.getByLabel('角色名称', { exact: true }).fill('保留完整角色输入');
+  await page.getByRole('button', { name: '检查并保存', exact: true }).click();
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('记录数量或资料/授权范围达到管理容量');
   await expect(page.getByRole('alert')).not.toContainText('记录已被更新');
@@ -260,11 +411,12 @@ test('T13: an explicit aggregate-capacity rejection preserves editable input and
   await expect(page.getByLabel('角色名称', { exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: '保存变更', exact: true })).toBeEnabled();
   expect(state.detail.roles).toHaveLength(1); expect(state.writes).toHaveLength(1);
-  await page.getByRole('button', { name: '移除权限 1', exact: true }).click();
+  await page.getByRole('button', { name: '移除 企业知识文档 整个租户 的授权', exact: true }).click();
   expect(state.writes).toHaveLength(1);
   state.status = 200;
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('heading', { name: '保留完整角色输入', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '编辑权限', exact: true })).toBeEnabled();
   expect(state.writes).toHaveLength(2);
   expect(state.writes[1].body).toMatchObject({ expectedRevision: 1, grants: [] });
 });

@@ -14,6 +14,7 @@ public sealed record IdentityWorkspace(Guid ActorUserId, bool PlatformAdministra
 public sealed record IdentityTenantWorkspace(Guid ActorUserId, bool PlatformAdministrator, IdentityTenant Tenant, IReadOnlyList<IdentityMember> Members,
     IReadOnlyList<IdentityOrganization> Organizations, IReadOnlyList<IdentityRole> Roles, IdentityAuditPage Audit);
 public sealed record IdentityRevision(long Revision);
+public sealed record IdentityGrantApplication(string AppId, string Name, bool Enabled, IReadOnlyList<string> Permissions);
 public sealed record SaveIdentityUser(string Issuer, string Subject, string DisplayName, bool Enabled, bool PlatformAdministrator, long ExpectedRevision);
 public sealed record SaveIdentityTenant(string Name, bool Enabled, long ExpectedRevision);
 public sealed record SaveIdentityMember(bool Enabled, bool Administrator, IReadOnlyList<Guid> RoleIds, long ExpectedRevision);
@@ -30,6 +31,7 @@ public interface IIdentityManagementStore
 {
     Task<IdentityResult<IdentityWorkspace>> ReadWorkspaceAsync(SubjectIdentity subject, CancellationToken token);
     Task<IdentityResult<IdentityTenantWorkspace>> ReadTenantAsync(SubjectIdentity subject, Guid tenant, Guid? selectedTenant, CancellationToken token);
+    Task<IdentityResult<IReadOnlyList<IdentityGrantApplication>>> ReadGrantApplicationsAsync(SubjectIdentity subject, Guid tenant, Guid? selectedTenant, CancellationToken token);
     Task<IdentityResult<IdentityRevision>> SaveUserAsync(SubjectIdentity subject, Guid id, SaveIdentityUser value, string requestId, Func<CancellationToken, Task<bool>> currentSession, CancellationToken token);
     Task<IdentityResult<IdentityRevision>> SaveTenantAsync(SubjectIdentity subject, Guid id, SaveIdentityTenant value, string requestId, Func<CancellationToken, Task<bool>> currentSession, CancellationToken token);
     Task<IdentityResult<IdentityRevision>> SaveMemberAsync(SubjectIdentity subject, Guid tenant, Guid? selectedTenant, Guid id, SaveIdentityMember value, string requestId, Func<CancellationToken, Task<bool>> currentSession, CancellationToken token);

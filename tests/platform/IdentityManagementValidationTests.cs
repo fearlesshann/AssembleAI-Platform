@@ -7,6 +7,7 @@ public static class IdentityManagementValidationTests
 {
     public static void Run()
     {
+        IdentityPermissionCatalogTests.Run();
         var user = """{"issuer":"https://identity.example/realm","subject":"trusted-subject","displayName":"成员","enabled":true,"platformAdministrator":false,"expectedRevision":0}""";
         Assert(Parse<SaveIdentityUser>(user), "Complete explicit user mutation is valid.");
         foreach (var invalidRevision in new[] { "\"0\"", "\"1\"", "0.0", "0e0", "1e0", "null", "false" })

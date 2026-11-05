@@ -219,6 +219,8 @@
 
 [实施决定，T3 内部凭据 / D8] 独立 RS256 JWT（RSA ≥ 2048），显式 `typ=assembleai-internal+jwt`、受控 kid、公钥集、固定 issuer、单一应用 audience；绑定平台用户、原 OIDC issuer / subject、租户、应用 / 发布版本、权限、资源 / 组织、method / path、requestId、策略版本及 jti。最长 30 秒、零时钟宽限；签发与消费均核验最新成员和完整权限，消费还要求策略版本一致。无浏览器签发接口，不接受 token 自带 key URL 或浏览器身份头。退出阻止新签发，已签发凭据最多保留 30 秒消费窗口；撤权提交后的新消费查询即拒绝，在途操作与流撤销留 T5。轮换先分发新旧公钥，再切换签名，至少等待有效期且所有消费者已更新后移除旧 key；紧急撤 key 的效果以消费者应用更新后的公钥集为界，不承诺配置文件变更自动热加载。
 
+[实施决定，角色授权交互] 新增只读 `GET /api/platform/v1/identity-management/tenants/{tenantId}/permission-catalog`，按身份管理权返回业务资源名称、动作说明、可用范围与配套权限；不依赖操作者个人业务访问权，不返回凭据 / 物理表 / 部署地址。角色写入协议与CAS不变。页面采用资源目录 → 能力 / 范围 → 已授权清单 → 变更检查工作区；原示例控件、动效继续复用。见[交互方案](docs/superpowers/plans/2026-11-05-role-permission-workspace.md)。
+
 ### I.authz 分层授权
 
 [实施决定，T7] Python 接入通过固定 `POST /internal/calls/validate` 远程复用平台验证；默认关闭，以 `InternalCalls:ValidationEndpointEnabled` 开启。服务附内部 Bearer、32 位十六进制 requestId 和自身 service / version / 实际 method / path；平台从真实已发布 Manifest、部署 audience 与操作权限生成可信目标。JWT 中的 app / release / tenant 仅作未可信候选索引；签名、全部目标、期限和当前授权版本均通过后才返回身份，并复核租户启用与全局发布。独立访问仍需同源 BFF / 显式创建运行，无公开免鉴权业务入口；Python 不持平台签名私钥。SDK 复制固定运行绑定并只提供 JSON / SSE，展示 context 不构成授权；卸载 / 到期 / 生命周期失败撤销能力。只有 SSE complete 算成功，错误 / 截断不算成功，不自动重试。
@@ -375,6 +377,7 @@
 | V35 | [实施决定，T13] 管理集合采用有界读取时，写操作须在事务内检查记录数量及完整响应预算，不得通过合法管理写使读取入口持续超限不可用；达到数量容量后拒绝新增、允许已有记录编辑，编辑也须遵守响应预算。不以静默截断、仅检查单条请求或停用腾容量替代。 |
 | V36 | [确认，用户2026-11-05] 正式门户及平台管理页面按语义组件复用用户原示例的底层设计；共享token、字体、密度、外壳与组件状态可与原始HTML/CSS实际渲染对照。新增页面与已有页面同一基线，变更来源合同须明确；不以“类似风格”或仅内容相同代替。 |
 | V37 | [确认，用户2026-11-05再次纠正] 每个用户界面组件先查原示例；已有实现复用其DOM层次、CSS和交互，覆盖登录整页、表格完整外壳、输入、自定义下拉、日期时间 / 滚轮、分页、抽屉与确认。测试对照实际渲染和打开 / 焦点 / 选中 / 错误等状态；仅token或静态默认态相同不算通过。整页惯性滚轮及切页 / 刷新 / 弹层 / 登录动效按原实现触发与清理，默认full，显式system / reduced；正常动效验收实际帧与进出时序，不用静态或减少动效测试替代。登录表单由真实身份服务验证凭据；未登录 / 退出进入该页，保留OIDC / CSRF / 授权和并发保护。 |
+| V38 | 角色授权按具名资源 / 业务能力组织，范围显式选择且符合实际消费接口；应用 / 模型等租户级能力不提供无效组织范围。已有未知授权原样保留，编辑不隐式合并 / 扩大；配套权限显式提示 / 用户选择补齐。保存前显示新增 / 移除 / 范围变化及关联成员，支持逐项撤销。目录失败 / 撤权 / 迟到响应、未完成配置离开、停用组织、CAS冲突与容量限制保留安全行为；目录服务端隔离租户、隐藏未发布资源 / 敏感配置。真实BFF / PG浏览器验证，浅暗 / 窄屏 / 动效沿用V37。 |
 
 ## §T 实施任务
 
@@ -394,9 +397,9 @@
 | T10 | x | 用户确认制造业测试数据；PostgreSQL 只读连接配置、结构化查询、工厂范围下推和工具授权完成。Core、迁移 1–8 / 真只读账号 / OIDC / 数据查询 / 审计联合验收通过；覆盖隔离、聚合、撤权、取消、超限与精度边界，详见 [连接器契约](docs/architecture/connectors.md)。 | I.connectors,I.authz,V4,V5,V6,V7,V12,V18,V20,V21,V25 |
 | T11 | x | 已交付：独立 ChatBI 前后端，活动模型 / 数据委托、提问与严格结构化计划、授权执行、结果与依据；制造业测试题集通过真实 DeepSeek / PostgreSQL 验证，独立 / 嵌入浏览器、隔离与越权拒绝通过。 | I.chatbi,I.connectors,I.models,I.gateway,I.identity,I.audit,V2,V4,V5,V6,V7,V8,V9,V12,V14,V18,V19,V20,V21,V25,V29 |
 | T12 | x | 独立知识库前后端、DOCX / PDF / TXT / Markdown、MinIO、RabbitMQ通知、固定本机embedding、pgvector索引 / 授权检索、活动委托与问答引用完成。代码回归、核心PG、真实原生服务 / 浏览器整链路及DeepSeek三道合成题通过，撤权 / 删除 / 隔离及清理通过。extracted不可问答，旧文档需启用索引后重新上传；见[开发记录](docs/development.md)、[索引与问答](docs/architecture/knowledge-qa.md)及[执行计划](docs/superpowers/plans/2026-11-05-t12-knowledge.md)。 | I.knowledge,I.jobs,I.authz,I.deploy,V2,V4,V8,V9,V22,V23,V24,V31,V32 |
-| T13 | ~ | 依赖T3,T8,T9,T11,T12；2026-11-05首批用户 / 租户 / 成员 / 组织 / 角色管理API、页面、授权导航与原子审计完成，真实OIDC / PostgreSQL / 浏览器验证通过，含并发 / 撤权、严格类型、500项及4MiB聚合预算。见[首批计划](docs/superpowers/plans/2026-11-05-t13-identity-management.md)、[身份管理合同](docs/architecture/identity-management.md)及开发记录。第二批模型 / 数据源 / 数据集管理页、配置 / 测试 / 调用记录及独立业务授权已完成，见[资源管理合同](docs/architecture/resource-management.md)与[第二批计划](docs/superpowers/plans/2026-11-05-t13-resource-management.md)。第三批统一调用 / 审计 / 异常、授权筛选 / 分页 / 关联和有界审计导出已接入，见[审计合同](docs/architecture/audit-console.md)及[第三批计划](docs/superpowers/plans/2026-11-05-t13-audit-console.md)；此前仅token校准的UI一致性结论撤回；本轮按原示例完整组件纠正，落实V36 / V37及B100，见[纠正计划](docs/superpowers/plans/2026-11-05-reference-ui-correction.md)。继续任务 / 运行诊断和D9生产留存策略。已有应用生命周期及两个用例持续回归，不新增AI用例；T13整体未完成。 | I.portal,I.identity,I.authz,I.registry,I.models,I.connectors,I.jobs,I.audit,V4,V7,V11,V12,V20,V25,V33,V34,V35,V36,V37 |
+| T13 | ~ | 依赖T3,T8,T9,T11,T12；2026-11-05首批用户 / 租户 / 成员 / 组织 / 角色管理API、页面、授权导航与原子审计完成，真实OIDC / PostgreSQL / 浏览器验证通过，含并发 / 撤权、严格类型、500项及4MiB聚合预算。见[首批计划](docs/superpowers/plans/2026-11-05-t13-identity-management.md)、[身份管理合同](docs/architecture/identity-management.md)及开发记录。第二批模型 / 数据源 / 数据集管理页、配置 / 测试 / 调用记录及独立业务授权已完成，见[资源管理合同](docs/architecture/resource-management.md)与[第二批计划](docs/superpowers/plans/2026-11-05-t13-resource-management.md)。第三批统一调用 / 审计 / 异常、授权筛选 / 分页 / 关联和有界审计导出已接入，见[审计合同](docs/architecture/audit-console.md)及[第三批计划](docs/superpowers/plans/2026-11-05-t13-audit-console.md)；此前仅token校准的UI一致性结论撤回；本轮按原示例完整组件纠正，落实V36 / V37及B100，见[纠正计划](docs/superpowers/plans/2026-11-05-reference-ui-correction.md)。角色授权工作区按V38重做具名目录、能力 / 范围、汇总与变更检查，见[交互方案](docs/superpowers/plans/2026-11-05-role-permission-workspace.md)。继续任务 / 运行诊断和D9生产留存策略。已有应用生命周期及两个用例持续回归，不新增AI用例；T13整体未完成。 | I.portal,I.identity,I.authz,I.registry,I.models,I.connectors,I.jobs,I.audit,V4,V7,V11,V12,V20,V25,V33,V34,V35,V36,V37,V38 |
 | T14 | . | 依赖 T11,T12,T13；落实 D7 交付决策；输出 SaaS / 私有化配置与发布说明，验证迁移、初始化、升级回滚与备份恢复；记录资源需求及外部依赖。 | I.deploy,I.registry,V13,V16,V26 |
-| T15 | . | 依赖T14；落实D9性能 / 可用性门槛；验收V1–V13及已采纳的V14–V37，覆盖C8平台功能 / 页面矩阵、既有两个用例的真实链路、权限隔离、双主题与两种部署，以及流取消 / 回滚等行为；分别报告平台和用例结果及未通过项。 | I.portal,I.gateway,I.authz,I.chatbi,I.knowledge,I.jobs,I.deploy,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,V29,V30,V31,V32,V33,V34,V35,V36,V37 |
+| T15 | . | 依赖T14；落实D9性能 / 可用性门槛；验收V1–V13及已采纳的V14–V38，覆盖C8平台功能 / 页面矩阵、既有两个用例的真实链路、权限隔离、双主题与两种部署，以及流取消 / 回滚等行为；分别报告平台和用例结果及未通过项。 | I.portal,I.gateway,I.authz,I.chatbi,I.knowledge,I.jobs,I.deploy,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,V29,V30,V31,V32,V33,V34,V35,V36,V37,V38 |
 
 建议首个纵向里程碑：身份 / 租户 → 注册一个最小应用 → 门户可见 → qiankun 加载 → YARP 授权转发 / 流式响应 → 审计可追溯；再接入两个真实 AI 用例。MVP 完成仍需满足 C2 全部范围及已采纳的验收约束。
 
@@ -517,10 +520,14 @@
 | B111 | 2026-11-05 | native dialog适配把overlay默认文字色设成text-primary，覆盖原overlay继承的text-frame，增强双主题对照发现容器继承色漂移。 | 复用原text-frame继承，标题 / 描述仍由原组件规则设色；逐项比较dialog及actions实际样式。V37已有覆盖。 |
 | B112 | 2026-11-05 | 本机交互身份夹具的form-action仅self，浏览器将POST后跳往另一回环端口BFF的重定向也拦截；HttpClient协议测试不执行CSP，真实Keycloak主题验收不覆盖此测试夹具策略。 | 仅额外允许已校验OIDC callback的回环origin；保持脚本 / 资源self、CSRF和凭据校验。协议断言CSP并在实际预览浏览器验证密码登录 / 回跳 / 退出，无拦截业务API。V37已有覆盖。 |
 | B113 | 2026-11-05 | 临时预览截图脚本选择租户后立即硬跳新文档，取消尚未提交的选择请求，审计页正确显示未选租户而使截图断言失败。 | 截图与正式验收一致，等待BFF确认选中租户再跳页，并等待有限过渡完成后取图；不改产品授权 / 导航保护。测试同步错误，无新增不变量。 |
-
 | B114 | 2026-11-05 | 原整页滚轮仅在参考页加载，正式页缺切页 / 内容入场触发；modal立即开关且父v-if提前卸载；门户与登录无条件按OS减少动效关动画。此前静态 / reduced验收未验证实际连续帧。 | V37补正常动效验收。原滚轮算法生成ES模块，按文档共享并随界面释放；复用视图 / 内容 / 菜单触发与220ms overlay退出；登录与门户按原默认full，保留system / reduced。真实滚轮红绿、原版轨迹 / 弹层时序、qiankun重挂及登录Canvas连续帧回归。 |
 | B115 | 2026-11-05 | 动效接入AI根组件时相对import多退一级，vue-tsc立即报模块不存在。 | 按已有共享组件路径纠正为三级；类型检查及三个独立产物构建复验。机械路径错误，V19 / V37已覆盖，无新增不变量。 |
-
 | B116 | 2026-11-05 | 动效预览脚本在BFF选租户已提交但客户端仍切换时点击导航，被正确的写入守卫忽略；只等抽屉出现又早于真实详情完成，误判无可滚内容。 | 等客户端刷新按钮可用、管理aria-busy=false及真实数据集出现，再测滚动；关闭后等表格重载与有限动画完成再截图。测试同步错误，沿用B113 / V37，不放宽产品保护。 |
+| B117 | 2026-11-05 | 角色表单直接暴露permission / resourceType / resourceId且逐条配置，缺少具名目录 / 授权汇总 / 差异检查；通用组织选择允许保存业务接口不接受的组织级应用授权。 | V38；真实权限目录、独立授权工作区、能力 / 范围分离与精确差异。保留未知授权和原CAS写入；补具名目录权限 / 配套依赖 / 组织范围回归。 |
+| B118 | 2026-11-05 | 新能力描述直接塞入原32px checkbox label导致多行内容重叠；编辑 / 检查共用滚动位置会遮住检查标题，截图发现。 | 复用原单行checkbox，将说明置于独立段落；左右区域独立滚动，步骤切换复位，原内容入场。V37/V38覆盖，补多行与检查标题可见断言。 |
+| B119 | 2026-11-05 | 编译检查发现移除角色抽屉后遗留无效类型比较、C#单个params参数的target-typed new被解释为数组。 | 删除失效分支，显式IdentityPermissionReference构造；类型 / .NET编译复验。机械错误，现有V19覆盖，无新增不变量。 |
+| B120 | 2026-11-05 | 新实库目录夹具清理将string[]直接传params object[]，数组协变展开成多个标量，ANY($1)触发42809并遮住原验收结果。 | 显式将数组作为一个参数传入，重跑独立身份实库与浏览器；夹具边界错误，现有V19覆盖。 |
+
+| B121 | 2026-11-05 | 旧角色回归用同名标题可见判断保存完成；新工作区编辑期间也显示该标题，异步CSRF尚未发出PUT就读取测试写入数组。 | 等回读后编辑权限按钮可用，再断言写入；不改产品保存时序或并发保护。测试同步错误，V38覆盖。 |
 
 2026-11-03 复验：B2 的浏览器历史导航、B6 的资源失败重载已通过真实浏览器；B3 的重复卸载重挂与 B5 的依赖锁定已验证，但不将这些结果扩展为所有组件内部异常均已覆盖。B9 修复后 All 自然返回 0、8 项浏览器测试完成于 21.2 秒，无需人工清理服务。

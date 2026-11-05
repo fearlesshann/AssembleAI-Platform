@@ -1,0 +1,66 @@
+/* New task layout; all controls and surfaces use the user's ui-v1 design vocabulary. */
+.role-workspace { display:flex; flex-direction:column; min-width:0; min-height:0; flex:1; margin:0 8px 12px; border:1px solid var(--surface-border); border-radius:10px; overflow:hidden; }
+.role-heading { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--surface-border); }
+.role-heading-title { display:flex; gap:8px; align-items:center; }
+.role-heading h2 { font-size:16px; font-weight:var(--fw-semibold); }
+.role-heading p { font-size:12px; color:var(--text-secondary); }
+.role-heading > .pill-btn:last-child { margin-left:auto; }
+.role-basics { display:flex; align-items:center; flex-wrap:wrap; gap:16px; padding:16px; border-bottom:1px solid var(--surface-border); }
+.role-basics > .subwindow-field { width:min(320px,100%); }
+.role-helper { color:var(--text-secondary); font-size:12px; line-height:18px; }
+.role-tabs { padding:10px 16px; flex-shrink:0; }
+.role-body { display:grid; grid-template-columns:minmax(0,1fr) 280px; flex:1; min-height:0; overflow:hidden; grid-template-rows:minmax(0,1fr); }
+.role-body.is-readonly { display:block; overflow:auto; }
+.role-config, .role-review { overflow:auto; min-height:0; min-width:0; padding:0 16px 16px; }
+.role-config-head, .role-assignment-summary > header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 0; }
+.role-workspace h3 { font-size:13px; font-weight:var(--fw-semibold); color:var(--text-frame); }
+.role-workspace h4 { margin:0; font-size:13px; font-weight:var(--fw-medium); color:var(--text-frame); }
+.role-search .data-grid__search { width:100%; min-width:0; }
+.role-category-list { padding:10px 0; flex-wrap:wrap; }
+.role-picker { display:grid; grid-template-columns:minmax(150px,.8fr) minmax(0,1.5fr); border:1px solid var(--surface-border); border-radius:8px; overflow:hidden; }
+.role-resource-list.app-list { padding:4px; border-right:1px solid var(--surface-border); max-height:640px; min-height:180px; }
+.role-resource { width:100%; text-align:left; }
+.role-resource .app-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.role-resource.selected { background:var(--nav-selected); }
+.role-assigned-dot { color:var(--accent-link); font-size:12px; margin-left:auto; }
+.role-capabilities { min-width:0; padding:12px; }
+.role-capabilities > header { display:flex; flex-direction:column; gap:4px; padding-bottom:12px; }
+.role-capability-options { border:0; padding:0; margin:0; min-width:0; }
+.role-capability { padding:4px 0 10px; border-top:1px solid var(--surface-border); }
+.role-capability .subwindow-check input { flex-shrink:0; }
+.role-capability > p { padding-left:22px; }
+.role-capability strong { font-size:13px; font-weight:var(--fw-medium); }
+.role-capability small { font-size:12px; line-height:18px; color:var(--text-secondary); }
+.role-scope { display:flex; flex-direction:column; gap:10px; padding-top:14px; margin-top:4px; border-top:1px solid var(--surface-border); }
+.role-organization-list { display:flex; flex-direction:column; gap:10px; max-height:180px; overflow:auto; padding:2px; overscroll-behavior:contain; }
+.role-technical { font-size:12px; color:var(--text-tertiary); margin:12px 0; }
+.role-technical summary { cursor:pointer; }
+.role-technical code { display:block; margin-top:4px; overflow-wrap:anywhere; }
+.role-composer-foot { border-top:1px solid var(--surface-border); padding-top:12px; display:flex; flex-direction:column; gap:10px; }
+.role-composer-foot > div { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+.role-assignment-summary { overflow:auto; min-height:0; padding:0 16px 16px; border-left:1px solid var(--surface-border); background:var(--panel-bg); min-width:0; }
+.role-assignment-summary > header { position:sticky; top:0; z-index:1; background:var(--panel-bg); border-bottom:1px solid var(--surface-border); }
+.role-body.is-readonly .role-assignment-summary > header { background:var(--surface-bg); }
+.role-body.is-readonly .role-assignment-summary { overflow:visible; border-left:0; background:transparent; }
+.role-assignment { padding:14px 0; border-bottom:1px solid var(--surface-border); }
+.role-assignment > header { display:flex; align-items:center; justify-content:space-between; gap:8px; overflow-wrap:anywhere; }
+.role-assignment ul, .role-dependencies ul { margin:8px 0; padding-left:18px; font-size:12px; line-height:20px; color:var(--text-primary); }
+.role-assignment-scope p { font-size:12px; line-height:18px; overflow-wrap:anywhere; margin:2px 0 6px; }
+.role-members, .role-dependencies { display:flex; flex-direction:column; gap:8px; padding-top:16px; font-size:12px; }
+.role-savebar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-top:1px solid var(--surface-border); background:var(--surface-bg); flex-shrink:0; }
+.role-savebar > div { flex:1; color:var(--text-secondary); font-size:12px; }
+.role-feedback, .role-validation { font-size:12px; color:var(--danger-strong); line-height:18px; }
+.role-feedback { padding:12px 0; display:flex; align-items:center; gap:10px; }
+.role-empty { padding:16px 0; font-size:12px; line-height:20px; color:var(--text-secondary); }
+.role-review > h3 { margin:12px 0 8px; }
+.role-change-counts { display:flex; flex-wrap:wrap; gap:16px; margin:16px 0; font-size:12px; color:var(--text-primary); }
+.role-metadata-change { font-size:12px; line-height:20px; margin:8px 0; }
+.role-change-grid { margin:12px 0 0; }
+.role-change-grid .data-grid__table { min-width:480px; }
+.role-change-grid td { white-space:normal; overflow-wrap:anywhere; }
+.role-change-grid td strong { font-weight:var(--fw-medium); }
+.role-change-grid td small { display:block; font-size:12px; color:var(--text-secondary); line-height:20px; }
+.role-old-scope { color:var(--text-secondary); }
+.role-activity { padding:0 16px 16px; }
+@media(max-width:1150px) { .role-body { grid-template-columns:minmax(0,1fr); grid-template-rows:auto; overflow:auto; }.role-config,.role-review,.role-assignment-summary { overflow:visible; }.role-assignment-summary { border-left:0; border-top:1px solid var(--surface-border); }.role-resource-list.app-list { max-height:400px; } }
+@media(max-width:760px) { .role-workspace { overflow:visible; }.role-body { overflow:visible; }.role-heading p { flex-basis:100%; }.role-picker { display:flex; flex-direction:column; }.role-resource-list.app-list { max-height:180px; border-right:0; border-bottom:1px solid var(--surface-border); }.role-savebar { flex-wrap:wrap; }.role-savebar > div { flex-basis:100%; }.role-basics { gap:12px; }.role-change-grid .data-grid__scroll { overflow:auto; } }

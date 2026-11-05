@@ -39,10 +39,12 @@ try {
   }
   async function save(page, name) {
     const mutation = page.waitForResponse(response => response.request().method() === 'PUT' && new URL(response.url()).pathname.startsWith(base));
+    const roleEditor = page.getByRole('button', { name: '检查并保存', exact: true });
+    if (await roleEditor.count()) await roleEditor.click();
     await page.getByRole('button', { name: '保存变更', exact: true }).click();
     assert.equal((await mutation).status(), 200);
     await expect(page.getByRole('heading', { name, exact: true, level: 2 })).toBeVisible();
-    await expect(page.getByRole('button', { name: '编辑资料', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /^(编辑资料|编辑权限)$/ })).toBeEnabled();
   }
   const root = await login('平台管理员', '/manage/users');
   await root.getByRole('button', { name: '新增用户', exact: true }).click();
@@ -75,14 +77,14 @@ try {
   await admin.goto('/manage/roles');
   await admin.getByRole('button', { name: '新增角色', exact: true }).click();
   await admin.getByLabel('角色名称', { exact: true }).fill('装配生产只读');
-  await admin.getByRole('button', { name: '添加权限', exact: true }).click();
-  await admin.getByLabel('权限名称', { exact: true }).fill('production:read');
-  await admin.getByLabel('资源类型', { exact: true }).fill('dataset');
-  await admin.getByLabel('资源标识', { exact: true }).fill('production');
-  await admin.getByLabel('整个租户', { exact: true }).uncheck();
+  await admin.getByRole('button', { name: '企业知识文档 · knowledge', exact: true }).click();
+  await admin.getByRole('checkbox', { name: '阅读与问答', exact: true }).check();
+  await chooseReferenceOption(admin, '生效范围', 'organizations');
   await admin.getByLabel('装配一厂', { exact: true }).check();
+  await admin.getByRole('button', { name: '加入授权清单', exact: true }).click();
   await save(admin, '装配生产只读');
   const role = (await api(admin, 'GET', tenant)).body.roles.find(role => role.name === '装配生产只读');
+  assert.equal(role.grants[0].permission, 'knowledge:read');
   assert.deepEqual(role.grants[0].organizationIds, [org.organizationId]);
   assert.equal(role.grants[0].tenantWide, false);
   await toggleReferenceTheme(admin);

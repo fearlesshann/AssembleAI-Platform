@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using AssembleAI.Platform.Identity;
+using AssembleAI.Platform.Registry;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -39,6 +40,17 @@ public static class PostgresIdentityManagementTests
                 IdentityManagementFixture.Assert(global.GetProperty("platformAdministrator").GetBoolean()
                     && global.GetProperty("users").GetArrayLength() == 4, "Global administration works without tenant membership or selection.");
                 await root.Call("GET", path);
+                var catalog = await root.Call("GET", path + "/permission-catalog");
+                IdentityManagementFixture.Assert(catalog.GetProperty("tenantId").GetGuid() == f.Tenant
+                    && catalog.GetProperty("resources").EnumerateArray().Any(resource => resource.GetProperty("resourceType").GetString() == "knowledge"),
+                    "Global identity administrators can assign named business permissions without personal business membership.");
+                var catalogApps = catalog.GetProperty("resources").EnumerateArray().Where(resource => resource.GetProperty("resourceType").GetString() == "application").ToArray();
+                IdentityManagementFixture.Assert(catalogApps.Any(resource => resource.GetProperty("resourceId").GetString() == f.CatalogApp && resource.GetProperty("name").GetString() == "租户固定版本")
+                    && !catalogApps.Any(resource => new[] { f.DraftApp, f.OtherPrivateApp }.Contains(resource.GetProperty("resourceId").GetString())),
+                    "Catalog uses this tenant's assigned release and excludes drafts and another tenant's disabled private release.");
+                IdentityManagementFixture.Assert(!catalog.GetRawText().Contains("production-api") && !catalog.GetRawText().Contains("frontendArtifact") && !catalog.GetRawText().Contains("/apps/"),
+                    "Catalog must not serialize application deployment contracts.");
+                await root.Call("GET", IdentityManagementFixture.Base + "/tenants/" + Guid.NewGuid() + "/permission-catalog", expected: 404);
                 await root.Call("GET", $"/api/platform/v1/tenants/{f.Tenant}/access", expected: 403);
                 await root.Call("PUT", IdentityManagementFixture.Base + "/users/" + f.Root,
                     new { expectedRevision = 1, issuer = oidc.Authority, subject = f.Root.ToString(), displayName = "平台管理员", enabled = false, platformAdministrator = false }, 409);
@@ -47,9 +59,15 @@ public static class PostgresIdentityManagementTests
                 await developer.Call("GET", workspace, expected: 403);
                 await developer.Call("GET", path, expected: 403);
                 await member.Select(f.Tenant); await member.Call("GET", path, expected: 403);
+                await member.Call("GET", path + "/permission-catalog", expected: 403);
+                await developer.Call("GET", path + "/permission-catalog", expected: 403);
+                await admin.Call("GET", path + "/permission-catalog", expected: 403);
                 await admin.Call("GET", path, expected: 403);
                 await admin.Select(f.Tenant);
                 var own = await admin.Call("GET", path);
+                await admin.Call("GET", path + "/permission-catalog");
+                await admin.Call("GET", other + "/permission-catalog", expected: 403);
+                await admin.Call("GET", path + "/permission-catalog?tenantId=" + f.OtherTenant, expected: 400);
                 IdentityManagementFixture.Assert(own.GetProperty("members").GetArrayLength() == 2, "Tenant administrator sees only local members.");
                 var restricted = await admin.Call("GET", workspace);
                 IdentityManagementFixture.Assert(restricted.GetProperty("users").GetArrayLength() == 0
@@ -173,6 +191,9 @@ internal sealed class IdentityManagementFixture
     public Guid Tenant { get; } = Guid.NewGuid(); public Guid OtherTenant { get; } = Guid.NewGuid();
     public Guid OtherRole { get; } = Guid.NewGuid(); public Guid OtherOrganization { get; } = Guid.NewGuid();
     public List<Guid> AdditionalUsers { get; } = [];
+    public string CatalogApp { get; } = "catalog-" + Guid.NewGuid().ToString("N");
+    public string DraftApp { get; } = "draft-" + Guid.NewGuid().ToString("N");
+    public string OtherPrivateApp { get; } = "private-" + Guid.NewGuid().ToString("N");
     public async Task Seed(NpgsqlConnection db, string issuer)
     {
         foreach (var (id, name) in new[] { (Root, "平台管理员"), (Admin, "租户管理员"), (Member, "普通成员"), (Developer, "研发审核员") })
@@ -184,11 +205,20 @@ internal sealed class IdentityManagementFixture
         await Execute(db, "INSERT INTO public.tenant_identity_administrators(tenant_id,user_id) VALUES($1,$2)", Tenant, Admin);
         await Execute(db, "INSERT INTO public.tenant_organizations(tenant_id,organization_id,name,kind) VALUES($1,$2,'外租户组织','factory')", OtherTenant, OtherOrganization);
         await Execute(db, "INSERT INTO public.tenant_roles(tenant_id,role_id,name) VALUES($1,$2,'外租户角色')", OtherTenant, OtherRole);
+        foreach (var id in new[] { CatalogApp, DraftApp, OtherPrivateApp })
+            await Execute(db, "INSERT INTO public.platform_applications(app_id,name,category,owner_user_id) VALUES($1,'目录验收','测试',$2)", id, Developer);
+        foreach (var (id, status) in new[] { (CatalogApp, "published"), (DraftApp, "draft"), (OtherPrivateApp, "disabled") })
+            await Execute(db, "INSERT INTO public.platform_application_releases(app_id,release_version,manifest,status,submitted_by,published_at) VALUES($1,'1.0.0',$2::jsonb,$3,$4,CASE WHEN $3='draft' THEN NULL ELSE now() END)",
+                id, ManifestValidator.Serialize(ManifestTests.Valid(id) with { Name = "租户固定版本" }), status, Developer);
+        await Execute(db, "INSERT INTO public.platform_application_releases(app_id,release_version,manifest,status,submitted_by,published_at) VALUES($1,'2.0.0',$2::jsonb,'published',$3,now())",
+            CatalogApp, ManifestValidator.Serialize(ManifestTests.Valid(CatalogApp, "2.0.0") with { Name = "新版名称" }), Developer);
+        await Execute(db, "INSERT INTO public.tenant_applications(tenant_id,app_id,release_version,enabled) VALUES($1,$2,'1.0.0',true),($3,$4,'1.0.0',false)", Tenant, CatalogApp, OtherTenant, OtherPrivateApp);
     }
     public async Task Cleanup(NpgsqlConnection db)
     {
         await Execute(db, "DELETE FROM public.platform_identity_audit WHERE actor_user_id=ANY($1)", new[] { Root, Admin, Member, Developer }.Concat(AdditionalUsers).ToArray());
         await Execute(db, "DELETE FROM public.platform_tenants WHERE tenant_id=ANY($1)", new[] { Tenant, OtherTenant });
+        await Execute(db, "DELETE FROM public.platform_applications WHERE app_id=ANY($1)", (object)new[] { CatalogApp, DraftApp, OtherPrivateApp });
         await Execute(db, "DELETE FROM public.platform_users WHERE user_id=ANY($1)", new[] { Root, Admin, Member, Developer }.Concat(AdditionalUsers).ToArray());
     }
     public static WebApplication Application(string connection, OidcFixture oidc, string origin) => PlatformApplication.Build([

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AssembleAI.Platform.Authorization;
+using AssembleAI.Platform.Registry;
 using Npgsql;
 
 namespace AssembleAI.Platform.IdentityManagement;
@@ -11,6 +12,29 @@ public sealed class PostgresIdentityManagementStore(IConfiguration configuration
     // Reads and mutations use the same lock order. External SQL writers are also fenced;
     // an advisory lock alone cannot protect a concurrent DBA revocation.
     private const string Tables = "public.platform_users,public.platform_tenants,public.tenant_memberships,public.tenant_organizations,public.tenant_roles,public.tenant_member_roles,public.role_permission_grants,public.grant_organizations,public.platform_identity_administrators,public.tenant_identity_administrators";
+
+    public Task<IdentityResult<IReadOnlyList<IdentityGrantApplication>>> ReadGrantApplicationsAsync(SubjectIdentity subject, Guid tenant, Guid? selectedTenant, CancellationToken token) => Run(false, async (db, ct) =>
+    {
+        if (await TenantActor(db, subject, tenant, selectedTenant, ct) is null) return Fail<IReadOnlyList<IdentityGrantApplication>>(IdentityError.Forbidden);
+        if (!await Exists(db, "SELECT EXISTS(SELECT 1 FROM public.platform_tenants WHERE tenant_id=$1)", ct, tenant)) return Fail<IReadOnlyList<IdentityGrantApplication>>(IdentityError.NotFound);
+        // Only published display metadata or this tenant's assigned release.
+        // Unpublished drafts, other tenants' assignments and deployment contracts never leave this boundary.
+        var applications = await Read(db, """
+            SELECT COALESCE(r.manifest,p.manifest)::text,COALESCE(t.enabled AND r.status='published',false)
+            FROM public.platform_applications a
+            LEFT JOIN public.tenant_applications t ON t.app_id=a.app_id AND t.tenant_id=$1
+            LEFT JOIN public.platform_application_releases r ON r.app_id=t.app_id AND r.release_version=t.release_version
+            LEFT JOIN LATERAL (SELECT manifest FROM public.platform_application_releases
+                WHERE app_id=a.app_id AND status='published' ORDER BY published_at DESC,release_version COLLATE "C" DESC LIMIT 1) p ON true
+            WHERE r.manifest IS NOT NULL OR p.manifest IS NOT NULL
+            ORDER BY a.app_id COLLATE "C" LIMIT 501
+            """, reader => {
+                using var json = JsonDocument.Parse(reader.GetString(0));
+                if (!ManifestValidator.TryParse(json.RootElement, out var manifest)) throw new IdentityManagementUnavailableException();
+                return new IdentityGrantApplication(manifest!.AppId, manifest.Name, reader.GetBoolean(1), manifest.Permissions);
+            }, ct, tenant);
+        return IdentityResult<IReadOnlyList<IdentityGrantApplication>>.Success(applications);
+    }, token);
 
     public Task<IdentityResult<IdentityWorkspace>> ReadWorkspaceAsync(SubjectIdentity subject, CancellationToken token) => Run(false, async (db, ct) =>
     {
