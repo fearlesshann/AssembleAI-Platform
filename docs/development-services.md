@@ -53,7 +53,7 @@ powershell -NoProfile -File deploy/postgres/migrate.ps1 -Psql '.\.local-data\nat
 
 将示例路径与地址换成实际环境。迁移前需已有 `assembleai_platform` 数据库及同名角色，迁移账号需有 `SET ROLE assembleai_platform` 和创建对应对象的权限。密码使用 PostgreSQL 密码文件或进程环境 `PGPASSWORD`，不放入命令行。脚本限定目标数据库，SQL 会再次检查数据库名，使用事务及 advisory lock。
 
-默认执行 `apply.sql` 的控制面迁移 1–10，不需要 pgvector。需要知识库扩展时加 `-IncludeVector`，执行 `apply-with-vector.sql`：控制面迁移完成后，再由 `enable-vector.sql` 安装并严格核验 pgvector 0.8.7。此时服务器必须已安装扩展文件，迁移账号也需具备安装扩展的权限；缺失或版本不符都会失败。该组合按各迁移事务顺序提交，vector 失败时已提交的控制面迁移仍保留。
+默认执行 `apply.sql` 的控制面迁移 1–13，包括身份管理及统一审计索引 / 导出表，不需要 pgvector。需要知识库扩展时加 `-IncludeVector`，执行 `apply-with-vector.sql`：控制面迁移完成后，再由 `enable-vector.sql` 安装并严格核验 pgvector 0.8.7。此时服务器必须已安装扩展文件，迁移账号也需具备安装扩展的权限；缺失或版本不符都会失败。该组合按各迁移事务顺序提交，vector 失败时已提交的控制面迁移仍保留。
 
 平台 `Readiness:RequireVector` 默认 true；仅控制面环境需明确配置 `Readiness__RequireVector=false`。这不会声明知识库已就绪，也不会绕过其他基础设施检查。开发流式样例仍不依赖数据库。
 

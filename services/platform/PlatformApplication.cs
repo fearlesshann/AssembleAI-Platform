@@ -9,6 +9,7 @@ using AssembleAI.Platform.Models;
 using AssembleAI.Platform.Connectors;
 using AssembleAI.Platform.Knowledge;
 using AssembleAI.Platform.IdentityManagement;
+using AssembleAI.Platform.Audit;
 
 namespace AssembleAI.Platform;
 
@@ -44,6 +45,7 @@ public static class PlatformApplication
         builder.AddPlatformConnectors();
         builder.AddPlatformKnowledge();
         builder.AddIdentityManagement();
+        builder.AddAuditConsole();
         var app = builder.Build();
         app.UseExceptionHandler();
         app.UseBffSessionBoundary();
@@ -51,6 +53,7 @@ public static class PlatformApplication
         app.UseAuthorization();
         app.MapIdentityEndpoints();
         app.MapIdentityManagementEndpoints();
+        app.MapAuditConsole();
         app.MapBffEndpoints();
         app.MapInternalCallEndpoints();
         app.MapRegistryEndpoints();

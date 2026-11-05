@@ -11,3 +11,4 @@
 \ir 0010_knowledge.sql
 \ir 0011_knowledge_index.sql
 \ir 0012_identity_management.sql
+\ir 0013_audit_console.sql

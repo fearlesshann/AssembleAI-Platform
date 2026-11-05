@@ -1,0 +1,314 @@
+/* Canonical product tokens from references/ui-v1/app.css; see reference-design-contract.md. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+}
+
+:root,
+html[data-theme="dark"] {
+  /* Elevation ladder (Linear dark): level-0 #08090a → panel #0f1011 → level-2 #141516 → level-3 #191a1b
+     Shell: chrome/sidebar sink to level-0; main surface lifts to level-2 for clearer contrast. */
+  --frame-bg: #08090a;
+  --plate-bg: #08090a;
+  --plate-border: #ffffff18;
+  --surface-bg: #141516;
+  --surface-border: #ffffff16;
+  --surface-shadow: 0 0 0 1px #0006, 0 0 0 2px #0004;
+  --panel-bg: #08090a;
+  --chat-bg: #191a1b;
+  --text-frame: #f7f8f8;
+  --text-primary: #d4dae3;
+  --text-secondary: #8e949d;
+  --text-tertiary: #6a6e76;
+  --hairline: #32343a;
+  --nav-selected: #ffffff1a;
+  --nav-hover: #ffffff12;
+  --nav-hover-strong: #ffffff18;
+  --border-card: #ffffff18;
+  --border-chat: #ffffff24;
+  --sidebar-w: 232px;
+  --props-w: 220px;
+  --fw-normal: 400;
+  --fw-medium: 510;
+  --fw-semibold: 590;
+  --font: "Inter Variable", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Open Sans", "Helvetica Neue", sans-serif;
+  --mono: "Berkeley Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+
+  /* Brand / status */
+  --accent: #5e6ad2;
+  --accent-bright: #7170ff;
+  --accent-hover: #7881e0;
+  --accent-soft: rgba(94, 106, 210, 0.16);
+  --accent-soft-strong: rgba(94, 106, 210, 0.28);
+  --accent-soft-muted: rgba(94, 106, 210, 0.08);
+  --accent-soft-row: rgba(94, 106, 210, 0.18);
+  --accent-ring: rgba(94, 106, 210, 0.45);
+  --accent-border: rgba(94, 106, 210, 0.55);
+  --accent-focus-glow: rgba(94, 106, 210, 0.25);
+  --accent-text: #c5caff;
+  --accent-text-strong: #d7dbff;
+  --accent-link: #9aa3ff;
+  --on-accent: #ffffff;
+  --status-warn: #f0bf00;
+  --status-ok: #27a644;
+  --danger: #eb5757;
+  --danger-strong: #ff6b6b;
+  --danger-soft: rgba(235, 87, 87, 0.16);
+  --danger-soft-strong: rgba(235, 87, 87, 0.28);
+  --danger-soft-chip: rgba(235, 87, 87, 0.2);
+  --danger-border: rgba(235, 87, 87, 0.34);
+  --danger-border-strong: rgba(235, 87, 87, 0.5);
+
+  /* Controls / menus / overlays */
+  --control-bg: #0d0e0f;
+  --control-bg-hover: #121314;
+  --control-bg-strong: #161718;
+  --control-border-hover: rgba(255, 255, 255, 0.18);
+  --control-border-strong: rgba(255, 255, 255, 0.24);
+  --control-border-check: rgba(255, 255, 255, 0.22);
+  --control-border-check-hover: rgba(255, 255, 255, 0.35);
+  --menu-bg: #17181a;
+  --menu-border: rgba(255, 255, 255, 0.12);
+  --menu-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  --drawer-bg: #141516;
+  --drawer-shadow: -16px 0 48px rgba(0, 0, 0, 0.35);
+  --dialog-bg: #1a1b1d;
+  --dialog-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  --toast-bg: #17181a;
+  --toast-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --overlay-backdrop: rgba(0, 0, 0, 0.52);
+  --elevated-ring: 0 0 0 1px #0003;
+  --divider-soft: rgba(255, 255, 255, 0.04);
+  --divider-mid: rgba(255, 255, 255, 0.08);
+  --divider-row: rgba(255, 255, 255, 0.055);
+
+  /* Buttons / chips / composer */
+  --pill-bg: rgba(255, 255, 255, 0.02);
+  --pill-inset: rgba(255, 255, 255, 0.05);
+  --pill-inset-hover: rgba(255, 255, 255, 0.14);
+  --code-chip-bg: rgba(255, 255, 255, 0.05);
+  --code-chip-border: rgba(255, 255, 255, 0.08);
+  --send-bg: rgba(255, 255, 255, 0.03);
+  --send-border: rgba(255, 255, 255, 0.05);
+  --send-border-hover: rgba(255, 255, 255, 0.14);
+  --send-shadow: 0 4px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.12);
+  --composer-wash: #ffffff08;
+  --composer-base: #161718;
+  --composer-edge-a: #ffffff26;
+  --composer-edge-b: #ffffff0d;
+  --activity-dot-bg: #23252a;
+  --comment-avatar-bg: #3c4149;
+  --comment-wash: #ffffff08;
+  --app-icon-wash: rgba(255, 255, 255, 0.05);
+  --app-icon-border: rgba(255, 255, 255, 0.08);
+  --list-row-wash: rgba(255, 255, 255, 0.02);
+  --list-row-inset: rgba(255, 255, 255, 0.05);
+  --list-row-inset-hover: rgba(255, 255, 255, 0.14);
+  --search-bg: rgba(255, 255, 255, 0.045);
+  --search-inset: rgba(255, 255, 255, 0.09);
+  --search-bg-hover: rgba(255, 255, 255, 0.07);
+  --search-inset-hover: rgba(255, 255, 255, 0.16);
+
+  /* Table */
+  --table-shell-bg: #0f1011;
+  --table-header-bg: #161718;
+  --table-row-bg: #121314;
+  --table-row-hover-sticky: #191a1c;
+  --table-row-selected-sticky: #12142a;
+
+  /* Scrollbars */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.28);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
+  --scrollbar-track-hover: rgba(0, 0, 0, 0.35);
+  --scrollbar-track-soft: rgba(255, 255, 255, 0.06);
+
+  /* Skeleton */
+  --sk-a: rgba(255, 255, 255, 0.04);
+  --sk-b: rgba(255, 255, 255, 0.09);
+
+  /* Primary button inset on hover */
+  --primary-hover-inset: rgba(255, 255, 255, 0.12);
+
+  /* Motion — CSS only, restrained */
+  --motion-instant: 100ms;
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+html[data-theme="light"] {
+  /* Chrome / sidebar slightly gray; main surface pure white for contrast */
+  --frame-bg: #f7f8f8;
+  --plate-bg: #f7f8f8;
+  --plate-border: rgba(0, 0, 0, 0.08);
+  --surface-bg: #ffffff;
+  --surface-border: rgba(0, 0, 0, 0.08);
+  --surface-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --panel-bg: #f3f4f5;
+  --chat-bg: #ffffff;
+  --text-frame: #08090a;
+  --text-primary: #2c2e33;
+  --text-secondary: #5a5f6b;
+  --text-tertiary: #8a8f98;
+  --hairline: #e6e8eb;
+  --nav-selected: rgba(0, 0, 0, 0.06);
+  --nav-hover: rgba(0, 0, 0, 0.04);
+  --nav-hover-strong: rgba(0, 0, 0, 0.07);
+  --border-card: rgba(0, 0, 0, 0.08);
+  --border-chat: rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+
+  --accent: #5e6ad2;
+  --accent-bright: #7170ff;
+  --accent-hover: #4b57c8;
+  --accent-soft: rgba(94, 106, 210, 0.12);
+  --accent-soft-strong: rgba(94, 106, 210, 0.2);
+  --accent-soft-muted: rgba(94, 106, 210, 0.08);
+  --accent-soft-row: rgba(94, 106, 210, 0.12);
+  --accent-soft-inset: rgba(94, 106, 210, 0.22);
+  --accent-ring: rgba(94, 106, 210, 0.4);
+  --accent-border: rgba(94, 106, 210, 0.55);
+  --accent-focus-glow: rgba(94, 106, 210, 0.2);
+  --accent-text: #3d49b8;
+  --accent-text-strong: #2f3aa8;
+  --accent-link: #4b57c8;
+  --on-accent: #ffffff;
+  --status-warn: #d4a000;
+  --status-ok: #1f8f3a;
+  --danger: #e5484d;
+  --danger-strong: #d63c41;
+  --danger-soft: rgba(229, 72, 77, 0.12);
+  --danger-soft-strong: rgba(229, 72, 77, 0.2);
+  --danger-soft-chip: rgba(229, 72, 77, 0.14);
+  --danger-border: rgba(229, 72, 77, 0.34);
+  --danger-border-strong: rgba(229, 72, 77, 0.48);
+
+  --control-bg: #ffffff;
+  --control-bg-hover: #f7f8f8;
+  --control-bg-strong: #f0f1f2;
+  --control-border-hover: rgba(0, 0, 0, 0.14);
+  --control-border-strong: rgba(0, 0, 0, 0.18);
+  --control-border-check: rgba(0, 0, 0, 0.18);
+  --control-border-check-hover: rgba(0, 0, 0, 0.32);
+  --menu-bg: #ffffff;
+  --menu-border: rgba(0, 0, 0, 0.1);
+  --menu-shadow: 0 12px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --drawer-bg: #ffffff;
+  --drawer-shadow: -16px 0 48px rgba(0, 0, 0, 0.12);
+  --dialog-bg: #ffffff;
+  --dialog-shadow: 0 24px 64px rgba(0, 0, 0, 0.16);
+  --toast-bg: #ffffff;
+  --toast-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --overlay-backdrop: rgba(15, 16, 17, 0.4);
+  --elevated-ring: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --divider-soft: rgba(0, 0, 0, 0.04);
+  --divider-mid: rgba(0, 0, 0, 0.08);
+  --divider-row: rgba(0, 0, 0, 0.06);
+
+  --pill-bg: rgba(0, 0, 0, 0.03);
+  --pill-inset: rgba(0, 0, 0, 0.06);
+  --pill-inset-hover: rgba(0, 0, 0, 0.12);
+  --code-chip-bg: rgba(0, 0, 0, 0.04);
+  --code-chip-border: rgba(0, 0, 0, 0.08);
+  --send-bg: rgba(0, 0, 0, 0.03);
+  --send-border: rgba(0, 0, 0, 0.06);
+  --send-border-hover: rgba(0, 0, 0, 0.14);
+  --send-shadow: 0 4px 4px -1px rgba(0, 0, 0, 0.04), 0 1px 1px rgba(0, 0, 0, 0.06);
+  --composer-wash: rgba(0, 0, 0, 0.02);
+  --composer-base: #ffffff;
+  --composer-edge-a: rgba(0, 0, 0, 0.12);
+  --composer-edge-b: rgba(0, 0, 0, 0.04);
+  --activity-dot-bg: #e8e9eb;
+  --comment-avatar-bg: #d0d4dc;
+  --comment-wash: rgba(0, 0, 0, 0.02);
+  --app-icon-wash: rgba(0, 0, 0, 0.04);
+  --app-icon-border: rgba(0, 0, 0, 0.08);
+  --list-row-wash: rgba(0, 0, 0, 0.02);
+  --list-row-inset: rgba(0, 0, 0, 0.05);
+  --list-row-inset-hover: rgba(0, 0, 0, 0.1);
+  --search-bg: rgba(0, 0, 0, 0.04);
+  --search-inset: rgba(0, 0, 0, 0.08);
+  --search-bg-hover: rgba(0, 0, 0, 0.06);
+  --search-inset-hover: rgba(0, 0, 0, 0.14);
+
+  --table-shell-bg: #ffffff;
+  --table-header-bg: #f7f8f8;
+  --table-row-bg: #ffffff;
+  --table-row-hover-sticky: #f0f1f2;
+  --table-row-selected-sticky: #eef0fb;
+
+  /* Light: dark thin thumb on hover */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.28);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.4);
+  --scrollbar-track-hover: rgba(0, 0, 0, 0.06);
+  --scrollbar-track-soft: rgba(0, 0, 0, 0.04);
+
+  --sk-a: rgba(0, 0, 0, 0.04);
+  --sk-b: rgba(0, 0, 0, 0.08);
+  --primary-hover-inset: rgba(255, 255, 255, 0.18);
+}
+
+:root {
+  font-family: var(--font);
+  font-synthesis: none;
+  font-feature-settings: "cv01", "ss03";
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  color: var(--text-primary);
+  background: var(--plate-bg);
+  --portal-page: var(--surface-bg);
+  --portal-panel: var(--panel-bg);
+  --portal-raised: var(--nav-selected);
+  --portal-ink: var(--text-primary);
+  --portal-muted: var(--text-secondary);
+  --portal-line: var(--surface-border);
+  --portal-brand: var(--accent);
+  --portal-error: var(--danger);
+  --portal-error-bg: var(--danger-soft);
+  --el-font-family: var(--font);
+  --el-font-size-base: 13px;
+  --el-color-primary: var(--accent);
+  --el-color-primary-light-3: var(--accent-hover);
+  --el-color-primary-light-5: var(--accent-soft-strong);
+  --el-color-primary-light-7: var(--accent-soft);
+  --el-color-primary-light-8: var(--accent-soft-muted);
+  --el-color-primary-light-9: var(--accent-soft-muted);
+  --el-color-primary-dark-2: var(--accent-hover);
+  --el-color-success: var(--status-ok);
+  --el-color-warning: var(--status-warn);
+  --el-color-danger: var(--danger);
+  --el-color-info: var(--text-secondary);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-primary);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-placeholder: var(--text-secondary);
+  --el-text-color-disabled: var(--text-secondary);
+  --el-border-color: var(--surface-border);
+  --el-border-color-light: var(--surface-border);
+  --el-border-color-lighter: var(--surface-border);
+  --el-border-color-extra-light: var(--surface-border);
+  --el-border-color-dark: var(--control-border-hover);
+  --el-border-color-darker: var(--control-border-strong);
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 8px;
+  --el-bg-color: var(--surface-bg);
+  --el-bg-color-page: var(--plate-bg);
+  --el-bg-color-overlay: var(--menu-bg);
+  --el-fill-color-blank: var(--surface-bg);
+  --el-fill-color: var(--nav-selected);
+  --el-fill-color-light: var(--nav-hover);
+  --el-fill-color-lighter: var(--nav-hover);
+  --el-fill-color-extra-light: var(--nav-hover);
+  --el-fill-color-dark: var(--nav-selected);
+  --el-fill-color-darker: var(--surface-border);
+  --el-disabled-bg-color: var(--control-bg);
+  --el-disabled-text-color: var(--text-secondary);
+  --el-disabled-border-color: var(--surface-border);
+  --el-box-shadow-light: none;
+}

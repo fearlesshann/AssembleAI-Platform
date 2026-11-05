@@ -360,3 +360,22 @@ T13保持进行中，下一批为模型 / 数据连接管理页，再推进统�
 最终完整`tools/verify-postgres.py --resource-browser`返回0：`.artifacts/postgres/run-41a13bc7eba34e1cabf3634e87ea2d71/result.json`的passed / cleanupComplete / resourceBrowserRequested为true，resourceOnly为false。该轮使用最终程序集与门户构建，迁移1–12及重放、身份初始化 / 容量 / 聚合预算、授权、PG会话、注册、目录、网关、模型、连接器和知识仓储基线全部通过。模型 / 数据源各6项真实HTTP竞争测试（表锁退出、切租户、权限撤销、配置行锁退出、外键父行锁退出、审计锁退出），合计**12项**均403且配置 / 修订 / 审计无越权提交；最终资源页面的持久化、CAS、实际调用、权限、主题 / 390px / 深链 / 退出也通过。测试数据库、凭据与进程清理完成。
 
 最终截图在`.artifacts/resource-postgres/74b349dd-1021-4388-8623-3a6dd028b059/`（model-light / source-dark / source-mobile），另有前端状态专项`.artifacts/t13-resources/`。本批实际模型调用使用loopback协议夹具，数据源使用独立PostgreSQL只读角色；未重跑实际DeepSeek问答、真实Keycloak产品或生产部署验收。既有两个用例通过代码回归，未新增业务用例。T13仍保持进行中，下一批统一调用 / 审计 / 异常、任务诊断及D9留存 / 导出；T14 / T15生产交付与性能验收仍在后续范围。
+
+
+## 2026-11-05 T13 第三批：统一审计与用户示例设计校准
+
+正式门户新增`/manage/audit[/source/id]`及`/manage/audit/global[/source/id]`。统一10类调用 / 操作 / 导出记录，支持固定时间窗、来源 / 结果 / 应用 / 请求号筛选、保护游标分页、详情和网关请求关联。原有精确资源与身份管理边界继续生效，新增网关观察、知识审计和导出权均显式授予；身份管理员不隐式获得业务记录。合同见[统一审计](architecture/audit-console.md)。迁移13增加历史查询索引及导出审计，readiness要求1–13。
+
+JSON导出最多1000条，保留truncated与exportedAt；记录仍逐条按查询权限过滤。持久化导出审计前后及响应前复核权限和实时BFF会话，故障或失效时不交付数据；提交后的最后检查若拒绝，审计可能已经存在。页面明确取消、403和不确定失败不能推断审计未写，不自动重试。不自动清理历史；单次31天窗口不等于生产留存期，生产容量、归档与备份恢复仍待后续。
+
+用户本轮明确要求严格复用原示例的底层设计。新增[设计合同](architecture/reference-design-contract.md)、共享reference-tokens及本地Inter 4.1字体，将正式门户和身份 / 应用 / 模型 / 数据源 / 审计管理的颜色、字重、外壳、导航、按钮、输入、表格密度与状态对齐到原HTML/CSS。232px侧栏、44px顶栏、28px导航 / 按钮、40px应用行及40/44px表头 / 行以实际浏览器对照验证；业务内容不照搬。保留原始快照不改，没有外部运行时字体请求。
+
+独立复核检查权限交集、global / tenant范围、历史资源、游标与导出时序，发现提交后403文案遗漏，已修复并加浏览器回归。实库浏览器还发现390px页面被表格sr-only绝对定位内容撑宽；滚动容器建立定位上下文后修复，保留键盘聚焦与局部横滚。测试选择器、约束夹具、导出提示和窄屏根因见SPEC B94–B99。未增加AI用例；ChatBI和知识库继续兼容回归。
+
+最终`tools/verify.ps1 -Scope All`返回0，日志`.artifacts/t13-audit-all.log`：**66项Node、201项原有Python、109项知识库Python、79项Playwright**通过；包含8项新审计交互及4项原示例实际样式对照，窄屏溢出回归并入审计交互测试。Vue类型检查、四个前端构建、.NET完整HTTP及真实FastAPI→YARP均通过。.NET构建0警告 / 0错误；本机ONNX模型目录显式配置，真实embedding测试未跳过。保留既有Vite包体积、Starlette及测试颜色环境提示，不将提示隐藏或描述为全部依赖验收。
+
+早期纯HTTP专项`.artifacts/postgres/run-e6669b17624e4137a0a99bd429ea145e/result.json`的passed / cleanupComplete为true。后续浏览器轮次分别暴露标签定位、390px辅助文本溢出，以及全量轮`run-70de80d38e0e4aac803a70a0af0e0b16`中权限选项尚未加载就断言的测试同步问题；这些失败轮不计作验收通过，均已清理。最后一项修为所有账号等待工作区加载完成与真实记录表出现后再检查权限，保留拒绝和空态的专门测试。
+
+最终完整`tools/verify-postgres.py --audit-browser`返回0：`.artifacts/postgres/run-e253529ced0845e59bdbda09b9d4a2aa/result.json`的passed / cleanupComplete / auditBrowserRequested为true，auditOnly为false。包含迁移1–13及重放、缺13的readiness拒绝、身份初始化 / 容量 / 授权、PG会话、注册 / 目录 / 网关、模型、连接器和知识仓储基线；本批多来源稳定分页、各来源精确资源 / tenant / global隔离、参数 / 时间 / 来源 / 结果筛选、篡改及跨主体游标拒绝、请求关联、安全元数据、未完成与窗外记录、1000条截断及导出审计故障均通过。4类真实锁等待后的退出 / 切租户 / 撤权及导出审计回滚通过。浏览器直接经过OIDC协议服务、BFF及PostgreSQL完成查询、翻页、详情、关联、JSON下载、范围权限、深链、主题 / 390px和退出；没有拦截业务API。数据库、临时凭据与进程清理完成。
+
+最终浅色 / 暗色 / 390px截图在`.artifacts/audit-postgres/9dc886a5-912f-4536-a2cb-2cf668149d86/`，原示例与正式外壳对照在`.artifacts/reference-design/`，均已目视检查。本轮未重跑真实Keycloak产品或DeepSeek效果验收，也未部署生产服务。T13保持进行中：下一批为任务、运行与依赖诊断；T14 / T15继续稳定交付、生产留存、备份恢复和性能验收。

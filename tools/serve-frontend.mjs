@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { createPlatformProxy } from './local-platform-target.mjs';
 import { developmentFrontendArtifacts, loadFrontendArtifacts } from './frontend-artifacts.mjs';
 
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
 
 /** Local-only production-build preview. Never exposes workspace source files. */
 export function previewServer({ portalRoot, sampleRoot, chatbiRoot, knowledgeRoot, platformOrigin, frontendArtifacts, frontendArtifactsPath }) {
@@ -39,6 +39,7 @@ export function previewServer({ portalRoot, sampleRoot, chatbiRoot, knowledgeRoo
       // even when their ID resembles an extension; nested missing assets do not.
       const resourceRoute = /^\/manage\/(?:models|data-sources)(?:\/[a-z][a-z0-9._-]{0,63})?\/?$/.test(pathname);
       if (resourceRoute || !extname(relative) && (pathname === '/' || pathname.startsWith('/workspace/')
+        || /^\/manage\/audit(?:\/global)?(?:\/(?:gateway|model|connector|knowledge-search|registry|identity|model-configuration|connector-configuration|knowledge-document|audit-export)\/[0-9a-f]{32})?\/?$/.test(pathname)
         || /^\/applications\/[a-z][a-z0-9-]{0,63}(?:\/run)?\/?$/.test(pathname)
         || /^\/manage\/applications(?:\/[a-z][a-z0-9-]{0,63})?\/?$/.test(pathname)
         || /^\/manage\/(?:users|tenants|members|organizations|roles)(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\/?$/i.test(pathname)

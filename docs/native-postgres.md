@@ -4,6 +4,8 @@
 
 T13模型与数据源管理可用`--resource-browser`加入真实页面验收；`--resource-only --resource-browser`只运行本批合同与readiness，不代表完整平台回归。前者可随完整核心实库测试运行，后者不得与其他专项模式组合。使用真实OIDC协议、BFF、PostgreSQL、本地模型协议服务和独立只读数据库角色，覆盖配置、冲突、锁等待中的撤权 / 切租户 / 退出、调用和审计、权限及主题 / 窄屏。前端需提前构建；不调用真实模型供应商。合同见[资源管理](architecture/resource-management.md)。
 
+T13统一审计可用`--audit-only`验证本批真实API，追加`--audit-browser`验证正式页面；最终`--audit-browser`不带only同时运行完整控制面回归。迁移1–13及重放、授权来源 / 租户隔离、相同时间稳定分页、请求关联、1000条导出截断 / 故障和锁等待中的退出 / 切租户 / 撤权均纳入。专项不可混用其他only模式；浏览器需预先构建门户，不调用模型供应商。合同见[统一审计](architecture/audit-console.md)。
+
 ## 准备与运行
 
 从仓库根目录执行：
@@ -59,7 +61,7 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 | 入口 | 行为 |
 | --- | --- |
-| `deploy/postgres/migrations/apply.sql` | 执行真实控制面迁移 1–12：迁移记录、授权关系、BFF 会话、注册 / 租约、模型及连接器、知识文档 / 索引元数据、身份管理员与审计；不安装 vector |
+| `deploy/postgres/migrations/apply.sql` | 执行真实控制面迁移 1–13：迁移记录、授权关系、BFF 会话、注册 / 租约、模型及连接器、知识文档 / 索引元数据、身份管理员与统一导出审计；不安装 vector |
 | `deploy/postgres/migrations/enable-vector.sql` | 独立安装并核验 pgvector **0.8.7**；缺少扩展文件或已有版本不符都会失败 |
 | `deploy/postgres/migrations/apply-with-vector.sql` | 先执行控制面迁移，再执行 vector 初始化 |
 | `deploy/postgres/migrate.ps1` | 默认执行控制面；加 `-IncludeVector` 执行两者；`-UseCompose` 仅切换执行环境 |
@@ -68,11 +70,11 @@ dotnet build AssembleAI.slnx --no-restore --configuration Debug
 
 操作已有数据库时，需先准备数据库和角色，并为迁移账号配置对应权限；这些准备由本验收器自动完成的范围仅限一次性测试集群。手动迁移示例见 [本地后端与基础设施](development-services.md#原生-postgresql-迁移)。
 
-`Readiness:RequireVector` 默认 **true**（环境变量 `Readiness__RequireVector`），保持完整平台对 vector 0.8.7 的要求。只有明确运行控制面时才配置 `false`；该选项不代表知识库功能已就绪，也不忽略 Redis、MinIO、RabbitMQ 或 OIDC 的健康检查。无论 BFF 或 Models 是否开启，当前控制面均要求迁移 1–12 完整；缺少11或12均有独立拒绝回归。
+`Readiness:RequireVector` 默认 **true**（环境变量 `Readiness__RequireVector`），保持完整平台对 vector 0.8.7 的要求。只有明确运行控制面时才配置 `false`；该选项不代表知识库功能已就绪，也不忽略 Redis、MinIO、RabbitMQ 或 OIDC 的健康检查。无论 BFF 或 Models 是否开启，当前控制面均要求迁移 1–13 完整；缺少11、12或13均有独立拒绝回归。
 
 ## 验证内容与边界
 
-- 真实迁移 1–12 连续执行两遍，检查迁移记录完整且无重复、没有预置业务数据；误连其他数据库必须失败。
+- 真实迁移 1–13 连续执行两遍，检查迁移记录完整且无重复、没有预置业务数据；误连其他数据库必须失败。
 - 身份管理验证正式Node / psql中文与引号初始化、重放和禁用 / 绑定保护、显式全局 / 租户管理隔离、严格JSON / CSRF、修订冲突、审计故障回滚、锁等待期间退出 / 切租户拒写、数量与完整响应预算；`--identity-browser`以真实页面操作验证用户 / 租户 / 成员 / 组织 / 角色和双主题 / 390px。详见[身份管理合同](architecture/identity-management.md)。
 - `--chatbi-browser` 验证真实 ChatBI 浏览器 / Python / PostgreSQL 链与本地模型协议夹具；`--chatbi-real-model` 再运行三道合成题的真实模型验收。参数、权限与题集见 [ChatBI 契约](architecture/chatbi.md)。
 - T10 始终验证连接配置 / 审计、真实 OIDC/BFF 数据查询和独立只读源角色；制造业测试表覆盖跨工厂 / 租户、聚合、权限交集、撤权 / 取消 / 超时、类型与结果大小限制。运行器创建专用非特权 reader，只授权测试表 SELECT；测试完成清理集群和凭据。基础验收整体窗口 240 秒，业务查询截止保持各自配置。

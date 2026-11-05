@@ -9,12 +9,15 @@ import { portalApi, PortalApiError, type PortalApp, type PortalRun, type PortalS
 const RegistryWorkspace = defineAsyncComponent(() => import('./RegistryWorkspace.vue'));
 const IdentityWorkspace = defineAsyncComponent(() => import('./IdentityWorkspace.vue'));
 const ResourceWorkspace = defineAsyncComponent(() => import('./ResourceWorkspace.vue'));
+const AuditWorkspace = defineAsyncComponent(() => import('./AuditWorkspace.vue'));
 import { identityApi, IdentityApiError, type IdentityWorkspaceData, type IdentitySection } from './identity-api';
 import { resourceApi, ResourceApiError } from './resource-api';
+import { auditApi, AuditApiError, auditSources, type AuditSource, type AuditScope } from './audit-api';
 const identityWorkspace = ref<IdentityWorkspaceData | null>(null);
 const identityNames: Record<IdentitySection, string> = { users: '用户管理', tenants: '租户管理', members: '租户成员', organizations: '组织管理', roles: '角色权限' };
 const resourceNames = { models: '模型管理', 'data-sources': '数据源管理' };
 const resourceNavigation = ref<(keyof typeof resourceNames)[]>([]);
+const auditNavigation = ref('');
 
 const theme = ref<Theme>(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 const session = ref<PortalSession | null>(null);
@@ -31,6 +34,7 @@ const busy = ref('');
 const message = ref('');
 const detailError = ref('');
 const path = ref(location.pathname);
+const routeQuery = ref(location.search);
 const managementBusy = ref(false);
 const managementDirty = ref(false);
 const managementRefresh = ref(0);
@@ -44,6 +48,8 @@ let disposed = false;
 
 const route = computed(() => {
   if (path.value === '/') return { kind: 'list', appId: '' };
+  const audit = new RegExp(`^/manage/audit(?:/(global))?(?:/(${auditSources.join('|')})/([0-9a-f]{32}))?/?$`).exec(path.value);
+  if (audit) return { kind: 'audit', appId: '', auditScope: (audit[1] ? 'global' : 'tenant') as AuditScope, recordSource: (audit[2] ?? '') as AuditSource | '', recordId: audit[3] ?? '' };
   const resource = /^\/manage\/(models|data-sources)(?:\/([a-z][a-z0-9._-]{0,63}))?\/?$/.exec(path.value);
   if (resource) return { kind: 'resource', appId: '', resourceSection: resource[1] as keyof typeof resourceNames, resourceId: resource[2] ?? '' };
   const identity = /^\/manage\/(users|tenants|members|organizations|roles)(?:\/([0-9a-f-]{36}))?\/?$/i.exec(path.value);
@@ -62,9 +68,10 @@ const shown = computed(() => {
     && (!query || `${item.name} ${item.description} ${item.appId}`.toLocaleLowerCase().includes(query)));
 });
 const writing = computed(() => managementBusy.value || ['switch', 'start', 'logout'].includes(busy.value));
-const managing = computed(() => ['management', 'identity', 'resource'].includes(route.value.kind));
-const title = computed(() => route.value.kind === 'resource' ? resourceNames[route.value.resourceSection!] : route.value.kind === 'identity' ? identityNames[route.value.section!] : managing.value ? '应用管理' : '应用中心');
+const managing = computed(() => ['management', 'identity', 'resource', 'audit'].includes(route.value.kind));
+const title = computed(() => route.value.kind === 'audit' ? '调用与审计' : route.value.kind === 'resource' ? resourceNames[route.value.resourceSection!] : route.value.kind === 'identity' ? identityNames[route.value.section!] : managing.value ? '应用管理' : '应用中心');
 const breadcrumbScope = computed(() => {
+  if (route.value.kind === 'audit') return route.value.auditScope === 'global' ? '平台操作' : tenantName.value;
   if (route.value.kind === 'resource') return tenantName.value;
   if (route.value.kind === 'identity') {
     if (route.value.section === 'users' || route.value.section === 'tenants') return '平台管理';
@@ -106,6 +113,17 @@ async function readResourceNavigation(id: number, signal: AbortSignal, selected:
   }
   resourceNavigation.value = available;
 }
+async function readAuditNavigation(id: number, signal: AbortSignal, selected: string) {
+  try {
+    const value = await auditApi.workspace(selected ? 'tenant' : 'global', signal);
+    if (!current(id)) return;
+    auditNavigation.value = value.sources.length ? (selected ? '/manage/audit' : '/manage/audit/global') : value.globalAvailable ? '/manage/audit/global' : '';
+  } catch (failure) {
+    if (!current(id)) return;
+    auditNavigation.value = '';
+    if (failure instanceof AuditApiError && failure.status === 401) throw new PortalApiError(401);
+  }
+}
 const managementKey = computed(() => JSON.stringify([session.value?.iss, session.value?.sub, tenant.value, managementInstance.value]));
 const loginHref = computed(() => `/bff/login?returnUrl=${encodeURIComponent(route.value.kind === 'missing' ? '/' : path.value)}`);
 const currentRun = computed(() => route.value.kind === 'run' && run.value?.appId === route.value.appId ? run.value : null);
@@ -119,6 +137,7 @@ function begin(action: string) {
 }
 const current = (id: number) => !disposed && generation === id;
 function clearData() {
+  auditNavigation.value = '';
   resourceNavigation.value = [];
   items.value = []; categories.value = []; detail.value = null; run.value = null;
   detailError.value = ''; search.value = ''; category.value = '';
@@ -185,7 +204,7 @@ async function refresh(quiet = false) {
     const selected = selection.tenantId && tenants.value.some(item => item.tenantId === selection.tenantId) ? selection.tenantId : '';
     if (selected !== tenant.value) clearData();
     tenant.value = selected;
-    await Promise.all([readManagementNavigation(id, signal), readResourceNavigation(id, signal, selected)]);
+    await Promise.all([readManagementNavigation(id, signal), readResourceNavigation(id, signal, selected), readAuditNavigation(id, signal, selected)]);
     if (!current(id)) return;
     mode.value = 'ready';
     if (selected && !managing.value) await loadCatalog(id, signal, selected);
@@ -216,7 +235,7 @@ async function selectTenant(event: Event) {
     if (!current(id)) return;
     if (!selection.tenantId || !tenants.value.some(item => item.tenantId === selection.tenantId)) throw new PortalApiError(403);
     tenant.value = selection.tenantId;
-    await Promise.all([readManagementNavigation(id, signal), readResourceNavigation(id, signal, tenant.value)]);
+    await Promise.all([readManagementNavigation(id, signal), readResourceNavigation(id, signal, tenant.value), readAuditNavigation(id, signal, tenant.value)]);
     if (!current(id)) return;
     if (route.value.kind === 'identity' && route.value.managementTenant) setPath(`/manage/${route.value.section}`);
     if (!managing.value) await loadCatalog(id, signal, tenant.value);
@@ -227,8 +246,10 @@ function setPath(next: string, replace = false) {
   // single-spa synthesizes popstate for pushState after its first mount. Publish
   // our path first so the listener does not mistake our own navigation for Back.
   path.value = new URL(next, location.origin).pathname;
+  routeQuery.value = new URL(next, location.origin).search;
   if (replace) history.replaceState({}, '', next); else history.pushState({}, '', next);
   path.value = location.pathname;
+  routeQuery.value = location.search;
 }
 async function navigate(next: string) {
   const discardManagement = managing.value && managementDirty.value;
@@ -285,9 +306,9 @@ function revisit() {
   focusTimer = window.setTimeout(() => void refresh(true), 120);
 }
 function historyChanged() {
-  if (path.value === location.pathname) return;
-  if (writing.value || !discardDraft()) { history.pushState({}, '', path.value); return; }
-  path.value = location.pathname; run.value = null; void refresh();
+  if (path.value === location.pathname && routeQuery.value === location.search) return;
+  if (writing.value || !discardDraft()) { history.pushState({}, '', path.value + routeQuery.value); return; }
+  path.value = location.pathname; routeQuery.value = location.search; run.value = null; void refresh();
 }
 function discardDraft() {
   if (!managementDirty.value) return true;
@@ -335,18 +356,19 @@ onBeforeUnmount(() => {
       <div class="portal-workspace"><span class="portal-label">工作空间</span><label for="portal-tenant" class="sr-only">当前租户</label><select id="portal-tenant" aria-label="当前租户" :value="tenant" :disabled="!session || writing || mode === 'boot'" @change="selectTenant"><option value="" disabled>选择租户</option><option v-for="item in tenants" :key="item.tenantId" :value="item.tenantId">{{ item.name }}</option></select></div>
       <nav aria-label="主导航"><a class="portal-nav-item" href="/" :aria-current="!managing ? 'page' : undefined" @click="follow($event, '/')"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2.5" y="2.5" width="5.5" height="5.5" rx="1" /><rect x="12" y="2.5" width="5.5" height="5.5" rx="1" /><rect x="2.5" y="12" width="5.5" height="5.5" rx="1" /><rect x="12" y="12" width="5.5" height="5.5" rx="1" /></svg>应用中心</a><a v-if="session" class="portal-nav-item" href="/manage/applications" :aria-current="route.kind === 'management' ? 'page' : undefined" @click="follow($event, '/manage/applications')"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h3" /></svg>应用管理</a><a v-for="link in identityNavigation" :key="link.section" class="portal-nav-item" :href="link.path" :aria-current="route.kind === 'identity' && route.section === link.section ? 'page' : undefined" @click="follow($event, link.path)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="10" cy="6" r="3" /><path d="M4 17v-2a6 6 0 0 1 12 0v2M7 17h6" /></svg>{{ link.name }}</a>
         <a v-for="section in resourceNavigation" :key="section" class="portal-nav-item" :href="`/manage/${section}`" :aria-current="route.kind === 'resource' && route.resourceSection === section ? 'page' : undefined" @click="follow($event, `/manage/${section}`)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2" /><path d="M3 8h14M8 8v9" /></svg>{{ resourceNames[section] }}</a>
+        <a v-if="auditNavigation" class="portal-nav-item" :href="auditNavigation" :aria-current="route.kind === 'audit' ? 'page' : undefined" @click="follow($event, auditNavigation)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h4" /></svg>调用与审计</a>
       </nav>
       <div class="portal-sidebar-bottom"><p>制造业 AI 应用平台</p><template v-if="session"><div class="portal-user"><span class="portal-avatar" aria-hidden="true">{{ (session.name || '用').slice(0, 1) }}</span><span class="portal-user-name">{{ session.name || '已登录用户' }}</span></div><ElButton text :disabled="writing" @click="logout">{{ busy === 'logout' ? '正在退出…' : '退出登录' }}</ElButton></template><span v-else class="portal-signed-out">企业应用，统一访问</span></div>
     </aside>
     <div class="portal-content">
       <header class="portal-topbar"><div class="portal-breadcrumb"><span>{{ session ? breadcrumbScope : '集智工作空间' }}</span><span aria-hidden="true">/</span><strong>{{ title }}</strong></div><ElButton text @click="toggleTheme" :aria-label="theme === 'light' ? '切换暗色' : '切换浅色'">{{ theme === 'light' ? '暗色外观' : '浅色外观' }}</ElButton></header>
       <main id="portal-main" tabindex="-1" class="portal-main">
-        <div class="portal-page-heading"><div><h1 ref="pageHeading" tabindex="-1">{{ title }}</h1><p>{{ route.kind === 'resource' ? (route.resourceSection === 'models' ? '配置租户模型额度，验证调用并查看运行记录。' : '管理租户数据连接，查看受控数据集与连接记录。') : route.kind === 'identity' ? '管理企业身份、成员关系与访问范围。' : managing ? '维护应用发布与当前租户的使用版本。' : '找到适合当前工作的应用。' }}</p></div><ElButton v-if="session" :disabled="!!busy || writing" @click="refreshPage">{{ managing ? '刷新管理数据' : '刷新应用' }}</ElButton></div>
+        <div class="portal-page-heading"><div><h1 ref="pageHeading" tabindex="-1">{{ title }}</h1><span v-if="mode === 'ready' && !!tenant && !managing" class="portal-heading-count">{{ items.length }}</span><p v-if="managing || !tenant">{{ route.kind === 'audit' ? '在授权范围内查询运行记录与管理操作。' : route.kind === 'resource' ? (route.resourceSection === 'models' ? '配置租户模型额度，验证调用并查看运行记录。' : '管理租户数据连接，查看受控数据集与连接记录。') : route.kind === 'identity' ? '管理企业身份、成员关系与访问范围。' : managing ? '维护应用发布与当前租户的使用版本。' : '找到适合当前工作的应用。' }}</p></div><ElInput v-if="mode === 'ready' && !!tenant && !managing" v-model="search" aria-label="搜索应用" placeholder="搜索应用" clearable :disabled="busy === 'switch'" class="portal-search"><template #prefix><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg></template></ElInput><ElButton v-if="session" :disabled="!!busy || writing" @click="refreshPage">{{ managing ? '刷新管理数据' : '刷新应用' }}</ElButton></div>
         <div v-if="message" class="portal-feedback" role="alert"><span>{{ message }}</span><ElButton v-if="mode === 'error' && session" @click="refresh()" :disabled="!!busy">重试</ElButton></div>
         <section v-if="mode === 'boot'" class="portal-skeleton" role="status" aria-label="正在加载应用中心"><span>正在加载工作空间…</span><div v-for="row in 3" :key="row" class="portal-skeleton-row"><i></i><div><b></b><em></em></div></div></section>
         <section v-else-if="mode === 'signed-out'" class="portal-entry"><div class="portal-entry-symbol" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 4 6v6c0 4.2 4.6 7.6 8 9 3.4-1.4 8-4.8 8-9V6l-8-3Z" /><path d="m8.5 12 2.3 2.3 4.7-4.8" /></svg></div><h2>登录后，访问你的应用</h2><p>使用企业账号登录，查看当前租户为你开放的应用。</p><a :href="loginHref" class="portal-primary-link">企业账号登录 <span aria-hidden="true">→</span></a><p class="portal-entry-note">账号与访问权限由企业统一管理。</p></section>
         <section v-else-if="mode === 'error'" class="portal-state"><h2>暂时无法加载工作空间</h2><p>请检查连接后重试。已有登录状态不会被当作退出。</p><ElButton :disabled="!!busy" @click="refresh()">重新加载</ElButton></section>
-        <template v-else-if="managing"><section v-if="busy === 'switch' || busy === 'logout'" class="portal-state" role="status">正在更新会话…</section><IdentityWorkspace v-else-if="route.kind === 'identity'" :key="managementKey" :section="route.section!" :entity-id="route.entityId || ''" :tenant-id="route.managementTenant || tenant || null" :explicit-tenant="!!route.managementTenant" :refresh-key="managementRefresh" @changed="refresh(true)" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /><ResourceWorkspace v-else-if="route.kind === 'resource'" :key="managementKey" :section="route.resourceSection!" :resource-id="route.resourceId || ''" :tenant-id="tenant" :refresh-token="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /><RegistryWorkspace v-else :key="managementKey" :tenant-id="tenant || null" :app-id="route.appId" :refresh-key="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /></template>
+        <template v-else-if="managing"><section v-if="busy === 'switch' || busy === 'logout'" class="portal-state" role="status">正在更新会话…</section><IdentityWorkspace v-else-if="route.kind === 'identity'" :key="managementKey" :section="route.section!" :entity-id="route.entityId || ''" :tenant-id="route.managementTenant || tenant || null" :explicit-tenant="!!route.managementTenant" :refresh-key="managementRefresh" @changed="refresh(true)" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /><AuditWorkspace v-else-if="route.kind === 'audit'" :key="managementKey" :scope="route.auditScope!" :tenant-id="tenant" :record-source="route.recordSource || ''" :record-id="route.recordId || ''" :query-string="routeQuery" :refresh-token="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" /><ResourceWorkspace v-else-if="route.kind === 'resource'" :key="managementKey" :section="route.resourceSection!" :resource-id="route.resourceId || ''" :tenant-id="tenant" :refresh-token="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /><RegistryWorkspace v-else :key="managementKey" :tenant-id="tenant || null" :app-id="route.appId" :refresh-key="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /></template>
         <section v-else-if="!tenants.length" class="portal-state"><h2>尚未加入租户</h2><p>你的企业账号已登录。请联系管理员添加租户成员关系后刷新。</p><ElButton :disabled="!!busy" @click="refresh()">重新加载</ElButton></section>
         <section v-else-if="!tenant" class="portal-state"><h2>{{ busy === 'switch' ? '正在切换租户…' : '选择租户' }}</h2><p>从工作空间选择当前租户，查看你可以使用的应用。</p></section>
         <section v-else-if="route.kind === 'missing'" class="portal-state"><h2>页面不存在</h2><p>请返回应用列表继续访问。</p><ElButton @click="navigate('/')">应用列表</ElButton></section>
@@ -357,7 +379,7 @@ onBeforeUnmount(() => {
         </template>
         <div v-else class="portal-catalog-layout" :class="{ 'has-detail': route.kind === 'detail' }">
           <section class="portal-catalog" aria-label="授权应用列表" :aria-busy="busy === 'load' || busy === 'switch'">
-            <div class="portal-catalog-toolbar"><h2>我的应用 <span>{{ items.length }}</span></h2><ElInput v-model="search" aria-label="搜索应用" placeholder="搜索应用" clearable :disabled="busy === 'switch'" class="portal-search"><template #prefix><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg></template></ElInput></div>
+            <h2 class="sr-only">我的应用</h2>
             <div class="portal-categories" aria-label="应用分类"><button :aria-pressed="!category" @click="category = ''">全部应用</button><button v-for="item in categories" :key="item" :aria-pressed="category === item" @click="category = item">{{ item }}</button></div>
             <div v-if="busy === 'load' && !items.length" class="portal-skeleton" role="status"><span>正在加载应用…</span><div v-for="row in 3" :key="row" class="portal-skeleton-row"><i></i><div><b></b><em></em></div></div></div>
             <div v-else-if="!items.length" class="portal-state"><h3>暂无可用应用</h3><p>当前租户尚未为你开放应用。应用发布并获得授权后，会显示在这里。</p><ElButton :disabled="!!busy" @click="refresh()">刷新应用列表</ElButton></div>

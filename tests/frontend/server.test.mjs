@@ -36,6 +36,13 @@ test('V2/V19: release assets, deep links and source isolation', async (t) => {
     for (const suffix of ['/Fixture', '/fixture/missing.js', '/_invalid', '/fixture/unknown', '/' + 'a'.repeat(65)])
       assert.equal((await fetch(`${base}/manage/${section}${suffix}`)).status, 404);
   }
+  for (const scope of ['', '/global']) {
+    assert.match(await (await fetch(`${base}/manage/audit${scope}`)).text(), /Portal/);
+    for (const source of ['gateway', 'model', 'connector', 'knowledge-search', 'registry', 'identity', 'model-configuration', 'connector-configuration', 'knowledge-document', 'audit-export'])
+      assert.match(await (await fetch(`${base}/manage/audit${scope}/${source}/${'a'.repeat(32)}`)).text(), /Portal/);
+  }
+  for (const path of ['/manage/audit/unknown/' + 'a'.repeat(32), '/manage/audit/model/not-an-id', '/manage/audit/global/secret.js', '/manage/audit/model/' + 'a'.repeat(32) + '/asset.js'])
+    assert.equal((await fetch(base + path)).status, 404);
   const identityId = '11111111-1111-4111-8111-111111111111';
   for (const section of ['users', 'tenants', 'members', 'organizations', 'roles']) {
     assert.match(await (await fetch(`${base}/manage/${section}`)).text(), /Portal/);
