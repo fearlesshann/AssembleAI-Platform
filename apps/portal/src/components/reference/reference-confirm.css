@@ -1,0 +1,4 @@
+/* Native dialog provides focus containment; the original overlay and dialog define appearance. */
+.reference-ui .reference-confirm-overlay { inset: 0; margin: 0; padding: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; border: 0; background: transparent; color: var(--text-frame); }
+.reference-ui .reference-confirm-overlay:not([open]) { display: none; }
+.reference-ui .reference-confirm-overlay::backdrop { background: transparent; }

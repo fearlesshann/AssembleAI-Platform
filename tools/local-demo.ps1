@@ -2,6 +2,7 @@
 .SYNOPSIS
 Starts an isolated ChatBI experience on a loopback port (default 4174) for up to four hours.
 Uses a local test identity, synthetic PostgreSQL data and three fixed query plans.
+The original login form validates the preview-only account demo / AssembleAI-2026!.
 No real model is called. Requires the built solution, portal and ChatBI artifacts,
 the locked ChatBI Python environment and tools/install-native-postgres.ps1.
 Run with -Stop from another terminal to stop and remove temporary data.

@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectOidcAccountPicker, logoutFromUserMenu, toggleReferenceTheme } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
@@ -20,10 +21,9 @@ try {
   async function login(account, route) {
     const context = await browser.newContext({ baseURL: origin.origin, viewport: { width: 1366, height: 900 }, reducedMotion: 'reduce' });
     const page = await context.newPage(); page.on('pageerror', error => failures.push(error.message));
-    await page.goto(route);
-    await page.getByRole('link', { name: '企业账号登录', exact: true }).click();
+    await page.goto('/bff/login?returnUrl=' + encodeURIComponent(route));
     await page.getByRole('link', { name: account, exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '用户菜单', exact: true })).toBeVisible();
     return page;
   }
   async function api(page, method, path, body) {
@@ -59,11 +59,11 @@ try {
   await save(root, '身份验收工厂');
   await root.getByRole('link', { name: '管理租户成员' }).click();
   await root.getByRole('button', { name: '新增成员', exact: true }).click();
-  await root.getByLabel('用户 UUID', { exact: true }).fill(created.userId);
+  await chooseReferenceOption(root, '用户 UUID', created.userId);
   await save(root, '浏览器新成员');
 
   const admin = await login('租户管理员', '/manage/organizations');
-  await admin.getByLabel('当前租户', { exact: true }).selectOption(config.tenantId);
+  await chooseReferenceOption(admin, '当前租户', config.tenantId);
   await expect.poll(async () => (await api(admin, 'GET', '/bff/tenant')).body.tenantId).toBe(config.tenantId);
   await admin.goto('/manage/organizations');
   await admin.getByRole('button', { name: '新增组织', exact: true }).click();
@@ -85,7 +85,7 @@ try {
   const role = (await api(admin, 'GET', tenant)).body.roles.find(role => role.name === '装配生产只读');
   assert.deepEqual(role.grants[0].organizationIds, [org.organizationId]);
   assert.equal(role.grants[0].tenantWide, false);
-  await admin.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(admin);
   await admin.screenshot({ path: resolve(directory, 'roles-dark.png'), fullPage: true });
   await admin.goto(`/manage/members/${created.userId}`);
   await admin.getByRole('button', { name: '编辑资料', exact: true }).click();
@@ -110,7 +110,7 @@ try {
   await expect(admin.getByLabel('组织名称', { exact: true })).toHaveValue('未保存的工厂名称');
   await expect(admin.getByRole('button', { name: '保存变更', exact: true })).toBeDisabled();
   const ordinary = await login('普通成员', '/manage/organizations');
-  await ordinary.getByLabel('当前租户', { exact: true }).selectOption(config.tenantId);
+  await chooseReferenceOption(ordinary, '当前租户', config.tenantId);
   await expect.poll(async () => (await api(ordinary, 'GET', '/bff/tenant')).body.tenantId).toBe(config.tenantId);
   await ordinary.goto('/manage/organizations');
   await expect(ordinary.getByRole('alert')).toBeVisible();
@@ -120,8 +120,8 @@ try {
   // No credentials or sensitive management state may be persisted in browser storage.
   const storage = await root.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   assert.ok(!storage.includes('fixture-access-token') && !storage.includes('fixture-refresh-token') && !storage.includes(created.userId));
-  await root.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(root.getByRole('link', { name: '企业账号登录', exact: true })).toBeVisible();
+  await logoutFromUserMenu(root);
+  await expectOidcAccountPicker(root);
   assert.equal((await root.context().request.get(`${base}/workspace`)).status(), 401);
   assert.deepEqual(failures, []);
   process.stdout.write('PASS: built identity pages create users, edit tenants, create scoped roles/organizations, assign members, preserve real CAS conflict input, deny ordinary/cross-tenant access, themes/mobile and logout.\n');

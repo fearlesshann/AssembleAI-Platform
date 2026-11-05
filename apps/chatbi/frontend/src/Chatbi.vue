@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
+import '../../../portal/src/reference-tokens.css';
+import '../../../portal/src/reference-source.css';
+
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import type { ApplicationApi, PlatformContext } from '@assembleai/app-sdk';
 import StandaloneAccess from './StandaloneAccess.vue';
@@ -23,6 +27,9 @@ const status = ref('');
 const error = ref(false);
 const result = shallowRef<AnalysisResult>();
 const evidenceOpen = ref(false);
+const resultPage = ref(1); const resultPageSize = ref(10);
+const shownRows = computed(() => (result.value?.rows ?? []).slice((resultPage.value - 1) * resultPageSize.value, resultPage.value * resultPageSize.value));
+watch([result, resultPageSize], () => { resultPage.value = 1; });
 const examples = ['2026年11月1日至2日的产量合计是多少？', '2026年11月2日的产量是多少？', '按产线汇总产量'];
 const stages: { value: Stage; label: string }[] = [{ value: 'planning', label: '理解问题' }, { value: 'querying', label: '查询授权数据' }, { value: 'receiving', label: '核对结果' }];
 let catalogController: AbortController | undefined;
@@ -91,29 +98,25 @@ onBeforeUnmount(() => { disposed = true; catalogGeneration++; catalogController?
 </script>
 
 <template>
-  <article class="chatbi-app" :data-theme="theme" :data-mode="context.mode" data-testid="chatbi-app">
+  <article class="reference-ui chatbi-app" :data-theme="theme" :data-mode="context.mode" data-testid="chatbi-app">
     <header class="chatbi-header">
       <div><h1>ChatBI <span>数据分析</span></h1><p>用自然语言查询数据，并查看每次结果的查询依据。</p></div>
-      <div class="chatbi-header-actions"><span class="chatbi-mode">{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span><button v-if="context.mode === 'standalone'" type="button" @click="localTheme = theme === 'light' ? 'dark' : 'light'">{{ theme === 'light' ? '切换暗色' : '切换浅色' }}</button></div>
+      <div class="chatbi-header-actions"><span class="chatbi-mode">{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span><ReferenceButton v-if="context.mode === 'standalone'" type="button" @click="localTheme = theme === 'light' ? 'dark' : 'light'">{{ theme === 'light' ? '切换暗色' : '切换浅色' }}</ReferenceButton></div>
     </header>
     <StandaloneAccess v-if="context.mode === 'standalone'" @connection="standalone = $event" />
     <div class="chatbi-workspace">
       <form class="chatbi-compose" aria-label="数据分析问题" @submit.prevent="ask">
-        <div class="chatbi-section-heading"><h2>分析范围</h2><button v-if="capability" type="button" class="chatbi-text-button" :disabled="catalogLoading || busy" @click="loadCatalog">刷新数据集</button></div>
-        <label for="chatbi-dataset">数据集</label>
-        <select id="chatbi-dataset" v-model="datasetId" data-testid="chatbi-dataset" aria-label="分析数据集" :disabled="!capability || catalogLoading || !datasets.length">
-          <option value="" disabled>{{ catalogLoading ? '正在读取数据集…' : '选择数据集' }}</option>
-          <option v-for="item in datasets" :key="item.datasetId" :value="item.datasetId">{{ item.displayName }}</option>
-        </select>
+        <div class="chatbi-section-heading"><h2>分析范围</h2><ReferenceButton v-if="capability" type="button" variant="link" :disabled="catalogLoading || busy" @click="loadCatalog">刷新数据集</ReferenceButton></div>
+        <div class="subwindow-field"><span>数据集</span><ReferenceSelect id="chatbi-dataset" v-model="datasetId" data-testid="chatbi-dataset" label="分析数据集" :disabled="!capability || catalogLoading || !datasets.length" :options="[{ value: '', label: catalogLoading ? '正在读取数据集…' : '选择数据集', disabled: true }, ...datasets.map(item => ({ value: item.datasetId, label: item.displayName }))]" /></div>
         <p v-if="!capability" class="chatbi-hint">连接平台后，可选择当前账号有权访问的数据集。</p>
         <p v-else-if="catalogMessage" class="chatbi-hint" role="status">{{ catalogMessage }}</p>
         <p v-else-if="dataset" class="chatbi-hint">查询范围：当前授权工厂 · 最多 {{ Math.min(100, dataset.maxRows) }} 行</p>
         <div v-if="catalogLoading" class="chatbi-loading" aria-hidden="true"><span></span><span></span></div>
         <label class="chatbi-question-label" for="chatbi-question">你想了解什么？</label>
-        <textarea id="chatbi-question" v-model="question" data-testid="chatbi-question" aria-label="分析问题" aria-describedby="chatbi-question-help" rows="5" maxlength="1000" :disabled="!dataset || busy" placeholder="例如：按产线汇总这两天的产量"></textarea>
+        <div class="composer-wrap"><div class="composer"><textarea id="chatbi-question" v-model="question" data-testid="chatbi-question" aria-label="分析问题" aria-describedby="chatbi-question-help" rows="5" maxlength="1000" :disabled="!dataset || busy" placeholder="例如：按产线汇总这两天的产量"></textarea>
         <p id="chatbi-question-help" class="chatbi-hint">写明时间范围和指标，问题限 1000 字。</p>
-        <div class="chatbi-actions"><button class="chatbi-primary" type="submit" data-testid="chatbi-submit" :disabled="!canAsk">{{ busy ? '正在分析…' : '开始分析' }}</button><button v-if="busy" type="button" data-testid="chatbi-cancel" @click="cancel">取消分析</button></div>
-        <section class="chatbi-examples" aria-label="制造业测试问题"><h3>制造业测试问题</h3><p>以下问题用于测试数据集，可选中后修改。</p><button v-for="example in examples" :key="example" type="button" :disabled="!dataset || busy" @click="chooseExample(example)">{{ example }} <span aria-hidden="true">↗</span></button></section>
+        <div class="composer-bar chatbi-actions"><ReferenceButton primary type="submit" data-testid="chatbi-submit" :disabled="!canAsk">{{ busy ? '正在分析…' : '开始分析' }}</ReferenceButton><ReferenceButton v-if="busy" type="button" data-testid="chatbi-cancel" @click="cancel">取消分析</ReferenceButton></div></div></div>
+        <section class="chatbi-examples" aria-label="制造业测试问题"><h3>制造业测试问题</h3><p>以下问题用于测试数据集，可选中后修改。</p><ReferenceButton variant="link" v-for="example in examples" :key="example" type="button" :disabled="!dataset || busy" @click="chooseExample(example)">{{ example }} <span aria-hidden="true">↗</span></ReferenceButton></section>
       </form>
       <section class="chatbi-output" aria-label="分析结果" :aria-busy="busy">
         <div class="chatbi-section-heading"><h2>分析结果</h2><span v-if="result" class="chatbi-result-count">{{ result.rowCount }} 行</span></div>
@@ -123,14 +126,14 @@ onBeforeUnmount(() => { disposed = true; catalogGeneration++; catalogController?
         <template v-else-if="result">
           <div data-testid="chatbi-result" class="chatbi-result">
             <p class="chatbi-summary">{{ result.summary }}</p>
-            <div v-if="result.rowCount" class="chatbi-table-wrap" tabindex="0" role="region" aria-label="查询结果表，可横向滚动">
-              <table><caption>{{ result.datasetName }} · {{ result.scope }}</caption><thead><tr><th v-for="column in result.columns" :key="column" scope="col">{{ column }}</th></tr></thead><tbody><tr v-for="(row, rowIndex) in result.rows" :key="rowIndex"><td v-for="(cell, columnIndex) in row" :key="columnIndex"><span v-if="cell === null" class="chatbi-null" aria-label="空值">—</span><template v-else>{{ cell }}</template></td></tr></tbody></table>
+            <div v-if="result.rowCount" class="data-grid chatbi-table-wrap" tabindex="0" role="region" aria-label="查询结果表，可横向滚动">
+              <div class="data-grid__toolbar"><span class="list-meta">{{ result.datasetName }} · {{ result.scope }}</span></div><div class="admin-table-wrap data-grid__body"><div class="scroll-content data-grid__scroll"><table class="data-grid__table" :aria-label="`${result.datasetName} · ${result.scope}`"><thead><tr><th v-for="column in result.columns" :key="column" scope="col">{{ column }}</th></tr></thead><tbody><tr v-for="(row, rowIndex) in shownRows" :key="rowIndex"><td v-for="(cell, columnIndex) in row" :key="columnIndex"><span v-if="cell === null" class="chatbi-null" aria-label="空值">—</span><template v-else>{{ cell }}</template></td></tr></tbody></table></div></div><ReferencePagination :current-page="resultPage" v-model:page-size="resultPageSize" :total="result.rows.length" @change="resultPage = $event" />
             </div>
             <p v-else class="chatbi-empty-result">没有匹配数据。可调整日期或筛选条件后重新分析。</p>
             <details class="chatbi-evidence" :open="evidenceOpen" @toggle="evidenceOpen = ($event.target as HTMLDetailsElement).open"><summary>查看查询依据</summary><dl><div><dt>数据集</dt><dd>{{ result.datasetName }}</dd></div><div><dt>数据范围</dt><dd>{{ result.scope }}</dd></div><div><dt>查询编号</dt><dd>{{ result.queryRequestId }}</dd></div></dl><h3>执行的结构化查询</h3><pre data-testid="chatbi-evidence">{{ result.queryText }}</pre></details>
           </div>
         </template>
-        <div v-else-if="!error" class="chatbi-empty"><svg viewBox="0 0 40 40" width="40" height="40" fill="none" aria-hidden="true"><rect x="5" y="7" width="30" height="26" rx="3" stroke="currentColor"/><path d="M5 16h30M15 16v17M25 16v17M5 24h30" stroke="currentColor"/></svg><h3>从一个数据问题开始</h3><p>选择数据集，描述你要查看的指标与时间范围。分析完成后，在这里核对数据和查询依据。</p></div>
+        <div v-else-if="!error" class="empty-state is-visible chatbi-empty"><div class="empty-icon" aria-hidden="true">∅</div><h3 class="empty-title">从一个数据问题开始</h3><p class="empty-desc">选择数据集，描述你要查看的指标与时间范围。分析完成后，在这里核对数据和查询依据。</p></div>
       </section>
     </div>
     <footer class="chatbi-footer">结果受当前账号与租户权限约束；更换数据集或分析范围后，请重新查询。</footer>

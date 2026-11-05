@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectReferenceValue, toggleReferenceTheme } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
@@ -20,8 +21,7 @@ try {
     const context = await browser.newContext({ baseURL: origin.origin, viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
     contexts.push(context);
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
-    await page.goto('/manage/applications');
-    await page.getByRole('link', { name: '企业账号登录', exact: true }).click();
+    await page.goto('/bff/login?returnUrl=' + encodeURIComponent('/manage/applications'));
     await page.getByRole('link', { name: account, exact: true }).click();
     await page.waitForURL(/\/manage\/applications\/?$/);
     return page;
@@ -44,11 +44,11 @@ try {
     const saved = page.waitForResponse(response => response.request().method() === 'PUT' && new URL(response.url()).pathname.endsWith(`/releases/${manifest.version}`));
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     assert.equal((await saved).status(), 200);
-    await expect(page.getByLabel('查看发布版本', { exact: true })).toHaveValue(manifest.version);
+    await expectReferenceValue(page, '查看发布版本', manifest.version);
   }
   async function show(page, version = '1.0.0') {
     await page.goto(route);
-    await page.getByLabel('查看发布版本', { exact: true }).selectOption(version);
+    await chooseReferenceOption(page, '查看发布版本', version);
   }
   async function api(page, method, path, body) {
     return page.evaluate(async ({ method, path, body }) => {
@@ -89,14 +89,14 @@ try {
   await reviewer.screenshot({ path: resolve(artifactDirectory, 'published-releases.png'), fullPage: true });
 
   const admin = await login('租户管理员');
-  await admin.getByRole('combobox', { name: '当前租户', exact: true }).selectOption(config.tenantId);
+  await chooseReferenceOption(admin, '当前租户', config.tenantId);
   // A forced full navigation can cancel the asynchronous POST initiated by the
   // selector. Wait for the server-owned selection, as the disabled UI does.
   await expect.poll(async () => (await api(admin, 'GET', '/bff/tenant')).body.tenantId).toBe(config.tenantId);
   await show(admin);
   const tenantPath = `/api/platform/v1/tenants/${config.tenantId}/applications/${config.appId}`;
   async function tenantChange(version, enabled = true) {
-    await admin.getByLabel('租户使用版本', { exact: true }).selectOption(version);
+    await chooseReferenceOption(admin, '租户使用版本', version);
     await admin.getByRole('button', { name: enabled ? /^(启用到当前租户|应用版本到当前租户)$/ : '停用当前租户应用' }).click();
     await admin.getByRole('dialog').getByRole('button', { name: '确认租户变更', exact: true }).click();
     await expect.poll(async () => {
@@ -163,7 +163,7 @@ try {
   await tenantChange('1.0.0', false); await ended(); await probe(enabled, 403);
   await tenantChange('1.0.0'); await probe(enabled, 403); await probe(await run('1.0.0'));
   await admin.screenshot({ path: resolve(artifactDirectory, 'tenant-version-management.png'), fullPage: true });
-  await admin.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(admin);
   await expect(admin.locator('html')).toHaveAttribute('data-theme', 'dark');
   await admin.screenshot({ path: resolve(artifactDirectory, 'tenant-dark.png'), fullPage: true });
   await show(reviewer);

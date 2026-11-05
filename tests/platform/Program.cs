@@ -12,6 +12,12 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Xml.Linq;
 using AssembleAI.Platform.SmokeTests;
 
+if (args.Contains("--bff-tests", StringComparer.Ordinal))
+{
+    await BffTests.RunAsync();
+    return;
+}
+
 if (args.Contains("--audit-tests", StringComparer.Ordinal))
 {
     await AuditTests.RunAsync();

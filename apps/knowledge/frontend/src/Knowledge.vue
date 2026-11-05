@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
+import '../../../portal/src/reference-tokens.css';
+import '../../../portal/src/reference-source.css';
+
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { ApplicationApi, PlatformContext } from '@assembleai/app-sdk';
 import StandaloneAccess from './StandaloneAccess.vue';
+import ReferenceConfirm from '../../../portal/src/components/reference/ReferenceConfirm.vue';
 import { BUILD_APP_ID, BUILD_FRONTEND_VERSION } from './build-context';
 import { createStandalonePlatform, type StandaloneSnapshot } from './standalone';
 import { createKnowledgeLibrary, type KnowledgeDocument, type LibraryAccess } from './library';
@@ -17,6 +22,10 @@ const library = createKnowledgeLibrary();
 const snapshot = shallowRef<StandaloneSnapshot>();
 const documents = shallowRef<KnowledgeDocument[]>([]);
 const access = shallowRef<LibraryAccess>();
+const documentPage = ref(1); const documentPageSize = ref(10);
+const shownDocuments = computed(() => documents.value.slice((documentPage.value - 1) * documentPageSize.value, documentPage.value * documentPageSize.value));
+watch(documentPageSize, () => { documentPage.value = 1; });
+watch(() => documents.value.length, count => { documentPage.value = Math.min(documentPage.value, Math.max(1, Math.ceil(count / documentPageSize.value))); });
 const loading = ref(false); const writing = ref(false); const libraryMessage = ref('');
 const libraryError = ref(false); const uploadScope = ref(''); const file = shallowRef<File>();
 const fileInput = ref<HTMLInputElement>(); const confirmation = shallowRef<KnowledgeDocument>();
@@ -204,40 +213,31 @@ onBeforeUnmount(() => { disposed = true; reset(); window.removeEventListener('fo
 </script>
 
 <template>
-  <article class="knowledge-app" :data-theme="theme" :data-mode="context.mode" data-testid="knowledge-app">
+  <article class="reference-ui knowledge-app" :data-theme="theme" :data-mode="context.mode" data-testid="knowledge-app">
     <header class="knowledge-header">
       <div><h1>企业知识库</h1><p>从授权文档中查找答案，回到原文核对依据。</p></div>
-      <div class="knowledge-header-actions"><span>{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span><button v-if="context.mode === 'standalone'" type="button" @click="localTheme = theme === 'light' ? 'dark' : 'light'">{{ theme === 'light' ? '切换暗色' : '切换浅色' }}</button></div>
+      <div class="knowledge-header-actions"><span>{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span><ReferenceButton v-if="context.mode === 'standalone'" type="button" @click="localTheme = theme === 'light' ? 'dark' : 'light'">{{ theme === 'light' ? '切换暗色' : '切换浅色' }}</ReferenceButton></div>
     </header>
     <StandaloneAccess v-if="context.mode === 'standalone'" @connection="standalone = $event" />
     <div class="knowledge-workspace">
       <section class="knowledge-library" aria-label="文档库" :aria-busy="loading || writing">
-        <div class="knowledge-section-heading"><h2>文档库 <span v-if="snapshot">{{ documents.length }}</span></h2><button class="knowledge-text-button" type="button" :disabled="!api || loading || writing" @click="refresh()">刷新文档</button></div>
+        <div class="knowledge-section-heading"><h2>文档库 <span v-if="snapshot">{{ documents.length }}</span></h2><ReferenceButton variant="link" type="button" :disabled="!api || loading || writing" @click="refresh()">刷新文档</ReferenceButton></div>
         <form v-if="access?.uploadScopes.length" class="knowledge-upload" aria-label="上传文档" @submit.prevent="upload">
-          <label for="knowledge-file">添加文档</label><input id="knowledge-file" ref="fileInput" type="file" accept=".pdf,.docx,.txt,.md" :disabled="writing || loading" @change="chooseFile" />
+          <label for="knowledge-file" class="subwindow-field">添加文档</label><div class="knowledge-file-picker"><ReferenceButton :disabled="writing || loading" @click="fileInput?.click()">选择文件</ReferenceButton><span class="subwindow-hint">{{ file?.name ?? '尚未选择文件' }}</span></div><input class="knowledge-file-input" id="knowledge-file" ref="fileInput" type="file" accept=".pdf,.docx,.txt,.md" :disabled="writing || loading" @change="chooseFile" />
           <p class="knowledge-hint">PDF / DOCX / TXT / Markdown，单份最多 5 MiB。PDF 需包含可提取文字。</p>
-          <div class="knowledge-upload-actions"><label for="knowledge-scope">所属范围<select id="knowledge-scope" v-model="uploadScope" :disabled="writing || loading"><option v-for="scope in access.uploadScopes" :key="scope ?? 'tenant'" :value="scope ?? 'tenant'" :title="scope ?? undefined">{{ scopeLabel(scope) }}</option></select></label><button type="submit" :disabled="!file || writing || loading">{{ writing ? '正在处理…' : '上传文档' }}</button></div>
+          <div class="knowledge-upload-actions"><div class="subwindow-field"><span>所属范围</span><ReferenceSelect id="knowledge-scope" v-model="uploadScope" label="所属范围" :disabled="writing || loading" :options="access.uploadScopes.map(scope => ({ value: scope ?? 'tenant', label: scopeLabel(scope) }))" /></div><ReferenceButton type="submit" :disabled="!file || writing || loading">{{ writing ? '正在处理…' : '上传文档' }}</ReferenceButton></div>
         </form>
         <p v-if="libraryMessage" class="knowledge-notice" :class="{ 'knowledge-error': libraryError }" :role="libraryError ? 'alert' : 'status'">{{ libraryMessage }}</p>
         <div v-if="loading && !documents.length" class="knowledge-skeleton" aria-label="正在读取文档"><span></span><span></span><span></span></div>
-        <ul v-else-if="documents.length" class="knowledge-document-list" data-testid="knowledge-documents">
-          <li v-for="item in documents" :key="item.documentId">
-            <div class="knowledge-document-heading"><span class="knowledge-file-kind">{{ item.fileName.split('.').pop()?.toUpperCase() }}</span><h3>{{ item.fileName }}</h3></div>
-            <div class="knowledge-document-meta"><span class="knowledge-state" :data-state="item.status">{{ statuses[item.status] }}</span><span :title="item.organizationId ?? undefined">{{ scopeLabel(item.organizationId) }}</span><span>{{ Math.max(1, Math.ceil(item.sizeBytes / 1024)) }} KB</span></div>
-            <p v-if="item.status === 'failed'" class="knowledge-failure">{{ failureNames[item.failureCode ?? ''] ?? '文档处理失败，请联系管理员检查或重新上传。' }}</p>
-            <p v-else-if="item.status === 'extracted'" class="knowledge-hint">文字已提取，尚未可用于问答。</p>
-            <div class="knowledge-document-actions"><button type="button" class="knowledge-text-button" :disabled="writing" @click="download(item.documentId, item.fileName)">下载原文</button><button v-if="access?.canManage(item)" type="button" class="knowledge-text-button" :disabled="writing || loading" @click="confirmation = item">删除</button></div>
-            <div v-if="confirmation?.documentId === item.documentId" class="knowledge-confirmation" role="group" aria-label="确认删除文档"><p>删除后，新的问答将不再引用这份文档。</p><div><button type="button" :disabled="writing" @click="remove">确认删除</button><button type="button" :disabled="writing" @click="confirmation = undefined">取消</button></div></div>
-          </li>
-        </ul>
-        <div v-else-if="!libraryError" class="knowledge-library-empty"><h3>{{ api ? '还没有可见文档' : '连接后查看文档' }}</h3><p>{{ api ? '上传一份操作规程或质量说明，处理完成后即可提问。没有上传权限时，请联系管理员。' : '文档列表与问答范围由当前账号和租户权限决定。' }}</p></div>
+        <div v-else-if="documents.length" class="data-grid knowledge-document-grid" data-testid="knowledge-documents"><div class="admin-table-wrap data-grid__body"><div class="scroll-content data-grid__scroll"><table class="data-grid__table" aria-label="授权文档"><thead><tr><th>文档</th><th>状态</th><th>所属范围</th><th>大小</th><th class="data-grid__actions">操作</th></tr></thead><tbody><tr v-for="item in shownDocuments" :key="item.documentId"><td><div class="data-grid__person"><span class="avatar sm">{{ item.fileName.split('.').pop()?.slice(0, 1).toUpperCase() }}</span><span :title="item.fileName">{{ item.fileName }}</span></div><p v-if="item.status === 'failed'" class="knowledge-failure">{{ failureNames[item.failureCode ?? ''] ?? '文档处理失败，请联系管理员检查或重新上传。' }}</p><p v-else-if="item.status === 'extracted'" class="knowledge-hint">文字已提取，尚未可用于问答。</p></td><td><span class="status-pill" :class="{ draft: item.status !== 'ready' }"><i class="sdot"></i>{{ statuses[item.status] }}</span></td><td class="muted" :title="item.organizationId ?? undefined">{{ scopeLabel(item.organizationId) }}</td><td class="muted tabular">{{ Math.max(1, Math.ceil(item.sizeBytes / 1024)) }} KB</td><td class="data-grid__actions"><div class="data-grid__action-content"><ReferenceButton variant="link" :disabled="writing" @click="download(item.documentId, item.fileName)">下载原文</ReferenceButton><ReferenceButton v-if="access?.canManage(item)" variant="link" :disabled="writing || loading" @click="confirmation = item">删除</ReferenceButton></div></td></tr></tbody></table></div></div><ReferencePagination :current-page="documentPage" v-model:page-size="documentPageSize" :total="documents.length" :disabled="writing" @change="documentPage = $event" /></div>
+        <div v-else-if="!libraryError" class="empty-state is-visible knowledge-library-empty"><div class="empty-icon" aria-hidden="true">∅</div><h3 class="empty-title">{{ api ? '还没有可见文档' : '连接后查看文档' }}</h3><p class="empty-desc">{{ api ? '上传一份操作规程或质量说明，处理完成后即可提问。没有上传权限时，请联系管理员。' : '文档列表与问答范围由当前账号和租户权限决定。' }}</p></div>
         <p v-if="documents.length" class="knowledge-hint knowledge-list-limit">此列表展示最近 100 份文档中的可见项目；问答检索覆盖全部授权文档。</p>
       </section>
       <section class="knowledge-answer-area" aria-label="知识问答">
         <form class="knowledge-question" aria-label="文档提问" @submit.prevent="ask">
           <label for="knowledge-question">你想从文档中了解什么？</label>
-          <textarea id="knowledge-question" v-model="question" rows="3" maxlength="2000" :disabled="!api || busy || checking" :aria-invalid="questionLength > 1000" placeholder="例如：设备点检发现异常时，应先执行哪些步骤？" aria-describedby="knowledge-question-help"></textarea>
-          <div class="knowledge-question-actions"><p id="knowledge-question-help" class="knowledge-hint">仅检索当前授权文档 · {{ questionLength > 1000 ? `已超出 ${questionLength - 1000} 字` : `${questionLength} / 1000 字` }}</p><div><button v-if="busy" type="button" @click="cancel">取消提问</button><button type="submit" class="knowledge-primary" :disabled="!canAsk">{{ busy ? '正在查找…' : '查找答案' }}</button></div></div>
+          <div class="composer-wrap"><div class="composer"><textarea id="knowledge-question" v-model="question" rows="3" maxlength="2000" :disabled="!api || busy || checking" :aria-invalid="questionLength > 1000" placeholder="例如：设备点检发现异常时，应先执行哪些步骤？" aria-describedby="knowledge-question-help"></textarea>
+          <div class="composer-bar knowledge-question-actions"><p id="knowledge-question-help" class="knowledge-hint">仅检索当前授权文档 · {{ questionLength > 1000 ? `已超出 ${questionLength - 1000} 字` : `${questionLength} / 1000 字` }}</p><div><ReferenceButton v-if="busy" type="button" @click="cancel">取消提问</ReferenceButton><ReferenceButton type="submit" primary :disabled="!canAsk">{{ busy ? '正在查找…' : '查找答案' }}</ReferenceButton></div></div></div></div>
         </form>
         <section class="knowledge-output" aria-label="答案与来源" :aria-busy="busy || checking">
           <div class="knowledge-section-heading"><h2>答案与来源</h2><span v-if="answer && !answer.refusal">{{ answer.citations.length }} 处引用</span></div>
@@ -247,14 +247,15 @@ onBeforeUnmount(() => { disposed = true; reset(); window.removeEventListener('fo
           <div v-else-if="answer" data-testid="knowledge-answer">
             <p class="knowledge-answer-text">{{ answer.answer }}</p>
             <ol v-if="answer.citations.length" class="knowledge-citations" aria-label="原文引用">
-              <li v-for="(citation, index) in answer.citations" :key="citation.chunkId"><div class="knowledge-citation-heading"><span class="knowledge-citation-number">{{ index + 1 }}</span><h3>{{ citation.fileName }}</h3><span>{{ locatorLabel(citation.locator) }}</span></div><blockquote>{{ citation.quote }}</blockquote><button type="button" class="knowledge-text-button" :disabled="writing" @click="download(citation.documentId, citation.fileName)">下载原文核对</button></li>
+              <li v-for="(citation, index) in answer.citations" :key="citation.chunkId"><div class="knowledge-citation-heading"><span class="avatar sm knowledge-citation-number">{{ index + 1 }}</span><h3>{{ citation.fileName }}</h3><span>{{ locatorLabel(citation.locator) }}</span></div><blockquote>{{ citation.quote }}</blockquote><ReferenceButton type="button" variant="link" :disabled="writing" @click="download(citation.documentId, citation.fileName)">下载原文核对</ReferenceButton></li>
             </ol>
           </div>
-          <div v-else-if="!busy && !error && !checking" class="knowledge-empty"><svg viewBox="0 0 40 40" width="40" height="40" fill="none" aria-hidden="true"><path d="M10 5h14l7 7v23H10zM24 5v8h7M15 20h11M15 25h11M15 30h7" stroke="currentColor" stroke-linejoin="round" /></svg><h3>每个答案，都有出处可查</h3><p>提出具体问题，查看相关说明与原文位置。文档没有充分依据时，会明确说明。</p></div>
+          <div v-else-if="!busy && !error && !checking" class="empty-state is-visible knowledge-empty"><div class="empty-icon" aria-hidden="true">∅</div><h3 class="empty-title">每个答案，都有出处可查</h3><p class="empty-desc">提出具体问题，查看相关说明与原文位置。文档没有充分依据时，会明确说明。</p></div>
           <div v-else-if="busy" class="knowledge-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
         </section>
       </section>
     </div>
     <footer class="knowledge-footer">处理完成的文档才能用于问答。答案供查阅参考，关键操作请核对现行规程与原文。</footer>
+    <ReferenceConfirm :request="confirmation ? { title: '确认删除文档', description: '删除后，新的问答将不再引用这份文档。', confirmLabel: writing ? '正在删除…' : '确认删除' } : null" :disabled="writing" @resolve="$event ? remove() : (confirmation = undefined)" />
   </article>
 </template>

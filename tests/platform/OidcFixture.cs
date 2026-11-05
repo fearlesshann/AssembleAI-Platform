@@ -43,6 +43,23 @@ public sealed class OidcFixture : IAsyncDisposable
     private string nextSubject = Subject;
     private int successfulTokenRequests;
     private IReadOnlyDictionary<string, string>? browserAccounts;
+    private string? interactiveLoginTemplate;
+    private readonly Dictionary<string, (byte[] Content, string Type)> loginAssets = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, (string Query, DateTimeOffset Expires)> loginForms = new(StringComparer.Ordinal);
+    public const string PreviewUsername = "demo";
+    public const string PreviewPassword = "AssembleAI-2026!";
+
+    // Explicitly enabled only by the loopback interactive preview, after its
+    // server-side setup. Production credentials are handled by the Keycloak theme.
+    public void EnableInteractiveLogin(string directory)
+    {
+        interactiveLoginTemplate = File.ReadAllText(Path.Combine(directory, "login.html"));
+        foreach (var path in Directory.EnumerateFiles(directory))
+        {
+            var type = Path.GetExtension(path) switch { ".css" => "text/css", ".js" => "text/javascript", ".png" => "image/png", ".woff2" => "font/woff2", _ => null };
+            if (type is not null) loginAssets.Add(Path.GetFileName(path), (File.ReadAllBytes(path), type));
+        }
+    }
 
     private OidcFixture(WebApplication app) => this.app = app;
 
@@ -71,6 +88,9 @@ public sealed class OidcFixture : IAsyncDisposable
         app.MapGet("/.well-known/openid-configuration", fixture.Discovery);
         app.MapGet("/jwks", fixture.Jwks);
         app.MapGet("/authorize", fixture.Authorize);
+        app.MapPost("/authorize", (Func<HttpContext, Task<IResult>>)fixture.InteractiveLoginAsync);
+        app.MapGet("/reference-login/{asset}", (string asset) => fixture.loginAssets.TryGetValue(asset, out var value)
+            ? Results.Bytes(value.Content, value.Type) : Results.NotFound());
         app.MapPost("/token", (Func<HttpContext, Task<IResult>>)fixture.TokenAsync);
         try
         {
@@ -138,18 +158,23 @@ public sealed class OidcFixture : IAsyncDisposable
             || !(Unique(query["scope"]) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("openid"))
             return ProtocolError("invalid_request");
 
+        if (interactiveLoginTemplate is not null && !context.Items.ContainsKey("preview-login-validated"))
+            return InteractiveLoginPage(context, context.Request.Cookies["assembleai.preview.account"] ?? "",
+                query.ContainsKey("__login_help") ? "本机测试账号：demo；密码：AssembleAI-2026!。仅用于隔离体验环境。" : "");
+
         string subject;
-        if (browserAccounts is not null)
+        if (browserAccounts is not null || (Unique(query["prompt"]) == "login" && !context.Items.ContainsKey("preview-login-validated")))
         {
+            var accounts = browserAccounts ?? new Dictionary<string, string> { [Subject] = "Alice Fixture" };
             var selected = Unique(query["__fixture_subject"]);
             if (selected is null)
             {
-                var links = browserAccounts.Select(account => "<p><a href=\"" + WebUtility.HtmlEncode(QueryHelpers.AddQueryString(
+                var links = accounts.Select(account => "<p><a href=\"" + WebUtility.HtmlEncode(QueryHelpers.AddQueryString(
                     context.Request.Path + context.Request.QueryString, "__fixture_subject", account.Key)) + "\">" + WebUtility.HtmlEncode(account.Value) + "</a></p>");
                 return Results.Content("<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>OIDC 验收身份</title><h1>选择验收账号</h1>"
                     + string.Join("", links) + "</html>", "text/html; charset=utf-8");
             }
-            if (!browserAccounts.ContainsKey(selected)) return ProtocolError("invalid_request");
+            if (!accounts.ContainsKey(selected)) return ProtocolError("invalid_request");
             subject = selected;
         }
         else subject = Interlocked.Exchange(ref nextSubject, Subject);
@@ -162,6 +187,55 @@ public sealed class OidcFixture : IAsyncDisposable
             ["code"] = code,
             ["state"] = state
         }));
+    }
+
+    private IResult InteractiveLoginPage(HttpContext context, string username = "", string error = "", bool remember = false)
+    {
+        if (interactiveLoginTemplate is null) return Results.NotFound();
+        if (!Uri.TryCreate(Unique(context.Request.Query["redirect_uri"]), UriKind.Absolute, out var callback)
+            || callback.Scheme != "http" || !callback.IsLoopback || callback.UserInfo.Length != 0
+            || callback.AbsolutePath != "/signin-oidc" || callback.Query.Length != 0 || callback.Fragment.Length != 0)
+            return ProtocolError("invalid_request");
+        foreach (var item in loginForms.Where(item => item.Value.Expires < DateTimeOffset.UtcNow)) loginForms.TryRemove(item.Key, out _);
+        if (loginForms.Count >= 128) return Results.StatusCode(429);
+        var token = Base64UrlEncoder.Encode(RandomNumberGenerator.GetBytes(32));
+        loginForms[token] = (context.Request.QueryString.Value ?? "", DateTimeOffset.UtcNow.AddMinutes(5));
+        context.Response.Headers.CacheControl = "no-store";
+        // Chromium applies form-action to the post-login redirect as well. The
+        // preview BFF has its own loopback port; allow only its validated origin.
+        context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; form-action 'self' "
+            + callback.GetLeftPart(UriPartial.Authority) + "; base-uri 'none'";
+        context.Response.Cookies.Append("assembleai.preview.login", token, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/authorize", MaxAge = TimeSpan.FromMinutes(5) });
+        var values = new Dictionary<string, string> {
+            ["ASSET_BASE"] = "/reference-login", ["LOGIN_ACTION"] = context.Request.Path + context.Request.QueryString,
+            ["USERNAME"] = username, ["ERROR"] = error, ["CSRF_TOKEN"] = token,
+            ["FORGOT_HREF"] = QueryHelpers.AddQueryString(context.Request.Path + context.Request.QueryString, "__login_help", "1") };
+        var html = interactiveLoginTemplate.Replace("@@ERROR_HIDDEN@@", error.Length == 0 ? "hidden" : "", StringComparison.Ordinal)
+            .Replace("@@REMEMBER_CHECKED@@", remember ? "checked" : "", StringComparison.Ordinal).Replace("记住我", "记住账号", StringComparison.Ordinal);
+        foreach (var pair in values) html = html.Replace("@@" + pair.Key + "@@", WebUtility.HtmlEncode(pair.Value), StringComparison.Ordinal);
+        return Results.Content(html, "text/html; charset=utf-8");
+    }
+
+    private async Task<IResult> InteractiveLoginAsync(HttpContext context)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (interactiveLoginTemplate is null) return Results.NotFound();
+        if (!context.Request.HasFormContentType || context.Request.ContentLength is null or > 8192
+            || context.Request.Headers.Origin != Authority) return Results.StatusCode(400);
+        var form = await context.Request.ReadFormAsync(context.RequestAborted);
+        var token = Unique(form["form_token"]);
+        if (token is null || token != context.Request.Cookies["assembleai.preview.login"]
+            || !loginForms.TryRemove(token, out var pending) || pending.Expires < DateTimeOffset.UtcNow
+            || pending.Query != context.Request.QueryString.Value) return Results.StatusCode(403);
+        var username = Unique(form["username"]) ?? "";
+        var password = Unique(form["password"]) ?? "";
+        var remember = Unique(form["rememberMe"]) is not null;
+        if (username != PreviewUsername || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(password)), SHA256.HashData(Encoding.UTF8.GetBytes(PreviewPassword))))
+            return InteractiveLoginPage(context, username.Length <= 256 ? username : "", "账号或密码不正确，请重新输入。", remember);
+        if (remember) context.Response.Cookies.Append("assembleai.preview.account", username, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/authorize", MaxAge = TimeSpan.FromHours(4) });
+        else context.Response.Cookies.Delete("assembleai.preview.account", new CookieOptions { Path = "/authorize" });
+        context.Items["preview-login-validated"] = true;
+        return Authorize(context);
     }
 
     private async Task<IResult> TokenAsync(HttpContext context)

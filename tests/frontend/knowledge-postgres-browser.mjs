@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectOidcAccountPicker, expectReferenceValue, logoutFromUserMenu, referenceSelect, toggleReferenceTheme } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, basename } from 'node:path';
@@ -40,21 +41,20 @@ try {
   const portal = await context.newPage();
   let standalone, standaloneRuns = 0;
   try {
-    await portal.goto('/');
-    await portal.getByRole('link', { name: '企业账号登录', exact: true }).click();
-    const portalTenant = portal.getByLabel('当前租户', { exact: true });
+    await portal.goto('/bff/login?returnUrl=' + encodeURIComponent('/'));
+    const portalTenant = portal.getByRole('combobox', { name: '当前租户', exact: true });
     await expect(portalTenant).toBeEnabled();
-    if (await portalTenant.inputValue() !== tenantId) {
-      // selectOption dispatches change; it does not await the component's
+    if (await referenceSelect(portal, '当前租户').getAttribute('data-value') !== tenantId) {
+      // An option click does not await the component's
       // CSRF -> tenant write -> authoritative read -> catalog transaction.
       const tenantWrite = portal.waitForResponse(response => response.request().method() === 'POST'
         && new URL(response.url()).pathname === '/bff/tenant');
-      await portalTenant.selectOption(tenantId);
+      await chooseReferenceOption(portal, '当前租户', tenantId);
       const committed = await tenantWrite;
       assert.equal(committed.status(), 200, 'Tenant selection must commit before opening the independent application.');
       assert.ok((await committed.json()).tenantId === tenantId, 'Tenant selection response must match the selected workspace.');
     }
-    await expect(portalTenant).toHaveValue(tenantId);
+    await expectReferenceValue(portal, '当前租户', tenantId);
     await expect(portalTenant).toBeEnabled();
     const selected = await context.request.get('/bff/tenant');
     assert.equal(selected.status(), 200);
@@ -66,7 +66,7 @@ try {
     standalone.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/runs')) standaloneRuns++; });
     await standalone.goto('/apps/knowledge/0.1.0/');
     await expect(standalone.getByTestId('knowledge-app')).toContainText('独立运行');
-    await expect(standalone.getByLabel('独立运行租户')).toHaveValue(tenantId);
+    await expectReferenceValue(standalone, '独立运行租户', tenantId);
     await expect(standalone.getByRole('region', { name: '独立运行平台连接' })).toHaveAttribute('aria-busy', 'false');
     await expect(standalone.getByRole('button', { name: '连接平台', exact: true })).toBeEnabled();
   } catch (error) {
@@ -75,14 +75,15 @@ try {
       return page.evaluate(({ selector, tenantId }) => {
         const select = document.querySelector(selector);
         const connection = document.querySelector('.knowledge-access');
-        const button = connection?.querySelector('.knowledge-controls button');
-        return { present: true, tenantControl: !!select, tenantPresent: !!select?.value,
-          selectedExpectedTenant: select?.value === tenantId, tenantDisabled: select?.disabled ?? null,
+        const button = connection?.querySelector('.knowledge-controls > button');
+        const selectedValue = select?.closest('.ui-select')?.getAttribute('data-value');
+        return { present: true, tenantControl: !!select, tenantPresent: !!selectedValue,
+          selectedExpectedTenant: selectedValue === tenantId, tenantDisabled: select?.disabled ?? null,
           connectionBusy: connection?.getAttribute('aria-busy') ?? null, connectionDisabled: button?.disabled ?? null };
       }, { selector, tenantId }).catch(() => ({ present: true, unavailable: true }));
     }
     process.stderr.write(`Knowledge bootstrap diagnostics: ${JSON.stringify({ http: bootstrapTimings,
-      portal: await state(portal, '#portal-tenant'), standalone: await state(standalone, '[aria-label="独立运行租户"]') })}\n`);
+      portal: await state(portal, '[role="combobox"][aria-label="当前租户"]'), standalone: await state(standalone, '[role="combobox"][aria-label="独立运行租户"]') })}\n`);
     throw error;
   }
   assert.equal(standaloneRuns, 0);
@@ -110,7 +111,7 @@ try {
   }
   await answer(standalone);
   await standalone.screenshot({ path: resolve(directory, 'standalone-light.png'), fullPage: true });
-  await standalone.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(standalone);
   await expect(standalone.getByTestId('knowledge-app')).toHaveAttribute('data-theme', 'dark');
   await expect(standalone.getByTestId('knowledge-answer')).toBeVisible();
   await standalone.screenshot({ path: resolve(directory, 'standalone-dark.png'), fullPage: true });
@@ -122,9 +123,9 @@ try {
 
   // A real upload from the rendered form must become ready through the broker/CPU indexer.
   await standalone.getByLabel('添加文档').setInputFiles(uploadFile);
-  await standalone.getByLabel('所属范围').selectOption(factoryId);
+  await chooseReferenceOption(standalone, '所属范围', factoryId);
   await standalone.getByRole('button', { name: '上传文档', exact: true }).click();
-  const uploaded = standalone.getByTestId('knowledge-documents').locator('li').filter({ has: standalone.getByRole('heading', { name: basename(uploadFile), exact: true }) });
+  const uploaded = standalone.getByTestId('knowledge-documents').locator('tbody tr').filter({ hasText: basename(uploadFile) });
   await expect(uploaded).toContainText('可问答', { timeout: 150_000 });
   assert.equal(uploads.length, 1);
   const uploadHeaders = await uploads[0].allHeaders();
@@ -143,8 +144,9 @@ try {
     assert.ok(downloadedBytes.equals(expectedBytes), 'Downloaded original must exactly match the uploaded document bytes.');
   } finally { await uploadedDownload.delete(); }
   await uploaded.getByRole('button', { name: '删除', exact: true }).click();
-  await expect(uploaded.getByRole('group', { name: '确认删除文档' })).toBeVisible();
-  await uploaded.getByRole('button', { name: '确认删除', exact: true }).click();
+  const deletion = standalone.getByRole('dialog', { name: '确认删除文档', exact: true });
+  await expect(deletion).toBeVisible();
+  await deletion.getByRole('button', { name: '确认删除', exact: true }).click();
   await expect(uploaded).toHaveCount(0);
   await answer(standalone); // Retain a current answer to verify cross-tab logout cleanup below.
 
@@ -153,7 +155,7 @@ try {
   await expect(portal.getByTestId('knowledge-app')).toContainText('平台内运行');
   await answer(portal);
   await portal.screenshot({ path: resolve(directory, 'embedded-light.png'), fullPage: true });
-  await portal.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(portal);
   await expect(portal.getByTestId('knowledge-app')).toHaveAttribute('data-theme', 'dark');
   await expect(portal.getByTestId('knowledge-answer')).toBeVisible();
   await portal.screenshot({ path: resolve(directory, 'embedded-dark.png'), fullPage: true });
@@ -166,8 +168,8 @@ try {
     assert.equal(headers['x-tenant-id'], tenantId);
   }
   assert.equal(appRequests.filter(request => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/ask')).length, 3);
-  await portal.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(portal.getByRole('link', { name: '企业账号登录', exact: true })).toBeVisible();
+  await logoutFromUserMenu(portal);
+  await expectOidcAccountPicker(portal);
   await standalone.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(standalone.getByTestId('knowledge-answer')).toHaveCount(0);
   await expect(standalone.getByRole('link', { name: '使用企业账号登录', exact: true })).toBeVisible();

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import ElButton from 'element-plus/es/components/button/index';
-import ElInput from 'element-plus/es/components/input/index';
-import 'element-plus/es/components/button/style/css';
-import 'element-plus/es/components/input/style/css';
+import { ReferenceButton, ReferenceSelect } from './components/reference';
+import ReferenceConfirm from './components/reference/ReferenceConfirm.vue';
+import { useReferenceConfirm } from './components/reference/useReferenceConfirm';
+const { confirmation, requestConfirmation, settleConfirmation } = useReferenceConfirm();
 import ApplicationRunner from './ApplicationRunner.vue';
 import { portalApi, PortalApiError, type PortalApp, type PortalRun, type PortalSession, type PortalTenant, type Theme } from './portal-api';
 const RegistryWorkspace = defineAsyncComponent(() => import('./RegistryWorkspace.vue'));
@@ -40,6 +40,9 @@ const managementDirty = ref(false);
 const managementRefresh = ref(0);
 const managementInstance = ref(0);
 const pageHeading = ref<HTMLElement>();
+const sidebarCollapsed = ref(false);
+const userMenuOpen = ref(false);
+const tenantPicker = ref<HTMLElement>();
 let generation = 0;
 let controller: AbortController | undefined;
 let expiryTimer: number | undefined;
@@ -125,7 +128,7 @@ async function readAuditNavigation(id: number, signal: AbortSignal, selected: st
   }
 }
 const managementKey = computed(() => JSON.stringify([session.value?.iss, session.value?.sub, tenant.value, managementInstance.value]));
-const loginHref = computed(() => `/bff/login?returnUrl=${encodeURIComponent(route.value.kind === 'missing' ? '/' : path.value)}`);
+const loginHref = computed(() => `/bff/login?returnUrl=${encodeURIComponent(route.value.kind === 'missing' ? '/' : path.value + routeQuery.value)}&prompt=login`);
 const currentRun = computed(() => route.value.kind === 'run' && run.value?.appId === route.value.appId ? run.value : null);
 
 function begin(action: string) {
@@ -222,10 +225,10 @@ async function refresh(quiet = false) {
     if (!(error instanceof PortalApiError && error.status === 401)) mode.value = 'error';
   } finally { if (current(id)) busy.value = ''; }
 }
-async function selectTenant(event: Event) {
-  const selected = (event.target as HTMLSelectElement).value;
+async function selectTenant(event: Event | string) {
+  const selected = typeof event === 'string' ? event : (event.target as HTMLSelectElement).value;
   if (!selected || writing.value || selected === tenant.value) return;
-  if (!discardDraft()) { (event.target as HTMLSelectElement).value = tenant.value; return; }
+  if (!await discardDraft()) { if (typeof event !== 'string') (event.target as HTMLSelectElement).value = tenant.value; return; }
   const { id, signal } = begin('switch');
   identityWorkspace.value = null; clearData(); tenant.value = ''; message.value = ''; mode.value = 'ready';
   try {
@@ -253,7 +256,7 @@ function setPath(next: string, replace = false) {
 }
 async function navigate(next: string) {
   const discardManagement = managing.value && managementDirty.value;
-  if (writing.value || !discardDraft()) return;
+  if (writing.value || !await discardDraft()) return;
   // The sidebar may navigate to this same URL. A confirmed discard must also
   // discard the child editor instead of only clearing the parent's dirty flag.
   if (discardManagement) managementInstance.value++;
@@ -284,7 +287,7 @@ async function openApplication() {
   finally { if (current(id)) busy.value = ''; }
 }
 async function logout() {
-  if (writing.value || !discardDraft()) return;
+  if (writing.value || !await discardDraft()) return;
   const { id, signal } = begin('logout');
   clearData(); message.value = '';
   try {
@@ -294,6 +297,14 @@ async function logout() {
     handleError(error, id, '退出登录');
     if (mode.value !== 'signed-out') { mode.value = 'error'; message.value = '退出登录未完成，请重试。'; }
   } finally { if (current(id)) busy.value = ''; }
+}
+function openWorkspace() {
+  if (sidebarCollapsed.value) { sidebarCollapsed.value = false; return; }
+  tenantPicker.value?.querySelector<HTMLButtonElement>('button')?.click();
+}
+function focusNavigation(event: FocusEvent) {
+  if (window.matchMedia('(max-width: 760px)').matches && event.target instanceof HTMLElement && event.target.matches('.nav-item'))
+    event.target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
 }
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light';
@@ -305,19 +316,26 @@ function revisit() {
   window.clearTimeout(focusTimer);
   focusTimer = window.setTimeout(() => void refresh(true), 120);
 }
-function historyChanged() {
+async function historyChanged() {
   if (path.value === location.pathname && routeQuery.value === location.search) return;
-  if (writing.value || !discardDraft()) { history.pushState({}, '', path.value + routeQuery.value); return; }
-  path.value = location.pathname; routeQuery.value = location.search; run.value = null; void refresh();
+  const destination = location.pathname + location.search;
+  const previous = path.value + routeQuery.value;
+  if (writing.value) { history.pushState({}, '', previous); return; }
+  // Keep the current URL while the source dialog is open, including cancellation.
+  if (managementDirty.value) history.replaceState({}, '', previous);
+  if (!await discardDraft()) return;
+  setPath(destination, true); run.value = null; void refresh();
 }
-function discardDraft() {
+async function discardDraft() {
   if (!managementDirty.value) return true;
-  if (!window.confirm('有尚未保存的草稿修改。放弃修改并继续？')) return false;
+  const before = generation;
+  if (!await requestConfirmation({ title: '放弃修改？', description: '有尚未保存的草稿修改。放弃修改并继续？', confirmLabel: '放弃修改' })
+    || !current(before) || writing.value) return false;
   managementDirty.value = false;
   return true;
 }
-function refreshPage() {
-  if (writing.value || !discardDraft()) return;
+async function refreshPage() {
+  if (writing.value || !await discardDraft()) return;
   if (managing.value) managementInstance.value++;
   void refresh();
 }
@@ -325,12 +343,17 @@ function beforeUnload(event: BeforeUnloadEvent) {
   if (managementDirty.value) { event.preventDefault(); event.returnValue = ''; }
 }
 function managementUnauthorized() { controller?.abort(); generation++; busy.value = ''; signedOut(); }
+watch(mode, value => { if (value === 'signed-out') { userMenuOpen.value = false; window.location.replace(loginHref.value); } });
+function closeUserMenu(event: Event) { if (!(event.target instanceof Element) || !event.target.closest('.user-menu')) userMenuOpen.value = false; }
+function keydown(event: KeyboardEvent) { if (event.key === 'Escape') userMenuOpen.value = false; }
 watch(title, value => { document.title = `集智 · ${value}`; }, { immediate: true });
 watch(run, value => {
   window.clearTimeout(expiryTimer);
   if (value) expiryTimer = window.setTimeout(() => { run.value = null; message.value = '本次运行已到期，请重新打开应用。'; }, Math.max(0, Date.parse(value.expiresAt) - Date.now()));
 });
 onMounted(() => {
+  document.addEventListener('pointerdown', closeUserMenu);
+  document.addEventListener('keydown', keydown);
   void refresh();
   window.addEventListener('popstate', historyChanged);
   window.addEventListener('focus', revisit);
@@ -339,6 +362,8 @@ onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload);
 });
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeUserMenu);
+  document.removeEventListener('keydown', keydown);
   disposed = true; controller?.abort(); window.clearTimeout(expiryTimer); window.clearTimeout(focusTimer);
   window.removeEventListener('popstate', historyChanged);
   window.removeEventListener('focus', revisit);
@@ -349,47 +374,55 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="portal-shell">
+  <div class="reference-ui portal-root">
     <a class="portal-skip" href="#portal-main">跳至主要内容</a>
-    <aside class="portal-sidebar" aria-label="平台导航">
-      <a class="portal-brand" href="/" @click="follow($event, '/')"><img src="/logo.png" width="28" height="28" alt="" /><span><strong>集智</strong><small>AssembleAI</small></span></a>
-      <div class="portal-workspace"><span class="portal-label">工作空间</span><label for="portal-tenant" class="sr-only">当前租户</label><select id="portal-tenant" aria-label="当前租户" :value="tenant" :disabled="!session || writing || mode === 'boot'" @change="selectTenant"><option value="" disabled>选择租户</option><option v-for="item in tenants" :key="item.tenantId" :value="item.tenantId">{{ item.name }}</option></select></div>
-      <nav aria-label="主导航"><a class="portal-nav-item" href="/" :aria-current="!managing ? 'page' : undefined" @click="follow($event, '/')"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2.5" y="2.5" width="5.5" height="5.5" rx="1" /><rect x="12" y="2.5" width="5.5" height="5.5" rx="1" /><rect x="2.5" y="12" width="5.5" height="5.5" rx="1" /><rect x="12" y="12" width="5.5" height="5.5" rx="1" /></svg>应用中心</a><a v-if="session" class="portal-nav-item" href="/manage/applications" :aria-current="route.kind === 'management' ? 'page' : undefined" @click="follow($event, '/manage/applications')"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h3" /></svg>应用管理</a><a v-for="link in identityNavigation" :key="link.section" class="portal-nav-item" :href="link.path" :aria-current="route.kind === 'identity' && route.section === link.section ? 'page' : undefined" @click="follow($event, link.path)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="10" cy="6" r="3" /><path d="M4 17v-2a6 6 0 0 1 12 0v2M7 17h6" /></svg>{{ link.name }}</a>
-        <a v-for="section in resourceNavigation" :key="section" class="portal-nav-item" :href="`/manage/${section}`" :aria-current="route.kind === 'resource' && route.resourceSection === section ? 'page' : undefined" @click="follow($event, `/manage/${section}`)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2" /><path d="M3 8h14M8 8v9" /></svg>{{ resourceNames[section] }}</a>
-        <a v-if="auditNavigation" class="portal-nav-item" :href="auditNavigation" :aria-current="route.kind === 'audit' ? 'page' : undefined" @click="follow($event, auditNavigation)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h4" /></svg>调用与审计</a>
-      </nav>
-      <div class="portal-sidebar-bottom"><p>制造业 AI 应用平台</p><template v-if="session"><div class="portal-user"><span class="portal-avatar" aria-hidden="true">{{ (session.name || '用').slice(0, 1) }}</span><span class="portal-user-name">{{ session.name || '已登录用户' }}</span></div><ElButton text :disabled="writing" @click="logout">{{ busy === 'logout' ? '正在退出…' : '退出登录' }}</ElButton></template><span v-else class="portal-signed-out">企业应用，统一访问</span></div>
-    </aside>
-    <div class="portal-content">
-      <header class="portal-topbar"><div class="portal-breadcrumb"><span>{{ session ? breadcrumbScope : '集智工作空间' }}</span><span aria-hidden="true">/</span><strong>{{ title }}</strong></div><ElButton text @click="toggleTheme" :aria-label="theme === 'light' ? '切换暗色' : '切换浅色'">{{ theme === 'light' ? '暗色外观' : '浅色外观' }}</ElButton></header>
-      <main id="portal-main" tabindex="-1" class="portal-main">
-        <div class="portal-page-heading"><div><h1 ref="pageHeading" tabindex="-1">{{ title }}</h1><span v-if="mode === 'ready' && !!tenant && !managing" class="portal-heading-count">{{ items.length }}</span><p v-if="managing || !tenant">{{ route.kind === 'audit' ? '在授权范围内查询运行记录与管理操作。' : route.kind === 'resource' ? (route.resourceSection === 'models' ? '配置租户模型额度，验证调用并查看运行记录。' : '管理租户数据连接，查看受控数据集与连接记录。') : route.kind === 'identity' ? '管理企业身份、成员关系与访问范围。' : managing ? '维护应用发布与当前租户的使用版本。' : '找到适合当前工作的应用。' }}</p></div><ElInput v-if="mode === 'ready' && !!tenant && !managing" v-model="search" aria-label="搜索应用" placeholder="搜索应用" clearable :disabled="busy === 'switch'" class="portal-search"><template #prefix><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg></template></ElInput><ElButton v-if="session" :disabled="!!busy || writing" @click="refreshPage">{{ managing ? '刷新管理数据' : '刷新应用' }}</ElButton></div>
-        <div v-if="message" class="portal-feedback" role="alert"><span>{{ message }}</span><ElButton v-if="mode === 'error' && session" @click="refresh()" :disabled="!!busy">重试</ElButton></div>
+    <div class="page"><div class="frame portal-shell" :class="{ 'is-sidebar-collapsed': sidebarCollapsed }">
+      <aside class="sidebar portal-sidebar" id="portal-sidebar" aria-label="平台导航" @focusin="focusNavigation">
+        <button class="workspace portal-brand" type="button" aria-label="集智工作区" @click="openWorkspace">
+          <img class="workspace-mark" src="/logo.png" width="22" height="22" alt="" />
+          <span class="workspace-name">集智</span><span class="workspace-chevron" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
+        </button>
+        <div class="sidebar-scroll"><div class="scroll-content">
+          <div ref="tenantPicker" class="nav-section portal-workspace"><span class="nav-section-label">工作空间</span><ReferenceSelect label="当前租户" size="small" :model-value="tenant" :options="[{ value: '', label: '选择租户', disabled: true }, ...tenants.map(item => ({value:item.tenantId,label:item.name}))]" :disabled="!session || writing || mode === 'boot'" @change="selectTenant" /></div>
+          <div class="nav-section"><nav class="nav-list" aria-label="主导航"><a class="nav-item portal-nav-item" href="/" :class="{ 'is-active': !managing }" :aria-current="!managing ? 'page' : undefined" @click="follow($event, '/')"><span class="nav-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="1.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" stroke-width="1.3"/></svg></span><span class="nav-label">应用中心</span></a><a v-if="session" class="nav-item portal-nav-item" href="/manage/applications" :class="{ 'is-active': route.kind === 'management' }" :aria-current="route.kind === 'management' ? 'page' : undefined" @click="follow($event, '/manage/applications')"><span class="nav-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h3" /></svg></span><span class="nav-label">应用管理</span></a><a v-for="link in identityNavigation" :key="link.section" class="nav-item portal-nav-item" :href="link.path" :class="{ 'is-active': route.kind === 'identity' && route.section === link.section }" :aria-current="route.kind === 'identity' && route.section === link.section ? 'page' : undefined" @click="follow($event, link.path)"><span class="nav-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="10" cy="6" r="3" /><path d="M4 17v-2a6 6 0 0 1 12 0v2M7 17h6" /></svg></span><span class="nav-label">{{ link.name }}</span></a>
+        <a v-for="section in resourceNavigation" :key="section" class="nav-item portal-nav-item" :href="`/manage/${section}`" :class="{ 'is-active': route.kind === 'resource' && route.resourceSection === section }" :aria-current="route.kind === 'resource' && route.resourceSection === section ? 'page' : undefined" @click="follow($event, `/manage/${section}`)"><span class="nav-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2" /><path d="M3 8h14M8 8v9" /></svg></span><span class="nav-label">{{ resourceNames[section] }}</span></a>
+        <a v-if="auditNavigation" class="nav-item portal-nav-item" :href="auditNavigation" :class="{ 'is-active': route.kind === 'audit' }" :aria-current="route.kind === 'audit' ? 'page' : undefined" @click="follow($event, auditNavigation)"><span class="nav-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h4" /></svg></span><span class="nav-label">调用与审计</span></a>
+</nav></div>
+        </div></div>
+        <div class="sidebar-footer portal-sidebar-bottom">
+          <button class="sidebar-collapse" type="button" :aria-expanded="!sidebarCollapsed" aria-controls="portal-sidebar" :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'" @click="sidebarCollapsed = !sidebarCollapsed"><span class="sidebar-collapse-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9.5 3.5L6 8l3.5 4.5M3.5 2.5v11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span class="sidebar-collapse-label">{{ sidebarCollapsed ? '展开' : '收起' }}</span></button>
+          <div v-if="session" class="user-menu" :class="{ 'is-open': userMenuOpen }"><button class="user-row portal-user" type="button" aria-label="用户菜单" aria-haspopup="menu" :aria-expanded="userMenuOpen" @click="userMenuOpen = !userMenuOpen"><span class="avatar portal-avatar" aria-hidden="true">{{ (session.name || '用').slice(0,1) }}</span><span class="user-name">{{ session.name || '已登录用户' }}</span></button><div class="user-menu-pop" role="menu" :hidden="!userMenuOpen"><button class="user-menu-item" type="button" role="menuitem" :disabled="writing" @click="logout">{{ busy === 'logout' ? '正在退出…' : '退出登录' }}</button></div></div>
+        </div>
+      </aside>
+      <div class="surface portal-content">
+        <header class="topbar portal-topbar"><div class="breadcrumb portal-breadcrumb"><span class="crumb-id">{{ session ? breadcrumbScope : '集智工作空间' }}</span><span class="crumb-title">{{ title }}</span></div><div class="topbar-actions"><button class="theme-toggle" type="button" @click="toggleTheme" :aria-label="theme === 'light' ? '切换暗色' : '切换浅色'" title="切换主题"><svg class="theme-icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.25" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.05 3.05l.99.99M11.96 11.96l.99.99M12.95 3.05l-.99.99M4.04 11.96l-.99.99" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><svg class="theme-icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.6 9.35A5.25 5.25 0 0 1 6.65 3.4 5.5 5.5 0 1 0 12.6 9.35z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></button></div></header>
+        <main id="portal-main" tabindex="-1" class="portal-main list-view" :class="{ 'is-management': managing }">
+          <div class="list-toolbar portal-page-heading"><h1 class="list-title" ref="pageHeading" tabindex="-1">{{ title }}</h1><span v-if="mode === 'ready' && !!tenant && !managing" class="list-meta portal-heading-count">{{ items.length }} 个应用</span><div v-if="mode === 'ready' && !!tenant && !managing" class="list-search portal-search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><input v-model="search" type="search" aria-label="搜索应用" placeholder="搜索应用…" :disabled="busy === 'switch'" /></div><ReferenceButton v-if="session" :disabled="!!busy || writing" @click="refreshPage">{{ managing ? '刷新管理数据' : '刷新应用' }}</ReferenceButton></div>
+        <div v-if="message" class="portal-feedback" role="alert"><span>{{ message }}</span><ReferenceButton v-if="mode === 'error' && session" @click="refresh()" :disabled="!!busy">重试</ReferenceButton></div>
         <section v-if="mode === 'boot'" class="portal-skeleton" role="status" aria-label="正在加载应用中心"><span>正在加载工作空间…</span><div v-for="row in 3" :key="row" class="portal-skeleton-row"><i></i><div><b></b><em></em></div></div></section>
-        <section v-else-if="mode === 'signed-out'" class="portal-entry"><div class="portal-entry-symbol" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 4 6v6c0 4.2 4.6 7.6 8 9 3.4-1.4 8-4.8 8-9V6l-8-3Z" /><path d="m8.5 12 2.3 2.3 4.7-4.8" /></svg></div><h2>登录后，访问你的应用</h2><p>使用企业账号登录，查看当前租户为你开放的应用。</p><a :href="loginHref" class="portal-primary-link">企业账号登录 <span aria-hidden="true">→</span></a><p class="portal-entry-note">账号与访问权限由企业统一管理。</p></section>
-        <section v-else-if="mode === 'error'" class="portal-state"><h2>暂时无法加载工作空间</h2><p>请检查连接后重试。已有登录状态不会被当作退出。</p><ElButton :disabled="!!busy" @click="refresh()">重新加载</ElButton></section>
+        <section v-else-if="mode === 'signed-out'" class="portal-state" role="status"><h2>正在进入登录页…</h2><a :href="loginHref" class="pill-btn">企业账号登录</a></section>
+        <section v-else-if="mode === 'error'" class="portal-state"><h2>暂时无法加载工作空间</h2><p>请检查连接后重试。已有登录状态不会被当作退出。</p><ReferenceButton :disabled="!!busy" @click="refresh()">重新加载</ReferenceButton></section>
         <template v-else-if="managing"><section v-if="busy === 'switch' || busy === 'logout'" class="portal-state" role="status">正在更新会话…</section><IdentityWorkspace v-else-if="route.kind === 'identity'" :key="managementKey" :section="route.section!" :entity-id="route.entityId || ''" :tenant-id="route.managementTenant || tenant || null" :explicit-tenant="!!route.managementTenant" :refresh-key="managementRefresh" @changed="refresh(true)" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /><AuditWorkspace v-else-if="route.kind === 'audit'" :key="managementKey" :scope="route.auditScope!" :tenant-id="tenant" :record-source="route.recordSource || ''" :record-id="route.recordId || ''" :query-string="routeQuery" :refresh-token="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" /><ResourceWorkspace v-else-if="route.kind === 'resource'" :key="managementKey" :section="route.resourceSection!" :resource-id="route.resourceId || ''" :tenant-id="tenant" :refresh-token="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /><RegistryWorkspace v-else :key="managementKey" :tenant-id="tenant || null" :app-id="route.appId" :refresh-key="managementRefresh" @navigate="navigate" @unauthorized="managementUnauthorized" @busy="managementBusy = $event" @dirty="managementDirty = $event" /></template>
-        <section v-else-if="!tenants.length" class="portal-state"><h2>尚未加入租户</h2><p>你的企业账号已登录。请联系管理员添加租户成员关系后刷新。</p><ElButton :disabled="!!busy" @click="refresh()">重新加载</ElButton></section>
+        <section v-else-if="!tenants.length" class="portal-state"><h2>尚未加入租户</h2><p>你的企业账号已登录。请联系管理员添加租户成员关系后刷新。</p><ReferenceButton :disabled="!!busy" @click="refresh()">重新加载</ReferenceButton></section>
         <section v-else-if="!tenant" class="portal-state"><h2>{{ busy === 'switch' ? '正在切换租户…' : '选择租户' }}</h2><p>从工作空间选择当前租户，查看你可以使用的应用。</p></section>
-        <section v-else-if="route.kind === 'missing'" class="portal-state"><h2>页面不存在</h2><p>请返回应用列表继续访问。</p><ElButton @click="navigate('/')">应用列表</ElButton></section>
+        <section v-else-if="route.kind === 'missing'" class="portal-state"><h2>页面不存在</h2><p>请返回应用列表继续访问。</p><ReferenceButton @click="navigate('/')">应用列表</ReferenceButton></section>
         <template v-else-if="route.kind === 'run'">
           <div class="portal-run-heading"><a :href="`/applications/${route.appId}`" @click="follow($event, `/applications/${route.appId}`)">← 返回应用详情</a><span>{{ detail?.name }}</span></div>
           <ApplicationRunner v-if="currentRun" :key="currentRun.runId" :run="currentRun" :theme="theme" @leave="navigate(`/applications/${route.appId}`)" />
-          <section v-else class="portal-state"><h2>请重新打开应用</h2><p>{{ detailError || '运行不会在刷新页面后自动恢复。返回详情，重新检查访问权限并打开应用。' }}</p><ElButton @click="navigate(`/applications/${route.appId}`)">返回应用详情</ElButton></section>
+          <section v-else class="portal-state"><h2>请重新打开应用</h2><p>{{ detailError || '运行不会在刷新页面后自动恢复。返回详情，重新检查访问权限并打开应用。' }}</p><ReferenceButton @click="navigate(`/applications/${route.appId}`)">返回应用详情</ReferenceButton></section>
         </template>
         <div v-else class="portal-catalog-layout" :class="{ 'has-detail': route.kind === 'detail' }">
-          <section class="portal-catalog" aria-label="授权应用列表" :aria-busy="busy === 'load' || busy === 'switch'">
-            <h2 class="sr-only">我的应用</h2>
-            <div class="portal-categories" aria-label="应用分类"><button :aria-pressed="!category" @click="category = ''">全部应用</button><button v-for="item in categories" :key="item" :aria-pressed="category === item" @click="category = item">{{ item }}</button></div>
-            <div v-if="busy === 'load' && !items.length" class="portal-skeleton" role="status"><span>正在加载应用…</span><div v-for="row in 3" :key="row" class="portal-skeleton-row"><i></i><div><b></b><em></em></div></div></div>
-            <div v-else-if="!items.length" class="portal-state"><h3>暂无可用应用</h3><p>当前租户尚未为你开放应用。应用发布并获得授权后，会显示在这里。</p><ElButton :disabled="!!busy" @click="refresh()">刷新应用列表</ElButton></div>
-            <div v-else-if="!shown.length" class="portal-state"><h3>没有匹配的应用</h3><p>试试其他关键词，或清除分类和搜索条件。</p><ElButton @click="search = ''; category = ''">清除筛选</ElButton></div>
-            <ul v-else class="portal-app-list"><li v-for="app in shown" :key="app.appId" class="portal-app-row" :class="{ selected: detail?.appId === app.appId }"><div class="portal-app-icon" aria-hidden="true">{{ app.name.slice(0, 1) }}</div><div class="portal-app-info"><a :href="`/applications/${app.appId}`" @click="follow($event, `/applications/${app.appId}`)"><h3>{{ app.name }}</h3></a><p>{{ app.description }}</p><div class="portal-app-meta"><span>{{ app.category }}</span><span>v{{ app.releaseVersion }}</span></div></div><a class="portal-detail-link" :href="`/applications/${app.appId}`" @click="follow($event, `/applications/${app.appId}`)">查看详情 <span aria-hidden="true">↗</span></a></li></ul>
+          <section class="portal-catalog list-view" aria-label="应用列表"><h2 class="sr-only">我的应用</h2>
+            <div class="filter-row portal-categories" aria-label="应用分类"><button class="filter-chip" :class="{ 'is-active': !category }" type="button" :aria-pressed="!category" @click="category = ''">全部应用</button><button v-for="item in categories" :key="item" class="filter-chip" :class="{ 'is-active': category === item }" type="button" :aria-pressed="category === item" @click="category = item">{{ item }}</button></div>
+            <div class="app-list" :class="{ 'is-loading': busy === 'load' }"><div v-if="busy === 'load'" class="skeleton-list" role="status" aria-label="正在读取应用"><div v-for="row in 5" :key="row" class="skeleton-row"><span class="sk sk-avatar"/><span class="sk sk-line grow"/><span class="sk sk-line short"/></div></div><div v-else-if="!shown.length" class="empty-state is-visible" role="status"><div class="empty-icon" aria-hidden="true">∅</div><h2 class="empty-title">{{ items.length ? '没有匹配的应用' : '当前租户暂无可用应用' }}</h2><p class="empty-desc">{{ items.length ? '试试调整关键词或清除筛选。' : '应用发布并获授权后，会显示在这里。' }}</p><ReferenceButton v-if="items.length" @click="search = ''; category = ''">清除筛选</ReferenceButton></div>
+            <ul v-else class="scroll-content portal-app-list"><li v-for="app in shown" :key="app.appId" class="app-row portal-app-row" :class="{ selected: route.appId === app.appId }"><span class="app-icon portal-app-icon" style="--ic:var(--accent)" aria-hidden="true">{{ app.name.slice(0,1) }}</span><a class="app-row-title" :href="`/applications/${app.appId}`" @click="follow($event, `/applications/${app.appId}`)">{{ app.name }}</a><span class="app-row-meta">{{ app.category }} · v{{ app.releaseVersion }}</span><a class="pill-btn portal-detail-link" :href="`/applications/${app.appId}`" @click="follow($event, `/applications/${app.appId}`)">查看详情</a></li></ul></div>
             <div v-if="items.length" class="portal-list-footer"><span aria-live="polite">显示 {{ shown.length }} 个应用</span><span>仅展示当前租户已授权的应用</span></div>
           </section>
-          <aside v-if="route.kind === 'detail'" class="portal-inspector" aria-label="应用详情" :aria-busy="busy === 'load'"><div class="portal-inspector-top"><span>应用详情</span><a href="/" @click="follow($event, '/')" aria-label="应用列表">关闭 <span aria-hidden="true">×</span></a></div><template v-if="detail"><span class="portal-detail-category">{{ detail.category }}</span><h2>{{ detail.name }}</h2><p class="portal-detail-description">{{ detail.description }}</p><dl><div><dt>当前版本</dt><dd>{{ detail.releaseVersion }}</dd></div><div><dt>所属租户</dt><dd>{{ tenantName }}</dd></div><div><dt>应用标识</dt><dd class="portal-app-id">{{ detail.appId }}</dd></div></dl><ElButton type="primary" :disabled="!!busy" @click="openApplication">{{ busy === 'start' ? '正在打开…' : '打开应用' }}</ElButton><p class="portal-run-note">打开时将再次确认你的访问权限与应用状态。</p></template><div v-else-if="detailError" class="portal-detail-unavailable" role="status"><h2>应用不可用</h2><p>{{ detailError }}</p><ElButton @click="navigate('/')">应用列表</ElButton></div><p v-else role="status">正在加载详情…</p></aside>
+          <aside v-if="route.kind === 'detail'" class="props portal-inspector" aria-label="应用详情" :aria-busy="busy === 'load'"><div class="scroll-content"><div class="portal-inspector-top"><span class="props-label">应用详情</span><a class="icon-btn" href="/" @click="follow($event, '/')" aria-label="应用列表">×</a></div><template v-if="detail"><div class="props-block"><span class="props-label">{{ detail.category }}</span><h2>{{ detail.name }}</h2><p class="portal-detail-description">{{ detail.description }}</p></div><div class="props-block"><dl><div><dt>当前版本</dt><dd>{{ detail.releaseVersion }}</dd></div><div><dt>所属租户</dt><dd>{{ tenantName }}</dd></div><div><dt>应用标识</dt><dd><code>{{ detail.appId }}</code></dd></div></dl></div><ReferenceButton primary :disabled="!!busy" @click="openApplication">{{ busy === 'start' ? '正在打开…' : '打开应用' }}</ReferenceButton><p class="portal-run-note">打开时将再次确认你的访问权限与应用状态。</p></template><div v-else-if="detailError" role="status"><h2>应用不可用</h2><p>{{ detailError }}</p><ReferenceButton @click="navigate('/')">应用列表</ReferenceButton></div><p v-else role="status">正在加载详情…</p></div></aside>
         </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </div></div>
+    <ReferenceConfirm :request="confirmation" @resolve="settleConfirmation" />
   </div>
 </template>

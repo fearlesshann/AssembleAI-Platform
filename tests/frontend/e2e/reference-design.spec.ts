@@ -1,3 +1,4 @@
+import { fulfillFixtureLogin } from '../reference-controls-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 
@@ -11,6 +12,7 @@ const app = { appId: 'sample', name: '产线分析', releaseVersion: '1.0.0', ca
 async function formal(page: Page, path = '/') {
   await page.route('**/bff/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/bff/login') return fulfillFixtureLogin(route);
     if (path === '/bff/session') return route.fulfill({ json: { iss: 'https://design.fixture', sub: 'reader', name: '界面验收' } });
     if (path === '/bff/tenant') return route.fulfill({ json: { tenantId: tenant } });
     return route.fulfill({ status: 404, json: {} });
@@ -29,7 +31,7 @@ async function formal(page: Page, path = '/') {
     return route.fulfill({ status: 404, json: {} });
   });
   await page.goto(path);
-  await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '用户菜单', exact: true })).toBeVisible();
   await expect(page.locator(path === '/' ? '.portal-app-row' : '.resource-dataset').first()).toBeVisible();
 }
 
@@ -60,25 +62,26 @@ async function same(referencePage: Page, actual: Page, referenceSelector: string
 }
 
 for (const theme of ['light', 'dark']) {
-  test(`V11/V36: ${theme} product shell matches the original reference runtime`, async ({ page, context }) => {
+  test(`V11/V36/V37: ${theme} product shell matches the original reference runtime`, async ({ page, context }) => {
     const original = await context.newPage();
     await page.emulateMedia({ reducedMotion: 'reduce' }); await original.emulateMedia({ reducedMotion: 'reduce' });
     await reference(original); await formal(page); await appearance(original, theme); await appearance(page, theme);
+    await original.mouse.move(0, 0); await page.mouse.move(0, 0);
     await same(original, page, 'html', 'html', tokens.map(token => `--${token}`));
     await same(original, page, '.sidebar', '.portal-sidebar', ['width', 'padding', 'background-color', 'gap']);
     await same(original, page, '.surface', '.portal-content', ['margin', 'border-radius', 'border-top-width', 'border-top-color', 'background-color', 'box-shadow']);
     await same(original, page, '.topbar', '.portal-topbar', ['height', 'padding', 'gap', 'border-bottom-color']);
-    await same(original, page, '.nav-item', '.portal-nav-item', ['height', 'padding', 'gap', 'border-radius', 'font-family', 'font-size', 'font-weight', 'color']);
+    await same(original, page, '.nav-item.is-active', '.portal-nav-item[aria-current=page]', ['height', 'padding', 'gap', 'border-radius', 'font-family', 'font-size', 'font-weight', 'color']);
     await same(original, page, '#view-apps .list-title', '.portal-page-heading h1', ['font-size', 'font-weight', 'line-height', 'color']);
     await same(original, page, '#view-apps .list-meta', '.portal-heading-count', ['font-size', 'font-weight', 'line-height', 'color']);
-    await same(original, page, '#view-apps .list-search', '.portal-search .el-input__wrapper', ['height', 'padding', 'border-radius', 'background-color', 'box-shadow']);
+    await same(original, page, '#view-apps .list-search', '.portal-search.list-search', ['height', 'padding', 'border-radius', 'background-color', 'box-shadow']);
     await same(original, page, '.workspace-mark', '.portal-brand img', ['width', 'height', 'padding', 'border-radius', 'background-color', 'filter']);
-    await same(original, page, '#view-apps .pill-btn', '.portal-page-heading > .el-button', ['height', 'padding', 'border-radius', 'font-size', 'font-weight', 'background-color', 'box-shadow', 'color']);
+    await same(original, page, '#view-apps .pill-btn', '.portal-page-heading > .pill-btn', ['height', 'padding', 'border-radius', 'font-size', 'font-weight', 'background-color', 'box-shadow', 'color']);
     await same(original, page, '#view-apps .app-row', '.portal-app-row', ['height', 'padding', 'border-radius', 'gap']);
     await same(original, page, '#view-apps .app-icon', '.portal-app-icon', ['width', 'height', 'border-radius', 'font-size', 'font-weight']);
     await same(original, page, '.nav-item.is-active', '.portal-nav-item[aria-current=page]', ['background-color']);
-    await original.locator('.nav-item').first().hover(); await page.locator('.portal-nav-item').first().hover();
-    await same(original, page, '.nav-item', '.portal-nav-item', ['background-color', 'color']);
+    await original.locator('.nav-item.is-active').first().hover(); await page.locator('.portal-nav-item[aria-current=page]').hover();
+    await same(original, page, '.nav-item.is-active', '.portal-nav-item[aria-current=page]', ['background-color', 'color']);
     await page.screenshot({ path: `.artifacts/reference-design/formal-${theme}.png`, fullPage: true });
     await original.screenshot({ path: `.artifacts/reference-design/reference-${theme}.png`, fullPage: true });
     expect(await page.evaluate(() => document.fonts.check('13px "Inter Variable"'))).toBe(true);
@@ -88,21 +91,40 @@ for (const theme of ['light', 'dark']) {
     await original.close();
   });
 
-  test(`V11/V36: ${theme} management table and inputs reuse the original component geometry`, async ({ page, context }) => {
+  test(`V11/V36/V37: ${theme} management table and inputs reuse the original component geometry`, async ({ page, context }) => {
     const original = await context.newPage(); await reference(original);
     await original.getByRole('navigation', { name: '主导航', exact: true }).getByRole('button', { name: '管理中心', exact: true }).click();
     await formal(page, '/manage/data-sources/factory'); await appearance(original, theme); await appearance(page, theme);
+    await original.mouse.move(0, 0); await page.mouse.move(0, 0);
     await same(original, page, '.data-grid', '.resource-table-wrap', ['border-radius', 'border-top-width', 'border-top-color', 'background-color']);
     // Compare ordinary data cells: the reference's selection column deliberately has 8px padding.
     await same(original, page, '.data-grid__table th:not(.data-grid__selection):not(.data-grid__actions)', '.resource-table-wrap th', ['height', 'padding', 'font-size', 'font-weight', 'background-color', 'color']);
     await same(original, page, '.data-grid__table td:not(.data-grid__selection):not(.data-grid__actions)', '.resource-table-wrap td', ['height', 'padding', 'font-size', 'font-weight', 'background-color', 'color']);
+    await original.locator('[data-member-edit]').first().click();
     await page.getByRole('button', { name: '编辑配置', exact: true }).click();
+    await original.locator('#memberFieldName').focus();
+    await page.getByLabel('最大返回行数', { exact: true }).focus();
     await same(original, page, '.subwindow-field input', '.resource-form input[type=number]', ['height', 'padding', 'border-radius', 'font-size', 'font-weight', 'background-color', 'color']);
     await page.getByLabel('最大返回行数', { exact: true }).focus();
-    expect(await page.getByLabel('最大返回行数', { exact: true }).evaluate(node => getComputedStyle(node).outlineStyle)).not.toBe('none');
+    await same(original, page, '#memberFieldName', '.resource-form input[type=number]', ['border-color', 'box-shadow', 'outline-style']);
+    expect(await page.getByLabel('最大返回行数', { exact: true }).evaluate(node => getComputedStyle(node).boxShadow)).not.toBe('none');
+    await page.screenshot({ path: `.artifacts/reference-components/actual-drawer-${theme}.png`, fullPage: true });
+    await original.screenshot({ path: `.artifacts/reference-components/original-drawer-${theme}.png`, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `.artifacts/reference-design/formal-management-${theme}-mobile.png`, fullPage: true });
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.getByLabel('启用当前租户', { exact: true }).uncheck();
+    await page.getByRole('button', { name: '保存配置', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: '确认停用？', exact: true })).toBeVisible();
+    await original.locator('#drawer-member button[data-close]').first().click();
+    await original.locator('[data-open=drawer-issue]').click();
+    await original.locator('[data-open=dialog-archive]').click();
+    await expect(original.locator('#dialog-archive')).toBeVisible();
+    await same(original, page, '#dialog-archive .dialog', '.reference-confirm-overlay .dialog', ['width', 'padding', 'border-radius', 'background-color', 'box-shadow']);
+    for (const selector of ['.dialog-title', '.dialog-desc', '.dialog-actions']) await same(original, page, '#dialog-archive ' + selector, '.reference-confirm-overlay ' + selector, ['margin', 'padding', 'font-size', 'font-weight', 'line-height', 'color', 'gap']);
+    await page.screenshot({ path: `.artifacts/reference-components/actual-confirm-${theme}.png`, fullPage: true });
+    await original.screenshot({ path: `.artifacts/reference-components/original-confirm-${theme}.png`, fullPage: true });
     await original.close();
   });
 }

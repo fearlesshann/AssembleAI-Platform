@@ -2,6 +2,7 @@ using AssembleAI.Platform.Identity.Sessions;
 using AssembleAI.Platform.Authorization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 
 namespace AssembleAI.Platform.Identity;
 
@@ -76,6 +77,13 @@ public static class BffEndpoints
                     "The return path is invalid.", "invalid_return_url");
                 return;
             }
+            var prompt = context.Request.Query["prompt"];
+            if (prompt.Count > 1 || (prompt.Count == 1 && prompt[0] != "login"))
+            {
+                await Problem(context, StatusCodes.Status400BadRequest,
+                    "The sign-in prompt is invalid.", "invalid_login_prompt");
+                return;
+            }
             if ((await context.AuthenticateAsync(BffAuthentication.CookieScheme)).Succeeded)
             {
                 await Problem(context, StatusCodes.Status409Conflict,
@@ -83,7 +91,7 @@ public static class BffEndpoints
                 return;
             }
             await context.ChallengeAsync(BffAuthentication.OidcScheme,
-                new AuthenticationProperties { RedirectUri = returnUrl });
+                new OpenIdConnectChallengeProperties { RedirectUri = returnUrl, Prompt = prompt.Count == 1 ? "login" : null });
         }).AllowAnonymous();
 
         group.MapGet("/csrf", (HttpContext context, IAntiforgery antiforgery) =>

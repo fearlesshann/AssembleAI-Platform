@@ -364,6 +364,8 @@ T13保持进行中，下一批为模型 / 数据连接管理页，再推进统�
 
 ## 2026-11-05 T13 第三批：统一审计与用户示例设计校准
 
+后续纠正：本节记录的token / 部分尺寸对照未覆盖原登录页与完整控件，不能视为用户要求的严格复用通过。相关视觉结论按SPEC B100撤回，完整组件纠正与后续验收见下方记录；本节后端审计功能的实际验收记录保持有效。
+
 正式门户新增`/manage/audit[/source/id]`及`/manage/audit/global[/source/id]`。统一10类调用 / 操作 / 导出记录，支持固定时间窗、来源 / 结果 / 应用 / 请求号筛选、保护游标分页、详情和网关请求关联。原有精确资源与身份管理边界继续生效，新增网关观察、知识审计和导出权均显式授予；身份管理员不隐式获得业务记录。合同见[统一审计](architecture/audit-console.md)。迁移13增加历史查询索引及导出审计，readiness要求1–13。
 
 JSON导出最多1000条，保留truncated与exportedAt；记录仍逐条按查询权限过滤。持久化导出审计前后及响应前复核权限和实时BFF会话，故障或失效时不交付数据；提交后的最后检查若拒绝，审计可能已经存在。页面明确取消、403和不确定失败不能推断审计未写，不自动重试。不自动清理历史；单次31天窗口不等于生产留存期，生产容量、归档与备份恢复仍待后续。
@@ -379,3 +381,25 @@ JSON导出最多1000条，保留truncated与exportedAt；记录仍逐条按查�
 最终完整`tools/verify-postgres.py --audit-browser`返回0：`.artifacts/postgres/run-e253529ced0845e59bdbda09b9d4a2aa/result.json`的passed / cleanupComplete / auditBrowserRequested为true，auditOnly为false。包含迁移1–13及重放、缺13的readiness拒绝、身份初始化 / 容量 / 授权、PG会话、注册 / 目录 / 网关、模型、连接器和知识仓储基线；本批多来源稳定分页、各来源精确资源 / tenant / global隔离、参数 / 时间 / 来源 / 结果筛选、篡改及跨主体游标拒绝、请求关联、安全元数据、未完成与窗外记录、1000条截断及导出审计故障均通过。4类真实锁等待后的退出 / 切租户 / 撤权及导出审计回滚通过。浏览器直接经过OIDC协议服务、BFF及PostgreSQL完成查询、翻页、详情、关联、JSON下载、范围权限、深链、主题 / 390px和退出；没有拦截业务API。数据库、临时凭据与进程清理完成。
 
 最终浅色 / 暗色 / 390px截图在`.artifacts/audit-postgres/9dc886a5-912f-4536-a2cb-2cf668149d86/`，原示例与正式外壳对照在`.artifacts/reference-design/`，均已目视检查。本轮未重跑真实Keycloak产品或DeepSeek效果验收，也未部署生产服务。T13保持进行中：下一批为任务、运行与依赖诊断；T14 / T15继续稳定交付、生产留存、备份恢复和性能验收。
+
+## 2026-11-05 原示例完整组件纠正
+
+用户再次明确要求先查示例，已有实现必须复用，不能只用相近token替换。本轮按SPEC V37 / B100撤回此前严格一致的结论，调整C4 / C6、AGENTS、PRODUCT和[设计合同](architecture/reference-design-contract.md)。原始`references/ui-v1`快照保持不改；没有新增AI用例，也不将本轮UI纠正视为T13剩余功能完成。
+
+正式登录复用原双栏页面、三张叠图、字体、输入 / remember / forgot、按钮亮边、波纹和背景效果，实际表单交身份服务验证。Keycloak登录、只需密码的重认证、找回密码、更新密码、信息 / 错误页使用同一原壳。门户401和本地退出请求OIDC `prompt=login`；BFF只接受该可选单值，不声称退出其他系统的SSO。隔离预览也使用同一表单并验证测试凭据，密码不交Portal处理、不保存在浏览器。
+
+原shell CSS按作用域生成，原自定义下拉、日期 / 月 / 年面板、42日格、小时分钟惯性滚轮、输入 / 按钮、分页直接移植；保留来源与MIT许可。应用 / 身份 / 资源 / 审计管理使用完整data-grid工具栏、滚动表体、页脚和原drawer / dialog。保留真实权限、修订冲突、草稿保护、取消和迟到响应约束。两个AI用例及工程sample的可见控件也使用同一实现；各独立发布物内含原版字体，控件运行时支持qiankun卸载重挂。
+
+实际复查修复了源控件接入中的问题：关闭草稿确认时的状态校验、下拉父值拒绝回滚、表格 / 抽屉中的弹层裁切、跨bundle重复事件、手机根box-sizing及导航可达、长应用滚动、骨架加载类、全局reset优先级、overlay继承色及登录canvas未绘制。SPEC B101–B112记录对应根因与回归。对照范围扩展到实际展开态、对话框、字体特征及三个已绘制canvas的逐字节像素，未通过放宽样式值迁就实现。
+
+验证结果：
+
+- Vue类型与四个应用构建通过，日志`.artifacts/reference-ui-typecheck.log`、`reference-ui-build-{sample,chatbi,knowledge,portal}.log`。最终完整浏览器**90项通过 / exit 0**，日志`.artifacts/reference-ui-frontend.log`；源 / 实际双主题table、下拉展开、日期滚轮、drawer、confirm截图位于`.artifacts/reference-components/`，已目视检查。此前overlay对照失败记录保留在`reference-ui-frontend-pre-overlay-fix.log`。
+- **66项Node、201项平台 / 用例Python、109项知识库Python**通过；.NET完整HTTP smoke、0警告 / 0错误构建及真实FastAPI→YARP通过。日志分别为`.artifacts/reference-ui-{node,python,knowledge-python,smoke,proxy,dotnet-build}.log`；保留既有Vite体积和Starlette提示。
+- 原登录独立浏览器对照在深浅主题 × 1440 / 1366 / 390六组通过，覆盖26个区域、焦点、勾选、三个canvas像素、原生POST与无凭据存储。真实Keycloak `--startup-timeout 300` 验收通过，`.artifacts/keycloak/run-aea27c5dd5334fa88d2b5df8450a9974/result.json`为passed / cleanupComplete=true：包括错误密码、remember Cookie、强制重认证、真实loopback SMTP邮件与action token、新密码和错误页面。详见[原生身份验收](native-identity.md)。
+- 完整PostgreSQL组合`--registry-browser --identity-browser --resource-browser --audit-browser --chatbi-browser`通过，`.artifacts/postgres/run-c21c4f34ebb34c62aad7533cbb5ff81d/result.json`为passed / cleanupComplete=true，非focus模式。覆盖完整核心合同和五类真实浏览器链路，权限 / 401 / CAS / 撤权 / 迟到响应断言保留。前一轮并行负载下connector的5秒请求504，不计通过；未修改业务超时，停止其他重负载后的完整重跑通过。
+- Knowledge原生专项通过，`.artifacts/postgres/run-2090f14e2e024084b5ac922669c89c94/result.json`为passed / cleanupComplete=true。覆盖真实DOCX / PDF、MinIO / RabbitMQ、本地CPU E5 / pgvector、上传 / 索引 / 下载原文 / 删除、独立 / 嵌入问答、引用 / 拒答 / 撤权 / 审计。截图在`.artifacts/knowledge-postgres/c37a92b76003457d8b39b70487650f32/`。
+
+本轮未调用外部真实模型、未部署生产环境；Keycloak使用隔离H2和BFF开发内存会话，PostgreSQL浏览器使用真实OIDC协议夹具，二者不合并宣称生产HTTPS / PG联合身份验收。全部验收服务、数据库、邮件令牌和临时凭据均按所属运行清理。
+
+最后单独重启4180本机展示预览时，实际浏览器发现测试身份服务的`form-action 'self'`拦截跨回环端口的BFF重定向（B112）；仅允许已校验callback origin后，重新构建0警告 / 0错误、`--bff-tests`全部通过。新预览`run-35b8f17d80a44bd5b0403e1d040bc327`实际浏览器验证原表单账号密码登录、显式初始化管理员、选择租户、10个平台页面、日期面板及退出后401通过，日志`.artifacts/reference-preview-verify.log`，截图`.artifacts/reference-preview/`。没有拦截业务API。此展示进程另外保留最多四小时，使用隔离制造业测试数据与固定3个查询规划；管理员和业务授权在该次临时数据库显式配置，启动器不自动授予正式管理权。

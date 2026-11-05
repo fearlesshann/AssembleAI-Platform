@@ -1,0 +1,5 @@
+/* Native dialog supplies modal focus containment; visible anatomy is the original overlay/subwindow. */
+.reference-ui .reference-drawer-overlay { inset: 0; margin: 0; padding: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; border: 0; background: transparent; color: var(--text-frame); overflow: hidden; }
+.reference-ui .reference-drawer-overlay:not([open]) { display: none; }
+.reference-ui .reference-drawer-overlay[open] { display: flex; justify-content: flex-end; }
+.reference-ui .reference-drawer-overlay::backdrop { background: transparent; }

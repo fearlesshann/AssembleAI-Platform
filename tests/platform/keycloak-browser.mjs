@@ -38,7 +38,43 @@ async function readConfiguration() {
     assert.ok(typeof config[name] === 'string' && config[name].length > 0);
   assert.ok(typeof config.artifactDirectory === 'string' && path.isAbsolute(config.artifactDirectory));
   assert.ok(within(path.join(workspace, '.artifacts'), config.artifactDirectory));
+  assert.ok(typeof config.resetMailFile === 'string' && path.isAbsolute(config.resetMailFile));
+  assert.ok(within(path.join(workspace, '.local-data/keycloak-tests'), config.resetMailFile));
   return config;
+}
+
+async function assertReferenceTheme(page, artifactDirectory, name) {
+  await page.locator('#loginScreen .login-hero').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.login-shot-deck .login-shot').count(), 3);
+  assert.equal(await page.locator('#loginThemeToggle').count(), 1);
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    document.querySelectorAll('#loginScreen *').forEach(element => getComputedStyle(element).opacity);
+    await Promise.all(document.getAnimations().filter(animation => animation.effect.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
+  });
+  const geometry = await page.evaluate(() => ({
+    columns: getComputedStyle(document.querySelector('.login-screen')).gridTemplateColumns.split(' ').length,
+    inputs: [...document.querySelectorAll('.login-input')].map(input => ({ height: input.getBoundingClientRect().height, radius: getComputedStyle(input).borderRadius })),
+    button: document.querySelector('#loginSubmit') ? { height: document.querySelector('#loginSubmit').getBoundingClientRect().height, radius: getComputedStyle(document.querySelector('#loginSubmit')).borderRadius } : null,
+    canvas: (() => { const canvas = document.querySelector('#loginWavesCanvas'); return { width: canvas.width, painted: canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value !== 0) }; })(),
+  }));
+  assert.equal(geometry.columns, 2);
+  assert.ok(geometry.canvas.width > 300 && geometry.canvas.painted, 'Original login waves must be drawn, not merely mounted as an empty canvas');
+  for (const input of geometry.inputs) assert.deepEqual(input, { height: 48, radius: '4px' });
+  if (geometry.button) assert.deepEqual(geometry.button, { height: 48, radius: '12px' });
+  await page.screenshot({ path: path.join(artifactDirectory, name), fullPage: true });
+}
+
+async function resetMailUrl(config) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      const mail = JSON.parse(await readFile(config.resetMailFile, 'utf8'));
+      assert.ok(mail.resetUrl.startsWith(config.authority + '/login-actions/action-token?'));
+      return mail.resetUrl;
+    } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+  }
+  throw new Error('Private reset mail was not delivered');
 }
 
 function noTokens(text) {
@@ -104,7 +140,7 @@ async function run() {
     const config = await readConfiguration();
     stage = 'launch Chromium';
     browser = await chromium.launch();
-    const context = await browser.newContext({ baseURL: config.platformOrigin });
+    const context = await browser.newContext({ baseURL: config.platformOrigin, viewport: { width: 1366, height: 900 }, colorScheme: 'dark' });
     contexts.push(context);
     context.setDefaultTimeout(20_000);
     context.setDefaultNavigationTimeout(30_000);
@@ -155,31 +191,44 @@ async function run() {
     stage = 'open the real Keycloak login form';
     await page.goto('/bff/login?returnUrl=/bff/session');
     assert.equal(new URL(page.url()).origin, new URL(config.authority).origin);
-    await page.locator('#username').waitFor({ state: 'visible' });
-    await page.locator('#password').waitFor({ state: 'visible' });
+    await page.locator('#loginAccount').waitFor({ state: 'visible' });
+    await page.locator('#loginPassword').waitFor({ state: 'visible' });
     await mkdir(config.artifactDirectory, { recursive: true });
-    await page.screenshot({ path: path.join(config.artifactDirectory, 'keycloak-login.png'), fullPage: true });
+    await assertReferenceTheme(page, config.artifactDirectory, 'keycloak-login.png');
+    await page.locator('#loginRemember').check();
 
     stage = 'reject an incorrect Keycloak password';
-    await page.locator('#username').fill(config.username);
-    await page.locator('#password').fill(`${config.password}-incorrect`);
+    await page.locator('#loginAccount').fill(config.username);
+    await page.locator('#loginPassword').fill(`${config.password}-incorrect`);
     await Promise.all([
       page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-      page.locator('#kc-login').click()
+      page.locator('#loginSubmit').click()
     ]);
     assert.equal(new URL(page.url()).origin, new URL(config.authority).origin);
-    await page.locator('#password').waitFor({ state: 'visible' });
+    await page.locator('#loginPassword').waitFor({ state: 'visible' });
+    await page.locator('#loginFormError').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#loginRemember').isChecked(), true);
+    await assertReferenceTheme(page, config.artifactDirectory, 'keycloak-login-error.png');
     await assertSession(context, config, 401);
 
     stage = 'complete real Keycloak authorization-code login';
-    await page.locator('#username').fill(config.username);
-    await page.locator('#password').fill(config.password);
+    await page.locator('#loginAccount').fill(config.username);
+    await page.locator('#loginPassword').fill(config.password);
     await Promise.all([
       page.waitForURL(url => url.origin === config.platformOrigin && url.pathname === '/bff/session',
         { waitUntil: 'domcontentloaded' }),
-      page.locator('#kc-login').click()
+      page.locator('#loginSubmit').click()
     ]);
     await assertSession(context, config);
+    stage = 'verify the persistent identity-provider remember-me Cookie';
+    // Keycloak scopes its Cookie to /realms/<realm>/, unlike the BFF's root
+    // Cookie. Query that path instead of incorrectly filtering at origin /.
+    const identityCookies = await context.cookies();
+    const rememberedIdentity = identityCookies.find(cookie => cookie.name === 'KEYCLOAK_REMEMBER_ME');
+    if (!rememberedIdentity || rememberedIdentity.expires <= Date.now() / 1000) {
+      console.error('FAIL: remember-me Cookie metadata ' + JSON.stringify(identityCookies.map(({ name, path: cookiePath, expires, httpOnly }) => ({ name, path: cookiePath, expires, httpOnly }))));
+    }
+    assert.ok(rememberedIdentity && rememberedIdentity.expires > Date.now() / 1000, 'Remember me is persisted by the actual identity provider');
 
     stage = 'verify browser session and token boundaries';
     const sessionCookies = (await context.cookies(config.platformOrigin))
@@ -235,6 +284,91 @@ async function run() {
     contexts.push(fresh);
     await assertSession(fresh, config, 401);
 
+    stage = 'honor explicit prompt=login despite the remembered Keycloak SSO session';
+    await page.goto('/bff/login?returnUrl=/bff/session&prompt=login');
+    await page.screenshot({ path: path.join(config.artifactDirectory, 'keycloak-forced-login-response.png'), fullPage: true });
+    assert.equal(new URL(page.url()).origin, new URL(config.authority).origin);
+    stage = 'show the reference password field during Keycloak reauthentication';
+    await page.locator('#loginPassword').waitFor({ state: 'visible' });
+    await assertReferenceTheme(page, config.artifactDirectory, 'keycloak-forced-login.png');
+    stage = 'submit credentials during explicit Keycloak reauthentication';
+    // Keycloak may hide the already established username during reauthentication.
+    if (await page.locator('#loginAccount').count()) await page.locator('#loginAccount').fill(config.username);
+    await page.locator('#loginPassword').fill(config.password);
+    await Promise.all([
+      page.waitForURL(url => url.origin === config.platformOrigin && url.pathname === '/bff/session', { waitUntil: 'domcontentloaded' }),
+      page.locator('#loginSubmit').click()
+    ]);
+    await assertSession(context, config);
+    assert.equal(await browserLogout(page, await csrfToken(context)), 204);
+
+    stage = 'open the themed real Keycloak password reset';
+    const resetContext = await browser.newContext({ baseURL: config.platformOrigin, viewport: { width: 1366, height: 900 }, colorScheme: 'light' });
+    contexts.push(resetContext);
+    const resetPage = await resetContext.newPage();
+    await resetPage.goto('/bff/login?returnUrl=/bff/session');
+    await Promise.all([resetPage.waitForNavigation({ waitUntil: 'domcontentloaded' }), resetPage.locator('#loginForgot').click()]);
+    assert.equal(await resetPage.locator('.login-form-title').innerText(), '找回密码');
+    assert.equal(await resetPage.locator('input[type="password"]').count(), 0);
+    await assertReferenceTheme(resetPage, config.artifactDirectory, 'keycloak-reset-request.png');
+
+    stage = 'deliver the real Keycloak reset email to the private SMTP sink';
+    await resetPage.locator('#loginAccount').fill(config.username);
+    await Promise.all([resetPage.waitForNavigation({ waitUntil: 'domcontentloaded' }), resetPage.locator('#loginSubmit').click()]);
+    await resetPage.screenshot({ path: path.join(config.artifactDirectory, 'keycloak-reset-email-response.png'), fullPage: true });
+    // Keycloak 26 forks back to the real login flow with emailSentMessage.
+    // Delivery is proven by the private SMTP capture, not by that generic UI
+    // response (which intentionally also covers unknown accounts).
+    assert.equal(await resetPage.locator('.login-form-title').innerText(), '登录工作台');
+    await resetPage.locator('#loginFormError').waitFor({ state: 'visible' });
+    await assertReferenceTheme(resetPage, config.artifactDirectory, 'keycloak-reset-email-sent.png');
+
+    stage = 'open the real emailed password-reset required action';
+    await resetPage.goto(await resetMailUrl(config));
+    await resetPage.locator('[name="password-new"]').waitFor({ state: 'visible' });
+    await resetPage.locator('[name="password-confirm"]').waitFor({ state: 'visible' });
+    await assertReferenceTheme(resetPage, config.artifactDirectory, 'keycloak-update-password.png');
+
+    stage = 'reject mismatched passwords in the real required action';
+    const replacementPassword = `${config.password}-updated`;
+    await resetPage.locator('[name="password-new"]').fill(replacementPassword);
+    await resetPage.locator('[name="password-confirm"]').fill(`${replacementPassword}-mismatch`);
+    await Promise.all([resetPage.waitForNavigation({ waitUntil: 'domcontentloaded' }), resetPage.locator('#loginSubmit').click()]);
+    await resetPage.locator('#loginFormError').waitFor({ state: 'visible' });
+    await assertReferenceTheme(resetPage, config.artifactDirectory, 'keycloak-update-password-error.png');
+
+    stage = 'complete the real password reset and authorization-code callback';
+    await resetPage.locator('[name="password-new"]').fill(replacementPassword);
+    await resetPage.locator('[name="password-confirm"]').fill(replacementPassword);
+    await Promise.all([
+      resetPage.waitForURL(url => url.origin === config.platformOrigin && url.pathname === '/bff/session', { waitUntil: 'domcontentloaded' }),
+      resetPage.locator('#loginSubmit').click()
+    ]);
+    await assertSession(resetContext, config);
+    assert.equal(await browserLogout(resetPage, await csrfToken(resetContext)), 204);
+
+    stage = 'verify the new password works in a fresh Keycloak session';
+    const changedContext = await browser.newContext({ baseURL: config.platformOrigin });
+    contexts.push(changedContext);
+    const changedPage = await changedContext.newPage();
+    await changedPage.goto('/bff/login?returnUrl=/bff/session');
+    await changedPage.locator('#loginAccount').fill(config.username);
+    await changedPage.locator('#loginPassword').fill(replacementPassword);
+    await Promise.all([
+      changedPage.waitForURL(url => url.origin === config.platformOrigin && url.pathname === '/bff/session', { waitUntil: 'domcontentloaded' }),
+      changedPage.locator('#loginSubmit').click()
+    ]);
+    await assertSession(changedContext, config);
+    assert.equal(await browserLogout(changedPage, await csrfToken(changedContext)), 204);
+
+    stage = 'render a genuine identity-provider protocol error in the reference shell';
+    const invalidCallback = new URL(config.authority + '/protocol/openid-connect/auth');
+    invalidCallback.search = new URLSearchParams({ client_id: 'assembleai-platform', response_type: 'code', scope: 'openid', redirect_uri: config.platformOrigin + '/unregistered-callback' }).toString();
+    await resetPage.goto(invalidCallback.href);
+    assert.equal(await resetPage.locator('.login-form-title').innerText(), '无法完成登录');
+    await resetPage.locator('#loginFormError').waitFor({ state: 'visible' });
+    await assertReferenceTheme(resetPage, config.artifactDirectory, 'keycloak-protocol-error.png');
+
     stage = 'verify browser-visible platform responses contain no OIDC tokens';
     for (let index = 0; index < responseChecks.length; index++) await responseChecks[index];
     if (responseFailures.length > 0) {
@@ -253,7 +387,7 @@ async function run() {
     for (const context of contexts.reverse()) await context.close().catch(() => {});
     await browser?.close().catch(() => {});
   }
-  console.log('PASS: real Keycloak browser login, password rejection, HttpOnly session, token isolation, CSRF/Origin, local logout, revoked Cookie replay and SSO re-entry.');
+  console.log('PASS: real Keycloak reference login/error/reset/required-action shell, remember-me Cookie, prompt=login, SMTP password reset, new-password login, HttpOnly session, token isolation, CSRF/Origin, local logout, revoked Cookie replay and SSO re-entry.');
 }
 
 await run().catch(error => {

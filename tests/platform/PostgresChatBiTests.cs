@@ -142,6 +142,7 @@ public static class PostgresChatBiTests
                 using (var configured = await browser.Send("PUT", $"/api/platform/v1/tenants/{f.Tenant}/connectors/{Source}/configuration", new { enabled = true, maxRows = 100, timeoutSeconds = 15, expectedRevision = 0 })) await Expect(configured, 200);
                 if (interactive)
                 {
+                    identity.EnableInteractiveLogin(Path.Combine(workspace, "apps", "portal", "public", "reference-login"));
                     await WaitForInteractiveDemo(runDirectory, publicOrigin, f, backend, preview);
                     return;
                 }

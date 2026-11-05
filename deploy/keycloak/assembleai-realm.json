@@ -1,6 +1,9 @@
 {
   "realm": "assembleai",
   "enabled": true,
+  "loginTheme": "assembleai",
+  "rememberMe": true,
+  "resetPasswordAllowed": true,
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,

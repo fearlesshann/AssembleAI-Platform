@@ -1,3 +1,4 @@
+import { chooseReferenceOption, closeReferenceDrawer, expectOidcAccountPicker, logoutFromUserMenu, toggleReferenceTheme } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
@@ -33,11 +34,10 @@ try {
   async function login(account, route) {
     const context = await browser.newContext({ baseURL: origin.origin, viewport: { width: 1366, height: 900 }, reducedMotion: 'reduce' });
     const page = await context.newPage(); page.on('pageerror', error => failures.push(error.message));
-    await page.goto(route);
-    await page.getByRole('link', { name: '企业账号登录', exact: true }).click();
+    await page.goto('/bff/login?returnUrl=' + encodeURIComponent(route));
     await page.getByRole('link', { name: account, exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
-    await page.getByLabel('当前租户', { exact: true }).selectOption(config.tenantId);
+    await expect(page.getByRole('button', { name: '用户菜单', exact: true })).toBeVisible();
+    await chooseReferenceOption(page, '当前租户', config.tenantId);
     await expect.poll(async () => (await api(page, 'GET', '/bff/tenant')).body.tenantId).toBe(config.tenantId);
     await page.goto(route);
     return page;
@@ -78,7 +78,9 @@ try {
   await manager.getByRole('button', { name: '保存配置', exact: true }).click(); await conflict;
   await expect(manager.getByLabel(/^最大输出 Token/)).toHaveValue('256');
   await expect(manager.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled();
-  manager.once('dialog', dialog => dialog.accept());
+  await manager.getByRole('button', { name: '取消编辑', exact: true }).click();
+  await manager.getByRole('dialog', { name: '放弃修改？', exact: true }).getByRole('button', { name: '放弃修改', exact: true }).click();
+  await closeReferenceDrawer(manager);
   await manager.getByRole('link', { name: '数据源管理', exact: true }).click();
   await manager.goto('/manage/data-sources/factory-db');
   await expect(manager.getByRole('heading', { name: '制造测试数据源', exact: true })).toBeVisible();
@@ -94,7 +96,7 @@ try {
   await expect(manager.getByText('连接测试通过。', { exact: true })).toBeVisible();
   const sourceCalls = (await api(manager, 'GET', `${source}/calls`)).body.items;
   assert.equal(sourceCalls.length, 1); assert.equal(sourceCalls[0].outcome, 'completed');
-  await manager.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(manager);
   await manager.screenshot({ path: resolve(directory, 'source-dark.png'), fullPage: true });
   await manager.setViewportSize({ width: 390, height: 844 });
   assert.equal(await manager.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -120,14 +122,14 @@ try {
     await denied.context().close();
   }
   // Selecting another tenant clears the visible former-tenant resource and test output.
-  await manager.getByLabel('当前租户', { exact: true }).selectOption(config.otherTenantId);
+  await chooseReferenceOption(manager, '当前租户', config.otherTenantId);
   await expect.poll(async () => (await api(manager, 'GET', '/bff/tenant')).body.tenantId).toBe(config.otherTenantId);
   await expect(manager.getByRole('heading', { name: '制造测试数据源', exact: true })).toHaveCount(0);
   assert.equal((await api(manager, 'GET', `${source}/configuration`)).status, 403);
   const storage = await limited.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   assert.ok(!storage.includes('fixture-access-token') && !storage.includes('fixture-refresh-token') && !storage.includes('模型连接正常'));
-  await limited.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(limited.getByRole('link', { name: '企业账号登录', exact: true })).toBeVisible();
+  await logoutFromUserMenu(limited);
+  await expectOidcAccountPicker(limited);
   assert.equal((await limited.context().request.get(`${source}/configuration`)).status(), 401);
   assert.deepEqual(failures, []);
   process.stdout.write('PASS: built resource pages persist model/source config and real CAS, test local model/read-only source, display calls, enforce exact grants and identity-admin separation, tenant switch, themes/mobile, deep links and logout.\n');

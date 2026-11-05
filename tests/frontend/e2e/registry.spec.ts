@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectFixtureLogin, fulfillFixtureLogin, logoutFromUserMenu, toggleReferenceTheme } from '../reference-controls-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 
 const tenantA = '11111111-1111-4111-8111-111111111111';
@@ -11,6 +12,7 @@ async function fixture(page: Page, tenantOnly = false, noTenant = false) {
     releases: [release()], saveStatus: 200, writes: [] as { path: string; body: Record<string, unknown> }[], current: { releaseVersion: '1.0.0', enabled: true, available: true, revision: 2 } };
   await page.route('**/bff/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/bff/login') return fulfillFixtureLogin(route);
     if (path === '/bff/session') return route.fulfill({ status: state.signedIn ? 200 : 401, json: { iss: 'https://identity.fixture', sub: 'registry-actor', name: '管理用户' } });
     if (path === '/bff/csrf') return route.fulfill({ json: { headerName: 'X-CSRF-TOKEN', requestToken: 'fixture-csrf' } });
     if (route.request().method() === 'POST') {
@@ -80,12 +82,13 @@ test('T8: confirmed discard on the same management route removes the draft', asy
   await page.goto('/manage/applications');
   await page.getByRole('button', { name: '注册应用', exact: true }).click();
   await page.getByLabel('应用名称', { exact: true }).fill('应当放弃的新应用草稿');
-  let confirmations = 0;
-  page.on('dialog', async dialog => { confirmations++; await dialog.accept(); });
-  await page.getByRole('link', { name: '应用管理', exact: true }).click();
+  await page.getByRole('button', { name: '取消编辑', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: '放弃修改？', exact: true });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole('button', { name: '放弃修改', exact: true }).click();
   await expect(page.getByRole('form', { name: '应用草稿', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '管理应用发布与租户使用', exact: true })).toBeVisible();
-  expect(confirmations).toBe(1);
+  await expect(page.getByRole('table', { name: '可管理应用记录', exact: true })).toBeVisible();
+  await expect(confirmation).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
 });
 
@@ -115,7 +118,7 @@ test('T8: tenant-only management hides global controls and can disable an unavai
   await page.getByRole('dialog').getByRole('button', { name: '确认租户变更', exact: true }).click();
   await expect(page.getByText('租户已停用', { exact: true })).toBeVisible();
   expect(state.writes[0].body).toEqual({ expectedRevision: 2, releaseVersion: '1.0.0', enabled: false });
-  await page.getByLabel('租户使用版本', { exact: true }).selectOption('2.0.0');
+  await chooseReferenceOption(page, '租户使用版本', '2.0.0');
   await page.getByRole('button', { name: '启用到当前租户', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: '确认租户变更', exact: true }).click();
   await expect(page.getByText('租户已启用', { exact: true })).toBeVisible();
@@ -135,12 +138,12 @@ test('T8: a late prior-tenant management response cannot restore the old list an
     try { await route.fulfill({ json: { actorUserId: actor, tenantId: tenantA, items: [{ appId: 'secret', name: '旧租户迟到数据', category: '', current: null }] } }); } catch { /* Cancelled old request. */ }
   });
   await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await pending;
-  await page.getByRole('combobox', { name: '当前租户', exact: true }).selectOption(tenantB);
-  await expect(page.getByRole('heading', { name: '应用不可管理', exact: true })).toBeVisible();
+  await chooseReferenceOption(page, '当前租户', tenantB);
+  await expect(page.getByText('当前没有可管理的应用', { exact: true })).toBeVisible();
   releaseGate();
   await expect(page.getByText('旧租户迟到数据', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(page.getByRole('link', { name: '企业账号登录', exact: true })).toBeVisible();
+  await logoutFromUserMenu(page);
+  await expectFixtureLogin(page);
   await expect(page.getByRole('region', { name: '应用注册管理' })).toHaveCount(0);
 });
 
@@ -148,13 +151,13 @@ test('T8: refresh dismisses a pending confirmation and both themes fit a narrow 
   const state = await fixture(page); state.releases = [release('1.0.0', 'published')];
   await page.goto('/manage/applications/sample');
   await page.getByRole('button', { name: '全局停用', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '全局停用', exact: true })).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.getByRole('dialog', { name: '全局停用', exact: true })).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await expect(page.getByTestId('registry-audit')).toContainText(actor);
@@ -170,5 +173,5 @@ test('T8: failed shell identity refresh explicitly reports clearing an unsaved m
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByRole('alert')).toContainText('未保存的草稿修改已清除');
   await expect(page.getByLabel('说明', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '企业账号登录', exact: true })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/bff\/login/);
 });

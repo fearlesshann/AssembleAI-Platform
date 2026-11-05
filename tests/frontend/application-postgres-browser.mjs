@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectOidcAccountPicker, logoutFromUserMenu } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -28,9 +29,8 @@ try {
   context.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/api/apps/')) appRequests.push(request);
   });
-  await page.goto('/');
-  await page.getByRole('link', { name: '企业账号登录' }).click();
-  await page.getByLabel('当前租户', { exact: true }).selectOption(tenantId);
+  await page.goto('/bff/login?returnUrl=' + encodeURIComponent('/'));
+  await chooseReferenceOption(page, '当前租户', tenantId);
   await page.locator('a[href="/applications/sample"]').first().click();
   await page.getByRole('button', { name: '打开应用', exact: true }).click();
   await expect(page.getByTestId('sample-app')).toBeVisible();
@@ -131,8 +131,8 @@ try {
     const storage = await target.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
     assert.ok(!storage.includes('fixture-access-token') && !storage.includes('fixture-refresh-token') && !storage.includes('eyJ'));
   }
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toBeVisible();
+  await logoutFromUserMenu(page);
+  await expectOidcAccountPicker(page);
   await standalone.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(standalone.getByRole('link', { name: '使用企业账号登录' })).toBeVisible();
   assert.equal(await standalone.getByTestId('sample-api-result').count(), 0);

@@ -1,3 +1,4 @@
+import { chooseReferenceDateTime, chooseReferenceOption, closeReferenceDrawer, expectReferenceValue, fulfillFixtureLogin, referenceSelect, toggleReferenceTheme } from '../reference-controls-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 import type { AuditEvent, AuditSource } from '../../../apps/portal/src/audit-api';
 
@@ -37,6 +38,7 @@ async function fixture(page: Page) {
           outcome: 'upstream_error', details: { elapsedMilliseconds: '41', httpStatus: '503' } }];
   await page.route('**/bff/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/bff/login') return fulfillFixtureLogin(route);
     if (path === '/bff/session') return route.fulfill({ json: { iss: 'https://audit.fixture', sub: 'auditor', name: '审计用户' } });
     if (path === '/bff/csrf') return route.fulfill({ json: { headerName: 'X-CSRF-TOKEN', requestToken: `fresh-${++state.csrf}` } });
     if (path === '/bff/tenant') {
@@ -87,8 +89,8 @@ async function fixture(page: Page) {
   return state;
 }
 const queries = (state: Awaited<ReturnType<typeof fixture>>) => state.requests.filter(request => request.path.endsWith('/events'));
-const auditTable = (page: Page) => page.getByRole('table', { name: '审计记录', exact: true });
-async function ready(page: Page) { await expect(auditTable(page)).toBeVisible(); await expect(page.getByRole('button', { name: '查询记录', exact: true })).toBeEnabled(); }
+const auditTable = (page: Page) => page.locator('table[aria-label=审计记录]');
+async function ready(page: Page) { await expect(auditTable(page)).toBeVisible(); await expect(page.getByRole('button', { name: '查询记录', exact: true, includeHidden: true })).toBeEnabled(); }
 
 test('V25/V33: audit filters and cursor pages persist; details can correlate across sources', async ({ page }) => {
   const state = await fixture(page); await page.goto(`/manage/audit?${fixed}`); await ready(page);
@@ -97,8 +99,8 @@ test('V25/V33: audit filters and cursor pages persist; details can correlate acr
   expect(queries(state).at(-1)!.query.get('cursor')).toBe('protected+/=page2');
   expect(queries(state).at(-1)!.query.get('from')).toBe('2026-11-01T00:00:00.000Z');
   await page.getByRole('button', { name: '上一页', exact: true }).click(); await expect(auditTable(page)).toContainText(related);
-  await page.getByRole('combobox', { name: '记录类型', exact: true }).selectOption('model');
-  await page.getByRole('combobox', { name: '结果', exact: true }).selectOption('failure');
+  await chooseReferenceOption(page, '记录类型', 'model');
+  await chooseReferenceOption(page, '结果', 'failure');
   await page.getByLabel('应用标识', { exact: true }).fill('chatbi');
   await page.getByLabel('请求标识', { exact: true }).fill('model-request');
   await page.getByRole('button', { name: '查询记录', exact: true }).click(); await expect(auditTable(page)).toContainText('model-request');
@@ -108,14 +110,14 @@ test('V25/V33: audit filters and cursor pages persist; details can correlate acr
   await page.getByRole('button', { name: '查询记录', exact: true }).click();
   await expect.poll(() => queries(state).length).toBeGreaterThan(count); await ready(page);
   await page.getByRole('link', { name: '查看详情 model-request', exact: true }).click();
-  const detail = page.getByRole('complementary', { name: '审计记录详情', exact: true });
+  const detail = page.getByRole('dialog', { name: '记录详情', exact: true });
   await expect(detail).toContainText('上游异常'); await expect(detail).toContainText(actor); await expect(detail).toContainText('503');
   await detail.getByRole('button', { name: '查看网关关联', exact: true }).click();
   await expect(auditTable(page)).toContainText(related); await expect(auditTable(page)).toContainText('model-request');
   const query = queries(state).at(-1)!.query;
   expect(query.get('requestId')).toBe(related); expect(query.has('source')).toBe(false); expect(query.has('status')).toBe(false); expect(query.has('appId')).toBe(false);
-  await expect(detail).toHaveCount(0); await expect(page.getByRole('combobox', { name: '记录类型', exact: true })).toHaveValue('');
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await expect(detail).toHaveCount(0); await expectReferenceValue(page, '记录类型', '');
+  await toggleReferenceTheme(page);
   await page.setViewportSize({ width: 390, height: 844 });
   const layout = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: innerWidth,
     outside: [...document.querySelectorAll('body *')].map(node => ({ tag: node.tagName, className: node.className,
@@ -135,7 +137,7 @@ test('V12/V25: export downloads explicitly truncated JSON with fresh CSRF and bl
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出记录', exact: true }).click(); await gate.entered.promise;
   await expect(page.getByRole('button', { name: '正在导出…', exact: true })).toBeDisabled();
-  await expect(page.getByLabel('当前租户', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: '当前租户', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '查询记录', exact: true })).toBeDisabled();
   gate.release.resolve(); const download = await downloaded;
   expect(download.suggestedFilename()).toBe('assembleai-audit-2026-11-02.json');
@@ -147,14 +149,14 @@ test('V12/V25: export downloads explicitly truncated JSON with fresh CSRF and bl
   await expect(page.getByRole('status').filter({ hasText: '结果已截断' })).toBeVisible();
   expect(state.exports).toHaveLength(1); expect(state.exports[0].csrf).toBe('fresh-1'); expect(state.exports[0].body).toEqual({});
   expect(state.exports[0].query.has('cursor')).toBe(false); expect(state.exports[0].query.has('pageSize')).toBe(false);
-  await expect(page.getByLabel('当前租户', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('combobox', { name: '当前租户', exact: true })).toBeEnabled();
 });
 
 test('V25/V33: a revoked query clears previously visible rows and details until an explicit retry', async ({ page }) => {
   const state = await fixture(page); await page.goto(`/manage/audit/gateway/${firstId}?${fixed}`); await ready(page);
-  const detail = page.getByRole('complementary', { name: '审计记录详情', exact: true }); await expect(detail).toContainText(actor);
+  const detail = page.getByRole('dialog', { name: '记录详情', exact: true }); await expect(detail).toContainText(actor);
   await page.clock.install(); state.readStatus = 403;
-  await page.getByRole('button', { name: '刷新管理数据', exact: true }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByRole('alert')).toContainText('当前范围没有查询或导出权限');
   await expect(auditTable(page)).toHaveCount(0); await expect(detail).not.toContainText(actor);
   await expect(page.getByRole('heading', { name: '没有查询权限', exact: true })).toBeVisible();
@@ -165,26 +167,27 @@ test('V25/V33: a revoked query clears previously visible rows and details until 
 
 for (const status of [403, 503]) test(`V12/V25: export ${status} clears data and preserves commit uncertainty without repeating the write`, async ({ page }) => {
   const state = await fixture(page); await page.goto(`/manage/audit/gateway/${firstId}?${fixed}`); await ready(page);
-  await expect(page.getByRole('complementary', { name: '审计记录详情', exact: true })).toContainText(actor);
+  await expect(page.getByRole('dialog', { name: '记录详情', exact: true })).toContainText(actor);
+  await closeReferenceDrawer(page);
   await page.clock.install(); state.exportStatus = status;
   await page.getByRole('button', { name: '导出记录', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('可能已记录导出审计；没有自动重试');
   await expect(auditTable(page)).toHaveCount(0);
-  await expect(page.getByRole('complementary', { name: '审计记录详情', exact: true })).not.toContainText(actor);
+  await expect(page.getByRole('dialog', { name: '记录详情', exact: true })).toHaveCount(0);
   await page.clock.runFor(30_000); expect(state.exports).toHaveLength(1);
   await expect(page.locator('body')).not.toContainText('private export failure');
-  await expect(page.getByLabel('当前租户', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('combobox', { name: '当前租户', exact: true })).toBeEnabled();
 });
 
 test('V25: a delayed response from the old tenant cannot repopulate the new tenant audit view', async ({ page }) => {
   const state = await fixture(page); await page.goto(`/manage/audit?${fixed}`); await ready(page);
   const gate = hold(); state.eventHold = gate;
   await page.getByRole('button', { name: '下一页', exact: true }).click(); await gate.entered.promise;
-  await page.getByLabel('当前租户', { exact: true }).selectOption(other);
+  await chooseReferenceOption(page, '当前租户', other);
   await expect(auditTable(page)).toContainText('other-tenant-request');
   gate.release.resolve(); await gate.finished.promise;
   await expect(auditTable(page)).toContainText('other-tenant-request'); await expect(auditTable(page)).not.toContainText('model-request');
-  await expect(page.getByLabel('当前租户', { exact: true })).toHaveValue(other);
+  await expectReferenceValue(page, '当前租户', other);
   expect(queries(state).at(-1)!.selected).toBe(other); expect(queries(state).at(-1)!.query.has('cursor')).toBe(false);
 });
 
@@ -195,7 +198,7 @@ test('V25/V33: a global administrator can enter platform audit without a tenant 
   await navigation.getByRole('link', { name: '调用与审计', exact: true }).click(); await ready(page);
   await expect(auditTable(page)).toContainText('global-identity');
   await expect(page.getByRole('navigation', { name: '审计范围', exact: true }).getByRole('link', { name: '平台操作', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('combobox', { name: '记录类型', exact: true }).locator('option')).toHaveText(['全部已授权类型', '身份操作', '应用操作']);
+  await expect(referenceSelect(page, '记录类型').locator('[role=option]')).toHaveText(['全部已授权类型', '身份操作', '应用操作']);
   expect(queries(state).at(-1)!.query.get('scope')).toBe('global'); expect(queries(state).at(-1)!.selected).toBeNull();
 });
 
@@ -209,4 +212,16 @@ test('V25/V33: an actor without audit resources sees an honest empty state and n
   await page.goto(`/manage/audit/global?${fixed}`);
   await expect(page.getByRole('heading', { name: '没有查询权限', exact: true })).toBeVisible();
   await expect(page.locator('body')).not.toContainText('global-identity');
+});
+
+
+test('V33/V36: original calendar and time wheels submit the chosen local range', async ({ page }) => {
+  const state = await fixture(page); await page.goto(`/manage/audit?${fixed}`); await ready(page);
+  await chooseReferenceDateTime(page, '开始时间', '2026-11-02T09:15');
+  await chooseReferenceDateTime(page, '结束时间', '2026-11-03T16:45');
+  await page.getByRole('button', { name: '查询记录', exact: true }).click(); await ready(page);
+  const expected = await page.evaluate(() => ({ from: new Date('2026-11-02T09:15').toISOString(), to: new Date('2026-11-03T16:45').toISOString() }));
+  expect(Object.fromEntries(queries(state).at(-1)!.query)).toMatchObject(expected);
+  expect(new URL(page.url()).searchParams.get('from')).toBe(expected.from);
+  expect(new URL(page.url()).searchParams.get('to')).toBe(expected.to);
 });

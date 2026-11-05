@@ -8,15 +8,20 @@ are involved. Only this run's processes and temporary data are cleaned up.
 from __future__ import annotations
 
 import argparse
+from email import policy
+from email.parser import BytesParser
 import json
 import os
 from pathlib import Path
 import secrets
+import re
 import shutil
 import socket
+import socketserver
 import subprocess
 import sys
 import time
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -25,6 +30,60 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / ".local-data/keycloak-tests"
 ARTIFACTS = ROOT / ".artifacts/keycloak"
+
+
+class ResetMailServer(socketserver.ThreadingTCPServer):
+    """Private loopback-only SMTP sink for this run's real password-reset mail."""
+    daemon_threads = True
+
+    def __init__(self, destination: Path, authority: str):
+        self.destination = destination
+        self.authority = authority
+        super().__init__(("127.0.0.1", 0), ResetMailHandler)
+
+
+class ResetMailHandler(socketserver.StreamRequestHandler):
+    def handle(self) -> None:
+        self.connection.settimeout(15)
+
+        def reply(text: bytes) -> None:
+            self.wfile.write(text + b"\r\n")
+            self.wfile.flush()
+
+        reply(b"220 localhost test SMTP")
+        while line := self.rfile.readline(8192):
+            command = line.split(b" ", 1)[0].strip().upper()
+            if command in {b"EHLO", b"HELO"}:
+                reply(b"250-localhost\r\n250 8BITMIME")
+            elif command in {b"MAIL", b"RCPT", b"RSET", b"NOOP"}:
+                reply(b"250 OK")
+            elif command == b"DATA":
+                reply(b"354 End with a single dot")
+                parts = []
+                size = 0
+                while data := self.rfile.readline(8192):
+                    if data in {b".\r\n", b".\n"}:
+                        break
+                    size += len(data)
+                    if size > 2_000_000:
+                        reply(b"552 Message too large")
+                        return
+                    parts.append(data[1:] if data.startswith(b"..") else data)
+                message = BytesParser(policy=policy.default).parsebytes(b"".join(parts))
+                for part in message.walk():
+                    if part.get_content_type() != "text/plain":
+                        continue
+                    for candidate in re.findall(r'https?://[^\s<>\"]+', part.get_content()):
+                        if candidate.startswith(self.server.authority + "/login-actions/action-token?"):
+                            temporary = self.server.destination.with_suffix(".tmp")
+                            temporary.write_text(json.dumps({"resetUrl": candidate}), encoding="utf-8")
+                            temporary.replace(self.server.destination)
+                reply(b"250 Accepted")
+            elif command == b"QUIT":
+                reply(b"221 Bye")
+                return
+            else:
+                reply(b"502 Unsupported test SMTP command")
 
 
 def free_port() -> int:
@@ -112,6 +171,7 @@ def main() -> int:
     artifact_dir: Path | None = None
     passed = False
     cleanup_ok = True
+    mail_server: ResetMailServer | None = None
     try:
         lock = json.loads((ROOT / "tools/native-identity.lock.json").read_text(encoding="utf-8-sig"))
         packages = lock["packages"]
@@ -139,6 +199,9 @@ def main() -> int:
         runtime = run_dir / "keycloak"
         print("Preparing isolated native Keycloak runtime...", flush=True)
         shutil.copytree(keycloak_home, runtime)
+        theme_source = ROOT / "deploy/keycloak/themes/assembleai"
+        require_file(theme_source / "login/login.ftl", "Generate the reference login theme first.")
+        shutil.copytree(theme_source, runtime / "themes/assembleai", dirs_exist_ok=True)
         platform_port = free_port()
         identity_port = free_port()
         while identity_port == platform_port:
@@ -153,6 +216,15 @@ def main() -> int:
         client_secret = secrets.token_urlsafe(32)
         realm = json.loads((ROOT / "deploy/keycloak/assembleai-realm.json").read_text(encoding="utf-8-sig"))
         realm["realm"] = realm_name
+        if realm.get("loginTheme") != "assembleai" or not realm.get("rememberMe") or not realm.get("resetPasswordAllowed"):
+            raise RuntimeError("The deployment realm must use the reference theme and real remember/reset capabilities.")
+        reset_mail_file = run_dir / "reset-mail.json"
+        mail_server = ResetMailServer(reset_mail_file, authority)
+        threading.Thread(target=mail_server.serve_forever, daemon=True).start()
+        realm["smtpServer"] = {
+            "host": "127.0.0.1", "port": str(mail_server.server_address[1]),
+            "from": "identity@example.test", "auth": "false", "ssl": "false", "starttls": "false",
+        }
         # Keep the checked-in client's security settings; change only the
         # isolated callback and runtime secret, with no business-user seeding.
         client = realm["clients"][0]
@@ -174,6 +246,7 @@ def main() -> int:
             "platformOrigin": platform_origin, "authority": authority,
             "username": username, "password": password, "subject": subject,
             "artifactDirectory": str(artifact_dir),
+            "resetMailFile": str(reset_mail_file),
         }), encoding="utf-8")
 
         system_root = Path(os.environ["SystemRoot"])
@@ -272,6 +345,9 @@ def main() -> int:
         print(f"FAIL: {error}" if isinstance(error, RuntimeError) else
               "FAIL: Native Keycloak verification could not finish; inspect the local artifacts.", file=sys.stderr)
     finally:
+        if mail_server is not None:
+            mail_server.shutdown()
+            mail_server.server_close()
         for child in reversed(children):
             try:
                 stop_child(child)
@@ -291,7 +367,7 @@ def main() -> int:
                 "passed": passed and cleanup_ok, "cleanupComplete": cleanup_ok,
                 "keycloakVersion": packages["keycloak"]["version"],
                 "jdkVersion": packages["jdk"]["version"],
-                "scope": "native Keycloak browser login; development memory sessions; no PostgreSQL",
+                "scope": "native Keycloak reference theme, credential rejection, real SMTP password reset and required action; development memory sessions; no PostgreSQL",
             }, indent=2), encoding="utf-8")
             print(f"Artifacts: {artifact_dir.relative_to(ROOT)}", flush=True)
     if passed and cleanup_ok:

@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectOidcAccountPicker, logoutFromUserMenu, referenceOptionValues, toggleReferenceTheme } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
@@ -18,11 +19,11 @@ try {
   async function login(account, path, select = true) {
     const context = await browser.newContext({ baseURL: origin.origin, viewport: { width: 1366, height: 900 }, reducedMotion: 'reduce', acceptDownloads: true });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
-    await page.goto(path); await page.getByRole('link', { name: '企业账号登录', exact: true }).click();
+    await page.goto('/bff/login?returnUrl=' + encodeURIComponent(path));
     await page.getByRole('link', { name: account, exact: true }).click();
-    await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '用户菜单', exact: true })).toBeVisible();
     if (select) {
-      await page.getByLabel('当前租户', { exact: true }).selectOption(config.tenantId);
+      await chooseReferenceOption(page, '当前租户', config.tenantId);
       await expect.poll(async () => (await page.request.get('/bff/tenant')).json().then(x => x.tenantId)).toBe(config.tenantId);
     }
     await page.goto(path);
@@ -30,7 +31,7 @@ try {
     const workspace = page.getByRole('region', { name: '调用与审计工作区', exact: true });
     const before = await workspace.getAttribute('aria-busy');
     if (before === 'true') {
-      const values = await page.getByRole('combobox', { name: '记录类型', exact: true }).locator('option').evaluateAll(nodes => nodes.map(node => node.value));
+      const values = await referenceOptionValues(page, '记录类型');
       process.stdout.write('Audit page pending: ' + JSON.stringify({ account, busy: before, sourceOptions: values }) + '\n');
     }
     await expect(workspace).toHaveAttribute('aria-busy', 'false');
@@ -51,7 +52,7 @@ try {
   await expect(manager.getByRole('button', { name: '上一页', exact: true })).toBeEnabled();
   assert.notEqual(await manager.getByRole('table').innerText(), firstPage);
   await manager.getByRole('button', { name: '上一页', exact: true }).click();
-  await manager.getByRole('combobox', { name: '记录类型', exact: true }).selectOption('model');
+  await chooseReferenceOption(manager, '记录类型', 'model');
   await manager.getByLabel('请求标识', { exact: true }).fill(config.correlation);
   await query(manager);
   await expect(manager.getByRole('link', { name: /^查看详情\s/ })).toHaveCount(1);
@@ -68,7 +69,7 @@ try {
   assert.equal(exported.items.length, 3); assert.equal(exported.truncated, false);
   assert.ok(!JSON.stringify(exported).includes('private-marker'));
   await manager.screenshot({ path: resolve(directory, 'audit-light.png'), fullPage: true });
-  await manager.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(manager);
   await manager.screenshot({ path: resolve(directory, 'audit-dark.png'), fullPage: true });
   await manager.setViewportSize({ width: 390, height: 844 });
   assert.equal(await manager.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -78,21 +79,21 @@ try {
   await expect(manager.getByRole('button', { name: '查看网关关联', exact: true })).toBeVisible();
   const limited = await login('模型审计员', '/manage/audit');
   await expect(limited.getByRole('button', { name: '导出记录', exact: true })).toHaveCount(0);
-  const options = await limited.getByRole('combobox', { name: '记录类型', exact: true }).locator('option').evaluateAll(nodes => nodes.map(n => n.value));
+  const options = await referenceOptionValues(limited, '记录类型');
   assert.ok(options.includes('model') && !options.includes('connector') && !options.includes('gateway'));
   const global = await login('平台身份管理员', '/manage/audit/global', false);
   await expect(global.getByRole('table')).toBeVisible();
-  const globalOptions = await global.getByRole('combobox', { name: '记录类型', exact: true }).locator('option').evaluateAll(nodes => nodes.map(n => n.value));
+  const globalOptions = await referenceOptionValues(global, '记录类型');
   assert.ok(globalOptions.includes('identity') && !globalOptions.includes('model') && !globalOptions.includes('connector'));
   await expect(global.getByRole('button', { name: '导出记录', exact: true })).toHaveCount(0);
-  await manager.getByLabel('当前租户', { exact: true }).selectOption(config.otherTenantId);
+  await chooseReferenceOption(manager, '当前租户', config.otherTenantId);
   await expect.poll(async () => (await manager.request.get('/bff/tenant')).json().then(x => x.tenantId)).toBe(config.otherTenantId);
   await expect(manager.getByRole('button', { name: '查看网关关联', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('table')).toHaveCount(0);
   const storage = await limited.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   assert.ok(!storage.includes(config.correlation) && !storage.includes('fixture-access-token'));
-  await limited.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(limited.getByRole('link', { name: '企业账号登录', exact: true })).toBeVisible();
+  await logoutFromUserMenu(limited);
+  await expectOidcAccountPicker(limited);
   assert.equal((await limited.request.get('/api/platform/v1/audit/workspace?scope=tenant')).status(), 401);
   assert.deepEqual(errors, []);
   process.stdout.write('PASS: actual unified audit pages, filters/pagination/detail/correlation/JSON export, global/resource separation, deep links, reference themes/390px and logout.\n');

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
+
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { createApplicationClient, type ApplicationApi, type ApplicationClient } from '@assembleai/app-sdk';
 import { BUILD_APP_ID, BUILD_FRONTEND_VERSION } from './build-context';
@@ -85,9 +87,9 @@ onBeforeUnmount(() => { disposed = true; generation++; active?.abort(); disconne
     <a v-if="phase === 'login'" :href="loginHref">使用企业账号登录</a>
     <a v-else-if="phase === 'updated'" :href="detailHref">前往平台应用详情</a>
     <div v-else-if="phase === 'ready'" class="knowledge-controls">
-      <label>当前租户 <select v-model="selected" aria-label="独立运行租户" :disabled="busy" @change="selectTenant"><option value="" disabled>选择租户</option><option v-for="tenant in snapshot?.tenants" :key="tenant.tenantId" :value="tenant.tenantId">{{ tenant.name }}</option></select></label>
-      <button :disabled="busy || !snapshot?.tenantId || connected" @click="connect">{{ connected ? '已连接平台' : '连接平台' }}</button>
+      <div class="subwindow-field"><span>当前租户</span><ReferenceSelect v-model="selected" label="独立运行租户" :disabled="busy" @change="selectTenant" :options="[{ value: '', label: '选择租户', disabled: true }, ...(snapshot?.tenants ?? []).map(tenant => ({ value: tenant.tenantId, label: tenant.name }))]" /></div>
+      <ReferenceButton :disabled="busy || !snapshot?.tenantId || connected" @click="connect">{{ connected ? '已连接平台' : '连接平台' }}</ReferenceButton>
     </div>
-    <button v-else-if="phase === 'unavailable'" :disabled="busy" @click="inspect">重试平台连接</button>
+    <ReferenceButton v-else-if="phase === 'unavailable'" :disabled="busy" @click="inspect">重试平台连接</ReferenceButton>
   </section>
 </template>

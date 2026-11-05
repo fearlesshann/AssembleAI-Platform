@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AssembleAI.Platform.Identity;
 using AssembleAI.Platform.Identity.Sessions;
 using Microsoft.AspNetCore.Authentication;
@@ -44,6 +45,7 @@ public static class BffTests
             await VerifyStateAndCorrelation(provider, origin);
             await VerifyStorageFailure(app, origin);
             await VerifySessionExpiry(provider, origin, clock);
+            await VerifyInteractiveLogin(provider, origin);
         }
         finally { await app.StopAsync(); }
         Console.WriteLine("PASS: BFF HTTP OIDC code/S256, JWT/state/nonce/correlation validation, opaque cookies, CSRF/Origin, revocation, storage failures and secure configuration.");
@@ -111,6 +113,12 @@ public static class BffTests
         foreach (var path in new[] { "//evil.example", "/\\evil.example", "/%2fevil.example", "/%255cevil.example", "/\nheader" })
             await Expect(client, "/bff/login?returnUrl=" + Uri.EscapeDataString(path), HttpStatusCode.BadRequest);
         await Expect(client, "/bff/login?returnUrl=/&returnUrl=/other", HttpStatusCode.BadRequest);
+        foreach (var prompt in new[] { "", "none", "login&prompt=login" })
+            await Expect(client, "/bff/login?prompt=" + prompt, HttpStatusCode.BadRequest);
+        using (var reauthentication = await client.GetAsync("/bff/login?prompt=login&returnUrl=/"))
+            Assert(reauthentication.StatusCode == HttpStatusCode.Redirect
+                && QueryHelpers.ParseQuery(reauthentication.Headers.Location!.Query)["prompt"] == "login",
+                "Explicit login must request credentials from the identity provider, including after local logout.");
         await Expect(client, "/bff/csrf", HttpStatusCode.OK);
         using (var request = new HttpRequestMessage(HttpMethod.Get, "/bff/login"))
         {
@@ -296,6 +304,71 @@ public static class BffTests
         using var authorizationResponse = await client.GetAsync(authorization);
         Assert(authorizationResponse.StatusCode == HttpStatusCode.Redirect, "OIDC fixture must issue a single-use authorization code.");
         return authorizationResponse.Headers.Location!;
+    }
+
+    private static async Task VerifyInteractiveLogin(OidcFixture provider, string origin)
+    {
+        var workspace = new DirectoryInfo(AppContext.BaseDirectory);
+        while (workspace is not null && !File.Exists(Path.Combine(workspace.FullName, "SPEC.md"))) workspace = workspace.Parent;
+        Assert(workspace is not null, "Interactive identity tests require the repository reference assets.");
+        provider.EnableInteractiveLogin(Path.Combine(workspace!.FullName, "apps", "portal", "public", "reference-login"));
+        var cookies = new CookieContainer();
+        using var client = Client(origin, cookies);
+        using var challenge = await client.GetAsync("/bff/login?returnUrl=/&prompt=login");
+        var authorization = challenge.Headers.Location!;
+        using var page = await client.GetAsync(authorization);
+        Assert(page.StatusCode == HttpStatusCode.OK, "Interactive preview must show the original login page.");
+        Assert(page.Headers.GetValues("Content-Security-Policy").Single().Contains("form-action 'self' " + origin + ";", StringComparison.Ordinal),
+            "The preview form CSP allows its validated BFF callback origin so the browser can complete the code flow.");
+        var html = await page.Content.ReadAsStringAsync();
+        Assert(html.Contains("login-screen", StringComparison.Ordinal) && html.Contains("name=\"password\"", StringComparison.Ordinal), "The complete original form is served by the identity provider.");
+        string Token(string value) => Regex.Match(value, "name=\"form_token\" value=\"([^\"]+)\"").Groups[1].Value;
+        var token = Token(html);
+        Assert(token.Length >= 32, "Original login form has a server-bound CSRF token.");
+        async Task<HttpResponseMessage> Submit(HttpClient caller, string formToken, string password, string requestOrigin)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, authorization) {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string> {
+                    ["username"] = OidcFixture.PreviewUsername, ["password"] = password,
+                    ["rememberMe"] = "on", ["form_token"] = formToken }) };
+            request.Headers.Add("Origin", requestOrigin);
+            return await caller.SendAsync(request);
+        }
+        using (var deniedOrigin = await Submit(client, token, OidcFixture.PreviewPassword, "https://other.invalid"))
+            Assert(deniedOrigin.StatusCode == HttpStatusCode.BadRequest, "Login rejects a foreign Origin before credential validation.");
+        using (var stranger = Client(origin, new CookieContainer()))
+        using (var deniedCookie = await Submit(stranger, token, OidcFixture.PreviewPassword, provider.Authority))
+            Assert(deniedCookie.StatusCode == HttpStatusCode.Forbidden, "A copied form token without the initiating cookie cannot log in.");
+        var exchangedBefore = provider.SuccessfulTokenRequests;
+        using (var wrong = await Submit(client, token, "wrong-local-preview-password", provider.Authority))
+        {
+            var errorPage = await wrong.Content.ReadAsStringAsync();
+            Assert(wrong.StatusCode == HttpStatusCode.OK && errorPage.Contains("账号或密码不正确", StringComparison.Ordinal)
+                && !errorPage.Contains("wrong-local-preview-password", StringComparison.Ordinal), "Wrong credentials show the original error state without echoing the password.");
+            token = Token(errorPage);
+        }
+        Assert(provider.SuccessfulTokenRequests == exchangedBefore, "Invalid credentials cannot issue or exchange an authorization code.");
+        await Expect(client, "/bff/session", HttpStatusCode.Unauthorized);
+        using (var accepted = await Submit(client, token, OidcFixture.PreviewPassword, provider.Authority))
+        {
+            Assert(accepted.StatusCode == HttpStatusCode.Redirect, "Valid credentials continue the real OIDC code flow.");
+            using var callback = await client.GetAsync(accepted.Headers.Location);
+            Assert(callback.StatusCode == HttpStatusCode.Redirect, "PKCE callback establishes the BFF session.");
+        }
+        await Expect(client, "/bff/session", HttpStatusCode.OK);
+        using (var replay = await Submit(client, token, OidcFixture.PreviewPassword, provider.Authority))
+            Assert(replay.StatusCode == HttpStatusCode.Forbidden, "Login form submission tokens are single use.");
+        Assert(cookies.GetCookies(new Uri(provider.Authority + "/authorize"))["assembleai.preview.account"] is { HttpOnly: true, Value: OidcFixture.PreviewUsername },
+            "Remember account stores only the username, never a password or authenticated session.");
+        using var csrf = await client.GetAsync("/bff/csrf");
+        using var document = JsonDocument.Parse(await csrf.Content.ReadAsStringAsync());
+        using var logout = await Logout(client, origin, document.RootElement.GetProperty("requestToken").GetString());
+        Assert(logout.StatusCode == HttpStatusCode.NoContent, "Local logout succeeds after interactive login.");
+        await Expect(client, "/bff/session", HttpStatusCode.Unauthorized);
+        using var afterLogout = await client.GetAsync("/bff/login?prompt=login");
+        using var loginAgain = await client.GetAsync(afterLogout.Headers.Location);
+        Assert(loginAgain.StatusCode == HttpStatusCode.OK, "Local logout returns to the credential form without signing in again.");
+        await Expect(client, "/bff/session", HttpStatusCode.Unauthorized);
     }
 
     private static async Task<HttpResponseMessage> Logout(HttpClient client, string? origin, string? token)

@@ -1,0 +1,1000 @@
+/* Copied semantic rules from references/ui-v1/app.css. Selector scope only. */
+:where(.reference-control) { font-family: var(--font); }
+:where(.reference-control button, button.reference-control) { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: inherit; font-feature-settings: "cv01", "ss03"; }
+:where(.reference-control *, .reference-control) { box-sizing: border-box; }
+.reference-control :disabled, .reference-control:disabled { cursor: not-allowed; opacity: .5; }
+
+:where(.reference-control) .ui-select__menu,
+:where(.reference-control).ui-select__menu {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+}
+
+:where(.reference-control) .ui-select__menu:hover,
+:where(.reference-control).ui-select__menu:hover {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track-soft);
+}
+
+:where(.reference-control) .ui-select__menu::-webkit-scrollbar,
+:where(.reference-control).ui-select__menu::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+:where(.reference-control) .ui-select__menu::-webkit-scrollbar-track,
+:where(.reference-control).ui-select__menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:where(.reference-control) .ui-select__menu::-webkit-scrollbar-thumb,
+:where(.reference-control).ui-select__menu::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 999px;
+}
+
+:where(.reference-control) .ui-select__menu:hover::-webkit-scrollbar-track,
+:where(.reference-control).ui-select__menu:hover::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-hover);
+}
+
+:where(.reference-control) .ui-select__menu:hover::-webkit-scrollbar-thumb,
+:where(.reference-control).ui-select__menu:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+
+:where(.reference-control) .ui-select__menu::-webkit-scrollbar-thumb:active,
+:where(.reference-control).ui-select__menu::-webkit-scrollbar-thumb:active,
+:where(.reference-control) .ui-select__menu:hover::-webkit-scrollbar-thumb:hover,
+:where(.reference-control).ui-select__menu:hover::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+:where(.reference-control) .pill-btn,
+:where(.reference-control).pill-btn {
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 9999px;
+  background: var(--pill-bg);
+  color: var(--text-secondary);
+  font-size: 13.3333px;
+  font-weight: var(--fw-normal);
+  box-shadow: inset 0 0 0 1px var(--pill-inset);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition:
+    background-color var(--motion-fast) var(--ease-out-soft),
+    color var(--motion-fast) var(--ease-out-soft),
+    box-shadow var(--motion-fast) var(--ease-out-soft),
+    transform var(--motion-instant) var(--ease-out);
+}
+
+:where(.reference-control) .pill-btn:hover,
+:where(.reference-control).pill-btn:hover {
+  background: var(--nav-hover-strong);
+  color: var(--text-frame);
+  box-shadow: inset 0 0 0 1px var(--pill-inset-hover);
+}
+
+:where(.reference-control) .pill-btn:active,
+:where(.reference-control).pill-btn:active {
+  transform: scale(0.98);
+}
+
+:where(.reference-control) .icon-btn,
+:where(.reference-control).icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color var(--motion-fast) var(--ease-out-soft),
+    color var(--motion-fast) var(--ease-out-soft),
+    transform var(--motion-instant) var(--ease-out);
+}
+
+:where(.reference-control) .icon-btn:hover,
+:where(.reference-control).icon-btn:hover {
+  background: var(--nav-hover-strong);
+  color: var(--text-frame);
+}
+
+:where(.reference-control) .icon-btn:active,
+:where(.reference-control).icon-btn:active {
+  transform: scale(0.96);
+}
+
+:where(.reference-control) .ui-input,
+:where(.reference-control).ui-input {
+  height: 36px;
+  width: 100%;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  outline: none;
+  transition:
+    border-color var(--motion-fast) var(--ease-out-soft),
+    background-color var(--motion-fast) var(--ease-out-soft),
+    box-shadow var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-input:hover,
+:where(.reference-control).ui-input:hover {
+  background: var(--control-bg-hover);
+  border-color: var(--control-border-hover);
+}
+
+:where(.reference-control) .ui-input:focus,
+:where(.reference-control).ui-input:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-focus-glow);
+}
+
+html[data-motion="reduced"] :where(.reference-control) .ui-input,
+html[data-motion="reduced"] :where(.reference-control).ui-input {
+  transition: none !important;
+}
+
+:where(.reference-control) .pill-btn.is-primary,
+:where(.reference-control).pill-btn.is-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+
+:where(.reference-control) .pill-btn.is-primary:hover,
+:where(.reference-control).pill-btn.is-primary:hover {
+  background: var(--accent-hover);
+  color: var(--on-accent);
+  box-shadow: inset 0 0 0 1px var(--primary-hover-inset);
+}
+
+:where(.reference-control) .pill-btn.is-danger,
+:where(.reference-control).pill-btn.is-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger-border);
+}
+
+:where(.reference-control) .pill-btn.is-danger:hover,
+:where(.reference-control).pill-btn.is-danger:hover {
+  background: var(--danger-soft-strong);
+  color: var(--danger-strong);
+  box-shadow: inset 0 0 0 1px var(--danger-border-strong);
+}
+:where(.reference-control) .ui-select,
+:where(.reference-control).ui-select {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+:where(.reference-control) .ui-select--block,
+:where(.reference-control).ui-select--block {
+  display: block;
+  width: 100%;
+}
+
+:where(.reference-control) .ui-select__trigger,
+:where(.reference-control).ui-select__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  transition:
+    border-color var(--motion-fast) var(--ease-out-soft),
+    background-color var(--motion-fast) var(--ease-out-soft),
+    box-shadow var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-select--sm .ui-select__trigger,
+:where(.reference-control).ui-select--sm .ui-select__trigger {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--fw-normal);
+  color: var(--text-secondary);
+  min-width: 56px;
+}
+
+:where(.reference-control) .ui-select__value,
+:where(.reference-control).ui-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+:where(.reference-control) .ui-select__chev,
+:where(.reference-control).ui-select__chev {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-select.is-open .ui-select__chev,
+:where(.reference-control).ui-select.is-open .ui-select__chev {
+  transform: rotate(180deg);
+}
+
+:where(.reference-control) .ui-select__trigger:hover,
+:where(.reference-control).ui-select__trigger:hover {
+  background: var(--control-bg-strong);
+  border-color: var(--control-border-strong);
+  color: var(--text-frame);
+}
+
+:where(.reference-control) .ui-select.is-open .ui-select__trigger,
+:where(.reference-control).ui-select.is-open .ui-select__trigger,
+:where(.reference-control) .ui-select__trigger:focus-visible,
+:where(.reference-control).ui-select__trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-focus-glow);
+}
+
+:where(.reference-control) .ui-select__menu,
+:where(.reference-control).ui-select__menu {
+  position: absolute;
+  z-index: 90;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 100%;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  box-shadow: var(--menu-shadow);
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transform-origin: top center;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) var(--ease-out-soft),
+    transform var(--motion-standard) var(--ease-out);
+}
+
+:where(.reference-control) .ui-select[data-placement="top"] .ui-select__menu,
+:where(.reference-control).ui-select[data-placement="top"] .ui-select__menu {
+  top: auto;
+  bottom: calc(100% + 4px);
+  transform: translateY(-4px) scale(0.98);
+  transform-origin: bottom center;
+}
+
+:where(.reference-control) .ui-select.is-open .ui-select__menu,
+:where(.reference-control).ui-select.is-open .ui-select__menu {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+:where(.reference-control) .ui-select__menu[hidden],
+:where(.reference-control).ui-select__menu[hidden] {
+  display: none;
+}
+
+
+:where(.reference-control) .ui-select__option,
+:where(.reference-control).ui-select__option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: transparent;
+  transition: background-color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-select--sm .ui-select__option,
+:where(.reference-control).ui-select--sm .ui-select__option {
+  min-height: 28px;
+  font-size: 12px;
+}
+
+:where(.reference-control) .ui-select__option:hover,
+:where(.reference-control).ui-select__option:hover,
+:where(.reference-control) .ui-select__option.is-active,
+:where(.reference-control).ui-select__option.is-active {
+  background: var(--nav-hover-strong);
+  color: var(--text-frame);
+}
+
+:where(.reference-control) .ui-select__option.is-selected,
+:where(.reference-control).ui-select__option.is-selected {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+:where(.reference-control) .ui-select__option.is-selected:hover,
+:where(.reference-control).ui-select__option.is-selected:hover {
+  background: var(--accent-soft-strong);
+  color: var(--accent-text-strong);
+}
+
+html[data-motion="reduced"] :where(.reference-control) .ui-select__trigger,
+html[data-motion="reduced"] :where(.reference-control).ui-select__trigger,
+html[data-motion="reduced"] :where(.reference-control) .ui-select__menu,
+html[data-motion="reduced"] :where(.reference-control).ui-select__menu,
+html[data-motion="reduced"] :where(.reference-control) .ui-select__chev,
+html[data-motion="reduced"] :where(.reference-control).ui-select__chev,
+html[data-motion="reduced"] :where(.reference-control) .ui-select__option,
+html[data-motion="reduced"] :where(.reference-control).ui-select__option {
+  transition: none !important;
+}
+
+html[data-motion="reduced"] :where(.reference-control) .ui-select__menu,
+html[data-motion="reduced"] :where(.reference-control).ui-select__menu {
+  transform: none !important;
+}
+:where(.reference-control) .ui-datetime,
+:where(.reference-control).ui-datetime,
+:where(.reference-control) .ui-daterange,
+:where(.reference-control).ui-daterange {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+:where(.reference-control) .ui-datetime--block,
+:where(.reference-control).ui-datetime--block,
+:where(.reference-control) .ui-daterange--block,
+:where(.reference-control).ui-daterange--block {
+  display: block;
+  width: 100%;
+}
+
+:where(.reference-control) .ui-datetime__trigger,
+:where(.reference-control).ui-datetime__trigger,
+:where(.reference-control) .ui-daterange__trigger,
+:where(.reference-control).ui-daterange__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  transition:
+    border-color var(--motion-fast) var(--ease-out-soft),
+    background-color var(--motion-fast) var(--ease-out-soft),
+    box-shadow var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-datetime__value,
+:where(.reference-control).ui-datetime__value,
+:where(.reference-control) .ui-daterange__value,
+:where(.reference-control).ui-daterange__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+:where(.reference-control) .ui-datetime__value.is-placeholder,
+:where(.reference-control).ui-datetime__value.is-placeholder,
+:where(.reference-control) .ui-daterange__value.is-placeholder,
+:where(.reference-control).ui-daterange__value.is-placeholder {
+  color: var(--text-tertiary);
+  font-weight: var(--fw-normal);
+}
+
+:where(.reference-control) .ui-datetime__icon,
+:where(.reference-control).ui-datetime__icon,
+:where(.reference-control) .ui-daterange__icon,
+:where(.reference-control).ui-daterange__icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+:where(.reference-control) .ui-datetime__trigger:hover,
+:where(.reference-control).ui-datetime__trigger:hover,
+:where(.reference-control) .ui-daterange__trigger:hover,
+:where(.reference-control).ui-daterange__trigger:hover {
+  background: var(--control-bg-strong);
+  border-color: var(--control-border-strong);
+  color: var(--text-frame);
+}
+
+:where(.reference-control) .ui-datetime.is-open .ui-datetime__trigger,
+:where(.reference-control).ui-datetime.is-open .ui-datetime__trigger,
+:where(.reference-control) .ui-daterange.is-open .ui-daterange__trigger,
+:where(.reference-control).ui-daterange.is-open .ui-daterange__trigger,
+:where(.reference-control) .ui-datetime__trigger:focus-visible,
+:where(.reference-control).ui-datetime__trigger:focus-visible,
+:where(.reference-control) .ui-daterange__trigger:focus-visible,
+:where(.reference-control).ui-daterange__trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-focus-glow);
+}
+
+:where(.reference-control) .ui-datetime__panel,
+:where(.reference-control).ui-datetime__panel,
+:where(.reference-control) .ui-daterange__panel,
+:where(.reference-control).ui-daterange__panel {
+  position: fixed;
+  z-index: 200;
+  width: 280px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  box-shadow: var(--menu-shadow);
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transform-origin: top left;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) var(--ease-out-soft),
+    transform var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-datetime.is-open .ui-datetime__panel,
+:where(.reference-control).ui-datetime.is-open .ui-datetime__panel,
+:where(.reference-control) .ui-daterange.is-open .ui-daterange__panel,
+:where(.reference-control).ui-daterange.is-open .ui-daterange__panel {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+:where(.reference-control) .ui-datetime__panel[hidden],
+:where(.reference-control).ui-datetime__panel[hidden],
+:where(.reference-control) .ui-daterange__panel[hidden],
+:where(.reference-control).ui-daterange__panel[hidden] {
+  display: none;
+}
+
+:where(.reference-control) .ui-cal__head,
+:where(.reference-control).ui-cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+:where(.reference-control) .ui-cal__title,
+:where(.reference-control).ui-cal__title {
+  flex: 1;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  font-variation-settings: "wght" 590, "opsz" auto;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: background-color var(--motion-fast) var(--ease-out-soft), color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-cal__title:hover,
+:where(.reference-control).ui-cal__title:hover {
+  background: var(--nav-hover-strong);
+}
+
+:where(.reference-control) .ui-cal__title::after,
+:where(.reference-control).ui-cal__title::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid var(--text-tertiary);
+  margin-top: 1px;
+  opacity: 0.85;
+}
+
+:where(.reference-control) .ui-cal__title.is-terminal::after,
+:where(.reference-control).ui-cal__title.is-terminal::after {
+  display: none;
+}
+
+:where(.reference-control) .ui-cal__title.is-terminal:hover,
+:where(.reference-control).ui-cal__title.is-terminal:hover {
+  background: transparent;
+  cursor: default;
+}
+
+:where(.reference-control) .ui-cal__nav,
+:where(.reference-control).ui-cal__nav {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition:
+    background-color var(--motion-fast) var(--ease-out-soft),
+    color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-cal__nav:hover,
+:where(.reference-control).ui-cal__nav:hover {
+  background: var(--nav-hover-strong);
+  color: var(--text-frame);
+}
+
+:where(.reference-control) .ui-cal__weekdays,
+:where(.reference-control).ui-cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+:where(.reference-control) .ui-cal__weekdays[hidden],
+:where(.reference-control).ui-cal__weekdays[hidden] {
+  display: none;
+}
+
+:where(.reference-control) .ui-cal__weekday,
+:where(.reference-control).ui-cal__weekday {
+  height: 24px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+:where(.reference-control) .ui-cal__grid,
+:where(.reference-control).ui-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+:where(.reference-control) .ui-cal__grid--months,
+:where(.reference-control).ui-cal__grid--months,
+:where(.reference-control) .ui-cal__grid--years,
+:where(.reference-control).ui-cal__grid--years {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  min-height: 196px;
+}
+
+:where(.reference-control) .ui-cal__day,
+:where(.reference-control).ui-cal__day {
+  position: relative;
+  height: 32px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  color: var(--text-primary);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transition: background-color var(--motion-fast) var(--ease-out-soft), color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-cal__day:hover:not(:disabled),
+:where(.reference-control).ui-cal__day:hover:not(:disabled) {
+  background: var(--nav-hover-strong);
+}
+
+:where(.reference-control) .ui-cal__day.is-outside,
+:where(.reference-control).ui-cal__day.is-outside {
+  color: var(--text-tertiary);
+  opacity: 0.45;
+}
+
+:where(.reference-control) .ui-cal__day.is-today:not(.is-selected):not(.is-range-start):not(.is-range-end),
+:where(.reference-control).ui-cal__day.is-today:not(.is-selected):not(.is-range-start):not(.is-range-end),
+:where(.reference-control) .ui-cal__cell.is-today:not(.is-selected),
+:where(.reference-control).ui-cal__cell.is-today:not(.is-selected) {
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+:where(.reference-control) .ui-cal__day.is-selected,
+:where(.reference-control).ui-cal__day.is-selected,
+:where(.reference-control) .ui-cal__day.is-range-start,
+:where(.reference-control).ui-cal__day.is-range-start,
+:where(.reference-control) .ui-cal__day.is-range-end,
+:where(.reference-control).ui-cal__day.is-range-end,
+:where(.reference-control) .ui-cal__cell.is-selected,
+:where(.reference-control).ui-cal__cell.is-selected {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:where(.reference-control) .ui-cal__day.is-in-range:not(.is-range-start):not(.is-range-end),
+:where(.reference-control).ui-cal__day.is-in-range:not(.is-range-start):not(.is-range-end) {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-radius: 0;
+}
+
+:where(.reference-control) .ui-cal__day.is-range-start,
+:where(.reference-control).ui-cal__day.is-range-start {
+  border-radius: 6px 0 0 6px;
+}
+
+:where(.reference-control) .ui-cal__day.is-range-end,
+:where(.reference-control).ui-cal__day.is-range-end {
+  border-radius: 0 6px 6px 0;
+}
+
+:where(.reference-control) .ui-cal__day.is-range-start.is-range-end,
+:where(.reference-control).ui-cal__day.is-range-start.is-range-end {
+  border-radius: 6px;
+}
+
+:where(.reference-control) .ui-cal__cell,
+:where(.reference-control).ui-cal__cell {
+  height: 40px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  color: var(--text-primary);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  transition: background-color var(--motion-fast) var(--ease-out-soft), color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-cal__cell:hover,
+:where(.reference-control).ui-cal__cell:hover {
+  background: var(--nav-hover-strong);
+}
+
+:where(.reference-control) .ui-datetime__time,
+:where(.reference-control).ui-datetime__time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider-mid);
+}
+
+:where(.reference-control) .ui-datetime__time-label,
+:where(.reference-control).ui-datetime__time-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+:where(.reference-control) .ui-datetime__wheels,
+:where(.reference-control).ui-datetime__wheels {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+}
+
+:where(.reference-control) .ui-datetime__time-sep,
+:where(.reference-control).ui-datetime__time-sep {
+  align-self: center;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  padding-bottom: 1px;
+}
+
+:where(.reference-control) .ui-wheel,
+:where(.reference-control).ui-wheel {
+  --ui-wheel-item-h: 32px;
+  --ui-wheel-view-h: 160px;
+  position: relative;
+  width: 72px;
+  height: var(--ui-wheel-view-h);
+  border-radius: 8px;
+  background: var(--control-bg);
+  border: 1px solid var(--surface-border);
+  overflow: hidden;
+}
+
+:where(.reference-control) .ui-wheel__highlight,
+:where(.reference-control).ui-wheel__highlight {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: var(--ui-wheel-item-h);
+  margin-top: calc(var(--ui-wheel-item-h) / -2);
+  border-radius: 6px;
+  background: var(--accent-soft-row);
+  box-shadow: inset 0 0 0 1px var(--accent-soft-inset);
+  pointer-events: none;
+  z-index: 1;
+}
+
+:where(.reference-control) .ui-wheel__viewport,
+:where(.reference-control).ui-wheel__viewport {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 18%,
+    #000 82%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 18%,
+    #000 82%,
+    transparent 100%
+  );
+}
+
+:where(.reference-control) .ui-wheel__viewport:active,
+:where(.reference-control).ui-wheel__viewport:active {
+  cursor: grabbing;
+}
+:where(.reference-control) .ui-wheel__track,
+:where(.reference-control).ui-wheel__track {
+  will-change: transform;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  transition-duration: 0ms;
+}
+
+:where(.reference-control) .ui-wheel__pad,
+:where(.reference-control).ui-wheel__pad {
+  display: none;
+}
+
+:where(.reference-control) .ui-wheel__item,
+:where(.reference-control).ui-wheel__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--ui-wheel-item-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-wheel__item.is-selected,
+:where(.reference-control).ui-wheel__item.is-selected {
+  color: var(--accent-text);
+  font-weight: var(--fw-semibold);
+  font-variation-settings: "wght" 590, "opsz" auto;
+}
+
+:where(.reference-control) .ui-wheel__item:hover,
+:where(.reference-control).ui-wheel__item:hover {
+  color: var(--text-primary);
+}
+
+:where(.reference-control) .ui-daterange__foot,
+:where(.reference-control).ui-daterange__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider-mid);
+}
+
+:where(.reference-control) .ui-daterange__summary,
+:where(.reference-control).ui-daterange__summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.reference-control) .ui-daterange__clear,
+:where(.reference-control).ui-daterange__clear {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background-color var(--motion-fast) var(--ease-out-soft), color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .ui-daterange__clear:hover,
+:where(.reference-control).ui-daterange__clear:hover {
+  background: var(--nav-hover-strong);
+  color: var(--text-frame);
+}
+
+html[data-motion="reduced"] :where(.reference-control) .ui-datetime__trigger,
+html[data-motion="reduced"] :where(.reference-control).ui-datetime__trigger,
+html[data-motion="reduced"] :where(.reference-control) .ui-daterange__trigger,
+html[data-motion="reduced"] :where(.reference-control).ui-daterange__trigger,
+html[data-motion="reduced"] :where(.reference-control) .ui-datetime__panel,
+html[data-motion="reduced"] :where(.reference-control).ui-datetime__panel,
+html[data-motion="reduced"] :where(.reference-control) .ui-daterange__panel,
+html[data-motion="reduced"] :where(.reference-control).ui-daterange__panel,
+html[data-motion="reduced"] :where(.reference-control) .ui-cal__day,
+html[data-motion="reduced"] :where(.reference-control).ui-cal__day,
+html[data-motion="reduced"] :where(.reference-control) .ui-cal__cell,
+html[data-motion="reduced"] :where(.reference-control).ui-cal__cell,
+html[data-motion="reduced"] :where(.reference-control) .ui-cal__nav,
+html[data-motion="reduced"] :where(.reference-control).ui-cal__nav,
+html[data-motion="reduced"] :where(.reference-control) .ui-cal__title,
+html[data-motion="reduced"] :where(.reference-control).ui-cal__title,
+html[data-motion="reduced"] :where(.reference-control) .ui-wheel__item,
+html[data-motion="reduced"] :where(.reference-control).ui-wheel__item,
+html[data-motion="reduced"] :where(.reference-control) .ui-daterange__clear,
+html[data-motion="reduced"] :where(.reference-control).ui-daterange__clear {
+  transition: none !important;
+}
+
+html[data-motion="reduced"] :where(.reference-control) .ui-wheel__track,
+html[data-motion="reduced"] :where(.reference-control).ui-wheel__track {
+  transition-duration: 0ms !important;
+}
+
+html[data-motion="reduced"] :where(.reference-control) .ui-datetime__panel,
+html[data-motion="reduced"] :where(.reference-control).ui-datetime__panel,
+html[data-motion="reduced"] :where(.reference-control) .ui-daterange__panel,
+html[data-motion="reduced"] :where(.reference-control).ui-daterange__panel {
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="system"] :where(.reference-control) .ui-datetime__panel,
+html[data-motion="system"] :where(.reference-control).ui-datetime__panel,
+html[data-motion="system"] :where(.reference-control) .ui-daterange__panel,
+html[data-motion="system"] :where(.reference-control).ui-daterange__panel {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+:where(.reference-control) .link-btn,
+:where(.reference-control).link-btn {
+  color: var(--accent-link);
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+  font-variation-settings: "wght" 510, "opsz" auto;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background-color var(--motion-fast) var(--ease-out-soft), color var(--motion-fast) var(--ease-out-soft);
+}
+
+:where(.reference-control) .link-btn:hover,
+:where(.reference-control).link-btn:hover {
+  background: var(--accent-soft-strong);
+  color: var(--accent-text-strong);
+}
+
+:where(.reference-control) .data-grid__footer,
+:where(.reference-control).data-grid__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--surface-border);
+  flex-shrink: 0;
+}
+
+:where(.reference-control) .data-grid__count,
+:where(.reference-control).data-grid__count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+:where(.reference-control) .data-grid__pager,
+:where(.reference-control).data-grid__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+:where(.reference-control) .data-grid__page-size,
+:where(.reference-control).data-grid__page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+:where(.reference-control) .data-grid__pager .icon-btn:disabled,
+:where(.reference-control).data-grid__pager .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+:where(.reference-control) .data-grid__page,
+:where(.reference-control).data-grid__page {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 48px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+html[data-motion="reduced"] :where(.reference-control) .pill-btn,
+html[data-motion="reduced"] :where(.reference-control).pill-btn,
+html[data-motion="reduced"] :where(.reference-control) .icon-btn,
+html[data-motion="reduced"] :where(.reference-control).icon-btn {
+  transition: none !important;
+}
+
+html[data-motion="reduced"] :where(.reference-control) .pill-btn:active,
+html[data-motion="reduced"] :where(.reference-control).pill-btn:active,
+html[data-motion="reduced"] :where(.reference-control) .icon-btn:active,
+html[data-motion="reduced"] :where(.reference-control).icon-btn:active {
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="system"] :where(.reference-control) .pill-btn,
+html[data-motion="system"] :where(.reference-control).pill-btn,
+html[data-motion="system"] :where(.reference-control) .icon-btn,
+html[data-motion="system"] :where(.reference-control).icon-btn {
+    transition: none !important;
+  }
+}

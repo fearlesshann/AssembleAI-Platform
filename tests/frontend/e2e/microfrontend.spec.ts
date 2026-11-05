@@ -85,7 +85,7 @@ test('V19: child styles apply inside the app without changing the host across mo
     const response = await route.fetch();
     await route.fulfill({
       response,
-      body: `${await response.text()}\nbutton { border-top-width: 9px !important; }`,
+      body: `${await response.text()}\nbutton { border-top: 9px solid red !important; }`,
     });
   });
   await page.goto('/workspace/integration');
@@ -110,7 +110,7 @@ test('V19: child styles apply inside the app without changing the host across mo
   await page.getByRole('button', { name: '打开应用', exact: true }).click();
   const sample = page.getByTestId('sample-app');
   await expect(sample).toBeVisible();
-  await expect(sample.locator('h2')).toHaveCSS('font-size', '18px');
+  await expect(sample.locator('h2')).toHaveCSS('font-size', '16px');
   await expect(sample.getByRole('button', { name: '增加计数' })).toHaveCSS('border-top-width', '9px');
   await expect(page.getByRole('button', { name: '返回应用列表' })).toBeEnabled();
   await expect.poll(hostStyles).toEqual(beforeMount);

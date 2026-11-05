@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectFixtureLogin, expectReferenceValue, fulfillFixtureLogin, logoutFromUserMenu, toggleReferenceTheme } from '../reference-controls-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 
 const tenantA = '11111111-1111-4111-8111-111111111111';
@@ -12,6 +13,7 @@ async function fixture(page: Page, signedIn = true, selected: string | null = te
   const state = { signedIn, selected, applications: [...applications], catalogStatus: 200, runStatus: 200, runCalls: 0, csrfWrites: 0 };
   await page.route('**/bff/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/bff/login') return fulfillFixtureLogin(route);
     if (path === '/bff/session') return route.fulfill({ status: state.signedIn ? 200 : 401, json: state.signedIn ? { iss: 'https://identity.example.test', sub: 'fixture-user', name: '李工' } : { code: 'authentication_required' } });
     if (path === '/bff/csrf') return route.fulfill({ json: { requestToken: 'fixture-csrf', headerName: 'X-CSRF-TOKEN' } });
     if (route.request().method() === 'POST') {
@@ -51,14 +53,13 @@ async function fixture(page: Page, signedIn = true, selected: string | null = te
 
 test.beforeEach(async ({ page }) => { await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' }); });
 
-test('default portal uses enterprise sign-in and never restores the reference demo identity', async ({ page }) => {
+test('unauthenticated portal leaves for OIDC and never restores the reference demo identity', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('mfg-ai-auth', 'true'));
   await fixture(page, false);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '应用中心', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toHaveAttribute('href', /\/bff\/login\?returnUrl=/);
+  await expectFixtureLogin(page);
+  expect(new URL(page.url()).searchParams.get('returnUrl')).toBe('/');
   await expect(page.getByLabel('密码', { exact: true })).toHaveCount(0);
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.getByText('产线分析', { exact: true })).toHaveCount(0);
 });
 
@@ -69,7 +70,7 @@ test('authorized catalog supports category, search, empty state and deep-linked 
   await expect(page.getByText('质量知识检索', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '质量管理', exact: true }).click();
   await expect(page.getByText('产线分析', { exact: true })).toHaveCount(0);
-  await page.getByRole('textbox', { name: '搜索应用' }).fill('不存在的应用');
+  await page.getByRole('searchbox', { name: '搜索应用' }).fill('不存在的应用');
   await expect(page.getByRole('heading', { name: '没有匹配的应用' })).toBeVisible();
   await page.getByRole('button', { name: '清除筛选' }).click();
   await page.goto('/applications/sample');
@@ -116,13 +117,13 @@ test('theme, narrow layout and logout preserve only appearance', async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByText('产线分析', { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toBeVisible();
+  await logoutFromUserMenu(page);
+  await expectFixtureLogin(page);
   await expect(page.getByText('产线分析', { exact: true })).toHaveCount(0);
   expect(state.signedIn).toBe(false);
   expect(state.csrfWrites).toBe(1);
@@ -134,7 +135,7 @@ test('tenant choice is explicit and a late old-tenant response cannot restore it
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '选择租户', exact: true })).toBeVisible();
   expect(state.csrfWrites).toBe(0);
-  await page.getByLabel('当前租户', { exact: true }).selectOption(tenantA);
+  await chooseReferenceOption(page, '当前租户', tenantA);
   await expect(page.getByText('产线分析', { exact: true }).first()).toBeVisible();
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -146,14 +147,14 @@ test('tenant choice is explicit and a late old-tenant response cannot restore it
   });
   await page.getByRole('button', { name: '刷新应用', exact: true }).click();
   await pending;
-  await page.getByLabel('当前租户', { exact: true }).selectOption(tenantB);
+  await chooseReferenceOption(page, '当前租户', tenantB);
   await expect(page.getByRole('heading', { name: '暂无可用应用' })).toBeVisible();
   release();
   // Confirm the new selection's own settled state, then trigger another authoritative read.
   await page.getByRole('button', { name: '刷新应用', exact: true }).click();
   await expect(page.getByRole('heading', { name: '暂无可用应用' })).toBeVisible();
   await expect(page.getByText('产线分析', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('当前租户', { exact: true })).toHaveValue(tenantB);
+  await expectReferenceValue(page, '当前租户', tenantB);
 });
 
 test('focus revalidates session and a failed logout never claims success', async ({ page }) => {
@@ -161,13 +162,13 @@ test('focus revalidates session and a failed logout never claims success', async
   await page.goto('/');
   await expect(page.getByText('产线分析', { exact: true }).first()).toBeVisible();
   await page.route('**/bff/logout', route => route.fulfill({ status: 503, json: { code: 'session_unavailable' } }));
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await logoutFromUserMenu(page);
   await expect(page.getByRole('alert')).toContainText('退出登录未完成');
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/bff\/login/);
   await expect(page.getByText('产线分析', { exact: true })).toHaveCount(0);
   state.signedIn = false;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toBeVisible();
+  await expectFixtureLogin(page);
 });
 
 test('missing details, revoked catalog, loading and resource failure stay explicit', async ({ page }) => {
@@ -206,12 +207,13 @@ test('opening a second run in the same document survives single-spa history even
 test('a recovered identity with failed memberships shows an error instead of another sign-in', async ({ page }) => {
   const state = await fixture(page, false);
   await page.goto('/');
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toBeVisible();
+  await expectFixtureLogin(page);
   state.signedIn = true;
   await page.route('**/api/platform/v1/tenants', route => route.fulfill({ status: 503, json: { code: 'authorization_unavailable' } }));
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  // The OIDC callback returns to a new protected document after authentication.
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: '暂时无法加载工作空间' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '企业账号登录' })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/bff\/login/);
 });
 
 test('a hanging application lifecycle resets the document without creating another run', async ({ page }) => {
@@ -288,7 +290,7 @@ async function retainedApiFixture(page: Page, hangingMount: boolean) {
 
 test('T7: rejected theme update disposes the retained API without another gateway request', async ({ page }) => {
   const capability = await retainedApiFixture(page, false);
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(page);
   await expect(page.getByRole('alert').first()).toContainText('应用外观更新失败');
   expect(await capability.probe()).toEqual({ code: 'disposed' });
   expect(capability.calls()).toBe(1);
@@ -315,4 +317,31 @@ test('T7: hanging mount disposes the retained API while document replacement is 
     const replaced = page.waitForEvent('domcontentloaded', { timeout: 5000 });
     release(); await replaced;
   }
+});
+
+
+test('V37: catalog refresh displays the original loading skeleton until the authoritative response', async ({ page }) => {
+  await fixture(page); await page.goto('/'); await expect(page.getByText('产线分析', { exact: true }).first()).toBeVisible();
+  let release!: () => void; const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/tenants/${tenantA}/catalog`, async route => { await pending; return route.fulfill({ json: { items: applications, categories: ['生产运营', '质量管理'] } }); });
+  await page.getByRole('button', { name: '刷新应用', exact: true }).click();
+  const skeleton = page.getByRole('status', { name: '正在读取应用', exact: true });
+  await expect(skeleton).toBeVisible(); await expect(skeleton).toHaveCSS('opacity', '1');
+  expect((await skeleton.boundingBox())!.height).toBeGreaterThan(40);
+  release(); await expect(page.getByText('产线分析', { exact: true }).first()).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+});
+
+
+test('V37: long embedded application content remains scrollable and its last action reachable', async ({ page }) => {
+  await fixture(page);
+  await page.route('**/apps/sample/0.1.0/', route => route.fulfill({ contentType: 'text/html', body: '<div id="sample-root"></div><script src="/apps/sample/0.1.0/long.js" entry></script>' }));
+  await page.route('**/apps/sample/0.1.0/long.js', route => route.fulfill({ contentType: 'text/javascript', body: `window.assembleaiLongFixture={bootstrap:function(){return Promise.resolve()},mount:function(props){var root=props.container.querySelector('#sample-root');root.innerHTML='<div style="height:1800px">长内容顶部</div><button type="button">长内容末尾操作</button>';root.querySelector('button').onclick=function(){this.textContent='末尾操作已完成'};return Promise.resolve()},unmount:function(){return Promise.resolve()}};` }));
+  await page.goto('/applications/sample'); await page.getByRole('button', { name: '打开应用', exact: true }).click();
+  const runner = page.getByRole('region', { name: '应用运行区', exact: true });
+  await expect(page.getByRole('button', { name: '长内容末尾操作', exact: true })).toBeAttached();
+  expect(await runner.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await page.getByRole('button', { name: '长内容末尾操作', exact: true }).click();
+  await expect(page.getByRole('button', { name: '末尾操作已完成', exact: true })).toBeVisible();
+  expect(await runner.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
 });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { loadMicroApp, type MicroApp } from 'qiankun';
-import ElButton from 'element-plus/es/components/button/index';
+import { ReferenceButton } from './components/reference';
 import { createApplicationClient, type ApplicationClient } from '@assembleai/app-sdk';
 import type { PortalRun, Theme } from './portal-api';
 import { portalRuntimeLifecycle, portalRuntimeNeedsRestart, restartPortalRuntime } from './portal-runtime';
@@ -112,7 +112,7 @@ onBeforeUnmount(() => {
   <section aria-label="应用运行区" :aria-busy="loading" class="application-runner">
     <div v-if="failure" class="portal-state" role="alert">
       <h2>暂时无法继续运行</h2><p>{{ failure }}</p>
-      <ElButton @click="emit('leave')">返回应用详情</ElButton>
+      <ReferenceButton @click="emit('leave')">返回应用详情</ReferenceButton>
     </div>
     <p v-else-if="loading" role="status">正在打开应用…</p>
     <div ref="host" v-show="!failure" class="portal-runtime-host" />

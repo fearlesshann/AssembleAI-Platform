@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectOidcAccountPicker, logoutFromUserMenu, toggleReferenceTheme } from './reference-controls-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
@@ -25,9 +26,8 @@ try {
   context.on('page', page => page.on('pageerror', () => failures.push('Browser script failed.')));
   context.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/apps/chatbi/')) appRequests.push(request); });
   const portal = await context.newPage();
-  await portal.goto('/');
-  await portal.getByRole('link', { name: '企业账号登录', exact: true }).click();
-  await portal.getByLabel('当前租户', { exact: true }).selectOption(tenantId);
+  await portal.goto('/bff/login?returnUrl=' + encodeURIComponent('/'));
+  await chooseReferenceOption(portal, '当前租户', tenantId);
   const session = await context.request.get('/bff/session');
   assert.equal(session.status(), 200); assert.equal((await session.json()).iss, issuer);
 
@@ -54,7 +54,7 @@ try {
   }
   await analyze(standalone); assert.equal(standaloneRuns, 1);
   await standalone.screenshot({ path: resolve(directory, 'standalone-light.png'), fullPage: true });
-  await standalone.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(standalone);
   await expect(standalone.getByTestId('chatbi-app')).toHaveAttribute('data-theme', 'dark');
   await standalone.screenshot({ path: resolve(directory, 'standalone-dark.png'), fullPage: true });
   await standalone.setViewportSize({ width: 390, height: 844 });
@@ -68,7 +68,7 @@ try {
   await expect(portal.getByTestId('chatbi-app')).toContainText('平台内运行');
   await analyze(portal);
   await portal.screenshot({ path: resolve(directory, 'embedded-light.png'), fullPage: true });
-  await portal.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(portal);
   await expect(portal.getByTestId('chatbi-app')).toHaveAttribute('data-theme', 'dark');
   await expect(portal.getByTestId('chatbi-result')).toBeVisible();
   await portal.screenshot({ path: resolve(directory, 'embedded-dark.png'), fullPage: true });
@@ -81,8 +81,8 @@ try {
   }
   assert.equal(appRequests.filter(request => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/ask')).length, 2,
     'Acceptance must make exactly one explicit question per run mode.');
-  await portal.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(portal.getByRole('link', { name: '企业账号登录', exact: true })).toBeVisible();
+  await logoutFromUserMenu(portal);
+  await expectOidcAccountPicker(portal);
   await standalone.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(standalone.getByRole('link', { name: '使用企业账号登录', exact: true })).toBeVisible();
   await expect(standalone.getByTestId('chatbi-result')).toHaveCount(0);

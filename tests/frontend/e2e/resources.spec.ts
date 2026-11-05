@@ -1,3 +1,4 @@
+import { chooseReferenceOption, closeReferenceDrawer, expectFixtureLogin, fulfillFixtureLogin, toggleReferenceTheme } from '../reference-controls-helpers.mjs';
 import { test, expect, type Page } from '@playwright/test';
 const tenant = '11111111-1111-1111-1111-111111111111'; const other = '22222222-2222-2222-2222-222222222222';
 async function fixture(page: Page) {
@@ -9,6 +10,7 @@ async function fixture(page: Page) {
     calls: [] as any[] };
   await page.route('**/bff/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/bff/login') return fulfillFixtureLogin(route);
     if (path === '/bff/session') return route.fulfill({ status: state.signedIn ? 200 : 401, json: { iss: 'https://identity.fixture', sub: 'resource-user', name: '资源管理用户' } });
     if (path === '/bff/csrf') return route.fulfill({ json: { headerName: 'X-CSRF-TOKEN', requestToken: 'fresh' } });
     if (path === '/bff/logout') { state.signedIn = false; return route.fulfill({ status: 204 }); }
@@ -59,17 +61,17 @@ test('T13: source datasets, configuration, connection test, themes and narrow vi
   await expect(page.getByText('配置已保存，已重新读取最新状态。', { exact: true })).toBeVisible(); expect(state.writes[0].maxRows).toBe(200);
   await page.getByRole('button', { name: '测试连接', exact: true }).click(); await expect(page.getByText('连接测试通过。', { exact: true })).toBeVisible();
   await page.screenshot({ path: '.artifacts/t13-resources/source-light.png', fullPage: true });
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click(); await page.screenshot({ path: '.artifacts/t13-resources/source-dark.png', fullPage: true });
+  await toggleReferenceTheme(page); await page.screenshot({ path: '.artifacts/t13-resources/source-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: '.artifacts/t13-resources/source-mobile.png', fullPage: true });
 });
 test('T13: CAS conflict keeps input and blocks duplicate save; cancelled navigation keeps draft', async ({ page }) => {
   const state = await fixture(page); state.status = 409; await page.goto('/manage/models/assistant.v1');
   await page.getByRole('button', { name: '编辑配置', exact: true }).click(); await page.getByLabel('最大输出 Token', { exact: true }).fill('512');
-  page.once('dialog', dialog => dialog.dismiss()); await page.getByRole('link', { name: '数据源管理', exact: true }).click();
+  await page.getByRole('button', { name: '取消编辑', exact: true }).click(); await page.getByRole('dialog', { name: '放弃修改？', exact: true }).getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByLabel('最大输出 Token', { exact: true })).toHaveValue('512'); await page.getByRole('button', { name: '保存配置', exact: true }).click();
   await expect(page.getByRole('alert').first()).toContainText('不会自动覆盖'); await expect(page.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled(); expect(state.writes).toHaveLength(1);
-  page.once('dialog', dialog => dialog.accept()); await page.getByRole('link', { name: '数据源管理', exact: true }).click(); await expect(page.getByLabel('最大输出 Token', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '取消编辑', exact: true }).click(); await page.getByRole('dialog', { name: '放弃修改？', exact: true }).getByRole('button', { name: '放弃修改', exact: true }).click(); await closeReferenceDrawer(page); await page.getByRole('link', { name: '数据源管理', exact: true }).click(); await expect(page.getByLabel('最大输出 Token', { exact: true })).toHaveCount(0);
 });
 test('T13: management does not imply test authority, and invoke-only cannot load tenant configuration', async ({ page }) => {
   const state = await fixture(page); state.model.canInvoke = false; state.source.canTest = false;
@@ -97,25 +99,25 @@ test('T13: cancellation clears busy state and ignores a late test response witho
   await page.goto('/manage/models/assistant.v1'); await page.getByLabel('测试内容', { exact: true }).fill('请求测试'); await page.getByRole('button', { name: '发送测试', exact: true }).click();
   await expect.poll(() => sent).toBe(1); await page.getByRole('button', { name: '取消测试', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('已停止等待'); await expect(page.getByRole('button', { name: '发送测试', exact: true })).toBeDisabled(); release();
-  await page.getByRole('link', { name: '数据源管理', exact: true }).click(); await expect(page.getByRole('heading', { name: '数据源管理', exact: true })).toBeVisible();
+  await closeReferenceDrawer(page); await page.getByRole('link', { name: '数据源管理', exact: true }).click(); await expect(page.getByRole('heading', { name: '数据源管理', exact: true })).toBeVisible();
   expect(sent).toBe(1); expect(state.tests).toHaveLength(0); await expect(page.getByText('late model output', { exact: true })).toHaveCount(0);
 });
 test('T13: empty selection, missing resource and session loss clear previous data', async ({ page }) => {
   const state = await fixture(page); await page.goto('/manage/models/absent-model'); await expect(page.getByRole('heading', { name: '资源不可用', exact: true })).toBeVisible();
-  await page.getByLabel('当前租户', { exact: true }).selectOption(other); await expect(page.getByText('当前租户暂无已授权资源。请联系管理员检查资源部署和权限分配。', { exact: true })).toBeVisible();
-  await page.getByLabel('当前租户', { exact: true }).selectOption(tenant); await page.goto('/manage/models/assistant.v1'); await expect(page.getByRole('heading', { name: '生产助手模型', exact: true })).toBeVisible();
-  state.signedIn = false; await page.getByRole('button', { name: '刷新管理数据', exact: true }).click(); await expect(page.getByRole('link', { name: '企业账号登录', exact: false })).toBeVisible();
+  await chooseReferenceOption(page, '当前租户', other); await expect(page.getByText('当前租户暂无已授权资源', { exact: true })).toBeVisible();
+  await chooseReferenceOption(page, '当前租户', tenant); await page.goto('/manage/models/assistant.v1'); await expect(page.getByRole('heading', { name: '生产助手模型', exact: true })).toBeVisible();
+  state.signedIn = false; await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await expectFixtureLogin(page);
   await expect(page.getByRole('heading', { name: '生产助手模型', exact: true })).toHaveCount(0);
 });
 test('T13: delayed old tenant configuration cannot restore data after switching', async ({ page }) => {
   const state = await fixture(page); let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); let reading = false;
   await page.route(`**/tenants/${tenant}/models/assistant.v1/configuration`, async route => { reading = true; await gate; await route.fulfill({ json: state.modelConfig }).catch(() => {}); });
-  await page.goto('/manage/models/assistant.v1'); await expect.poll(() => reading).toBe(true); await page.getByLabel('当前租户', { exact: true }).selectOption(other); release();
-  await expect(page.getByText('当前租户暂无已授权资源。请联系管理员检查资源部署和权限分配。', { exact: true })).toBeVisible();
+  await page.goto('/manage/models/assistant.v1'); await expect.poll(() => reading).toBe(true); await chooseReferenceOption(page, '当前租户', other); release();
+  await expect(page.getByText('当前租户暂无已授权资源', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '生产助手模型', exact: true })).toHaveCount(0); await expect(page.getByRole('button', { name: '编辑配置', exact: true })).toHaveCount(0);
 });
 test('T13: isolated module errors do not break other navigation, switching tenant clears resource access', async ({ page }) => {
   const state = await fixture(page); state.modelFailure = true; await page.goto('/manage/data-sources/factory_db');
   await expect(page.getByRole('heading', { name: '制造测试数据源', exact: true })).toBeVisible(); await expect(page.getByRole('link', { name: '模型管理', exact: true })).toHaveCount(0);
-  await page.getByLabel('当前租户', { exact: true }).selectOption(other); await expect(page.getByRole('link', { name: '数据源管理', exact: true })).toHaveCount(0); await expect(page.getByRole('heading', { name: '制造测试数据源', exact: true })).toHaveCount(0);
+  await chooseReferenceOption(page, '当前租户', other); await expect(page.getByRole('link', { name: '数据源管理', exact: true })).toHaveCount(0); await expect(page.getByRole('heading', { name: '制造测试数据源', exact: true })).toHaveCount(0);
 });

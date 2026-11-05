@@ -1,0 +1,12 @@
+import type { Locator, Page, Route } from '@playwright/test';
+export function referenceSelect(page: Page, label: string): Locator;
+export function chooseReferenceOption(page: Page, label: string, value: string): Promise<void>;
+export function expectReferenceValue(page: Page, label: string, value: string): Promise<void>;
+export function referenceOptionValues(page: Page, label: string): Promise<string[]>;
+export function logoutFromUserMenu(page: Page): Promise<void>;
+export function closeReferenceDrawer(page: Page): Promise<void>;
+export function toggleReferenceTheme(page: Page): Promise<void>;
+export function expectOidcAccountPicker(page: Page): Promise<void>;
+export function fulfillFixtureLogin(route: Route): Promise<void>;
+export function expectFixtureLogin(page: Page): Promise<void>;
+export function chooseReferenceDateTime(page: Page, label: string, localValue: string): Promise<void>;

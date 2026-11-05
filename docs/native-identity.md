@@ -1,6 +1,6 @@
 # 原生 Keycloak 验收
 
-本入口启动真实 Keycloak、平台 BFF 和 Chromium，验证现有登录协议与浏览器会话边界。它使用一次性测试 realm、随机凭据和 Keycloak 开发 H2 数据库；平台仍使用 Development 内存会话。测试账号不写入 `deploy/keycloak/assembleai-realm.json`，也不自动建立平台租户成员关系。
+本入口启动真实 Keycloak、平台 BFF 和 Chromium，验证原示例登录主题、实际凭据校验、密码重置和浏览器会话边界。它使用一次性测试 realm、随机凭据和 Keycloak 开发 H2 数据库；平台仍使用 Development 内存会话。测试账号不写入 `deploy/keycloak/assembleai-realm.json`，也不自动建立平台租户成员关系。
 
 ## 准备与运行
 
@@ -14,6 +14,9 @@ powershell -NoProfile -File tools/install-native-identity.ps1
 dotnet restore AssembleAI.slnx --locked-mode
 dotnet build AssembleAI.slnx --no-restore
 
+# 原示例登录骨架/CSS和身份主题保持同步；不改参考快照
+node tools/sync-reference-login.mjs
+
 # 启动隔离服务、跑浏览器验收、停止自己启动的进程
 & '.\apps\sample\backend\.venv\Scripts\python.exe' tools/verify-keycloak.py
 ```
@@ -26,7 +29,11 @@ dotnet build AssembleAI.slnx --no-restore
 
 ## 验证内容
 
-- 真实 Keycloak 表单拒绝错误密码，再完成 Authorization Code 登录；realm 强制 PKCE S256。
+- 真实 Keycloak 使用 `assembleai` 主题：原示例的左右分栏、三张叠放预览、波纹、字体、输入框、复选框、按钮与主题切换。账号密码表单直接 POST 给 Keycloak，拒绝错误密码后完成 Authorization Code 登录；realm 强制 PKCE S256。
+- 登录错误、忘记密码请求、邮件提交反馈和更新密码 required action 使用同一原示例壳和控件。Keycloak 26 提交重置请求后带通用提示返回登录页；测试以本次私有 SMTP 接收的真实邮件和 action token 证明发送及重置成功，不能仅凭提示文案判断。
+- 两次新密码不一致由真实 Keycloak 拒绝；正确设置后，以全新浏览器会话验证新密码登录。
+- 记住我由 Keycloak 实际发出有期限的 Cookie；门户 BFF Cookie 仍为会话 Cookie。已有 SSO 时，显式 `prompt=login` 要求再次输入密码；Keycloak 可隐藏已经确认的账号，重认证仍使用同一原示例控件。
+- 未登记的回调地址被真实 Keycloak 拒绝，通用协议错误页仍使用原示例壳，不能落回另一套默认登录界面。
 - `/bff/session` 的 issuer / subject 与真实账号匹配；匿名请求为 401。
 - BFF Cookie 为 HttpOnly、SameSite=Lax；浏览器脚本读不到会话引用，响应和浏览器存储不包含 OIDC token，浏览器不直接调用 token endpoint。
 - 已有有效会话不能重新登录覆盖身份（409）；GET 退出为 405。
@@ -37,11 +44,25 @@ dotnet build AssembleAI.slnx --no-restore
 
 ## 数据与清理
 
-每次独立运行位于 `.local-data/keycloak-tests/run-*`。登录密码、客户端 secret 和临时数据库都在该忽略目录；凭据不进入进程命令行。验证器隔离继承的 Java、Keycloak、.NET 环境和 Playwright 调试设置，避免误用外部数据库、错误 JDK 或记录协议凭据。
+每次独立运行位于 `.local-data/keycloak-tests/run-*`。登录密码、客户端 secret、真实重置邮件中的 action token 和临时数据库都在该忽略目录；凭据不进入进程命令行。SMTP 接收器仅监听本次 loopback 临时端口，不向外部邮箱发信。验证器隔离继承的 Java、Keycloak、.NET 环境和 Playwright 调试设置，避免误用外部数据库、错误 JDK 或记录协议凭据。
 
-结束后先停止本次进程树，再核对绝对路径并删除本次临时目录。若清理失败，命令返回非零并保留目录便于处理，不宣称成功。验证记录位于 `.artifacts/keycloak/run-*`：服务日志、浏览器阶段结果、未填写的登录页截图，以及 `result.json` 的完成 / 清理状态。目录均被 Git 忽略。
+结束后停止本次 SMTP 接收器和进程树，再核对绝对路径并删除本次临时目录。若清理失败，命令返回非零并保留目录便于处理，不宣称成功。验证记录位于 `.artifacts/keycloak/run-*`：服务日志、浏览器阶段结果、登录/失败/重置各状态截图，以及 `result.json` 的完成 / 清理状态。浏览器仅打印固定阶段名称，不输出异常中可能包含的表单、Cookie 或回调参数；不录制带凭据的 trace。目录均被 Git 忽略。
 
-此入口不验证 PostgreSQL 授权仓储、生产数据库会话、多实例故障恢复、证书轮换或首页模板 SSO。普通 Core / All 检查不会自动启动 Keycloak；它们和本入口分别记录结果。
+此入口验证真实主题与 BFF 的登录链路；它不验证 PostgreSQL 授权仓储、生产数据库会话、多实例故障恢复、证书轮换或正式门户全页与 HTTPS 的联合部署。普通 Core / All 检查不会自动启动 Keycloak；它们和本入口分别记录结果。
+
+## 主题部署与邮件配置
+
+原生验证器将 [assembleai 主题](../deploy/keycloak/themes/assembleai/README.md) 复制到本次 Keycloak 的 `themes/assembleai`，使用部署 realm 的 `loginTheme=assembleai`、`rememberMe=true`、`resetPasswordAllowed=true`。常驻原生 Keycloak 同样需要安装该目录并更新 realm；已导入的 realm 不会因为修改导入 JSON 自动更新。
+
+当前主题覆盖登录、只需密码的重认证、找回密码、设置新密码、通用信息和通用错误页面。表单使用 Keycloak 官方的 action 和字段；其他尚未启用的身份流程继承父主题。部署 realm 不包含邮箱凭据。正式找回邮件必须在 Keycloak 配置企业 SMTP 并验证投递；本机验收的 loopback SMTP 仅用于隔离验证，不能当作生产邮件服务。
+
+`node tools/verify-reference-login.mjs` 另行在随机端口对照原始示例和共享登录资产，覆盖深浅主题、1440/1366/390 宽度以及焦点/勾选状态；测试固定噪声种子并减少动态效果，验证波纹、表单光晕、按钮亮边三个 canvas 的实际像素与原示例一致。正式资源仍保留原随机噪声。该视觉验证不代替本入口的真实身份校验。
+
+## 2026-11-05 原示例登录主题验收
+
+最终命令 `python tools/verify-keycloak.py --startup-timeout 300` 返回 0；`.artifacts/keycloak/run-aea27c5dd5334fa88d2b5df8450a9974/result.json` 的 `passed` 和 `cleanupComplete` 均为 true，本次运行目录已删除。验证了真实主题登录与波纹绘制、错误密码、记住我 Cookie、`prompt=login` 重认证、SMTP 重置邮件、邮件 action token、设置新密码与不一致拒绝、新密码重新登录、非法回调错误页，以及原有 BFF Cookie/CSRF/Origin/撤销重放/SSO 回归。
+
+同轮独立视觉回归在深浅主题与 1440/1366/390 三种宽度全部通过：26 个区域的布局/样式、焦点/勾选、三个 canvas 的实际像素、原生身份表单 POST 和浏览器存储边界。截图位于 `.artifacts/reference-login`。原始参考快照保持不改。
 
 ## 2026-11-03 验收记录
 

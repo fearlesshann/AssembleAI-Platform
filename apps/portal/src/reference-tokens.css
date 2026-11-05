@@ -4,11 +4,12 @@
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
-  src: url('/fonts/InterVariable.woff2') format('woff2');
+  src: url('../public/fonts/InterVariable.woff2') format('woff2');
 }
 
 :root,
-html[data-theme="dark"] {
+html[data-theme="dark"],
+.reference-ui[data-theme="dark"] {
   /* Elevation ladder (Linear dark): level-0 #08090a → panel #0f1011 → level-2 #141516 → level-3 #191a1b
      Shell: chrome/sidebar sink to level-0; main surface lifts to level-2 for clearer contrast. */
   --frame-bg: #08090a;
@@ -141,7 +142,8 @@ html[data-theme="dark"] {
   --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-html[data-theme="light"] {
+html[data-theme="light"],
+.reference-ui[data-theme="light"] {
   /* Chrome / sidebar slightly gray; main surface pure white for contrast */
   --frame-bg: #f7f8f8;
   --plate-bg: #f7f8f8;

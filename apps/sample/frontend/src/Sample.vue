@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { ReferenceButton, ReferenceSelect, ReferencePagination } from '../../../portal/src/components/reference';
+import '../../../portal/src/reference-tokens.css';
+import '../../../portal/src/reference-source.css';
+
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { ApplicationApiError, type ApplicationApi, type PlatformContext } from '@assembleai/app-sdk';
 import StandaloneAccess from './StandaloneAccess.vue';
@@ -57,7 +61,7 @@ onBeforeUnmount(() => { disposed = true; stop(); window.removeEventListener('ass
 </script>
 
 <template>
-  <article class="sample-app" :data-theme="context.theme" data-testid="sample-app">
+  <article class="reference-ui sample-app" :data-theme="context.theme" data-testid="sample-app">
     <header class="sample-header"><span class="sample-icon" aria-hidden="true">S</span><div><h2>应用已就绪</h2><p>这是用于验证平台接入能力的样例，不连接业务数据。</p></div><span class="sample-mode">{{ context.mode === 'embedded' ? '平台内运行' : '独立运行' }}</span></header>
     <dl class="sample-details"><div><dt>应用</dt><dd>{{ context.appId }}</dd></div><div><dt>发布版本</dt><dd>{{ releaseVersion }}</dd></div><div><dt>外观</dt><dd>{{ context.theme === 'dark' ? '暗色' : '浅色' }}</dd></div></dl>
     <StandaloneAccess v-if="context.mode === 'standalone'" @connection="standalone = $event" />
@@ -65,12 +69,12 @@ onBeforeUnmount(() => { disposed = true; stop(); window.removeEventListener('ass
       <h3>受保护调用验证</h3>
       <p v-if="!capability">当前仅验证界面交互；连接平台后才能调用受保护接口。</p>
       <p v-else>调用经过平台网关，校验当前会话、租户和应用权限。流式结果收到完整结束事件后才算完成。</p>
-      <div class="sample-controls"><button :disabled="!capability || busy" @click="verify(false)">JSON 验证</button><button :disabled="!capability || busy" @click="verify(true)">流式验证</button><button v-if="busy" @click="cancel">取消调用</button></div>
+      <div class="sample-controls"><ReferenceButton :disabled="!capability || busy" @click="verify(false)">JSON 验证</ReferenceButton><ReferenceButton :disabled="!capability || busy" @click="verify(true)">流式验证</ReferenceButton><ReferenceButton v-if="busy" @click="cancel">取消调用</ReferenceButton></div>
       <p role="status" data-testid="sample-api-status">{{ status }}</p>
       <ol v-if="deltas.length" class="sample-deltas" aria-label="接收增量"><li v-for="(delta, index) in deltas" :key="index">{{ delta }}</li></ol>
       <pre v-if="result" class="sample-result" data-testid="sample-api-result">{{ result }}</pre>
     </section>
-    <section class="sample-interaction"><h3>试一下交互</h3><p>退出应用再重新进入，计数应从零开始。</p><div class="sample-controls"><button @click="count++">增加计数</button><output aria-label="当前计数" data-testid="sample-count">{{ count }}</output></div></section>
+    <section class="sample-interaction"><h3>试一下交互</h3><p>退出应用再重新进入，计数应从零开始。</p><div class="sample-controls"><ReferenceButton @click="count++">增加计数</ReferenceButton><output aria-label="当前计数" data-testid="sample-count">{{ count }}</output></div></section>
     <footer>生命周期事件：<output data-testid="sample-signals">{{ signals }}</output><span>仅用于接入验证</span></footer>
   </article>
 </template>

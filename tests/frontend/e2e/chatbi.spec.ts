@@ -1,3 +1,4 @@
+import { chooseReferenceOption, expectReferenceValue, toggleReferenceTheme } from '../reference-controls-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 
 // UI protocol fixtures only. Root's marked PostgreSQL harness verifies the real chain.
@@ -30,7 +31,7 @@ async function embedded(page: Page) {
     target.chatbiFixture = state;
     await target.AssembleAI_chatbi.mount({ context: { appId: 'chatbi', releaseVersion: '0.1.0', theme: 'light', mode: 'embedded', tenantId: 'tenant-a', identity: { iss: 'fixture', sub: 'alice' } }, api: makeApi() });
   }, { catalog, metadata, row });
-  await expect(page.getByTestId('chatbi-dataset')).toHaveValue('production');
+  await expectReferenceValue(page, '分析数据集', 'production');
 }
 async function start(page: Page) {
   await page.getByTestId('chatbi-question').fill('按产线汇总产量');
@@ -57,7 +58,7 @@ test('T11: result commits only at complete, preserves decimal text and escapes q
   await expect(page.getByTestId('chatbi-app')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByTestId('chatbi-result')).toBeVisible();
   await page.screenshot({ path: '.artifacts/chatbi-result-dark.png', fullPage: true });
-  await page.getByTestId('chatbi-dataset').selectOption('quality');
+  await chooseReferenceOption(page, '分析数据集', 'quality');
   await expect(page.getByTestId('chatbi-result')).toHaveCount(0);
 });
 
@@ -121,8 +122,8 @@ test('T11: standalone inspects session but requires explicit connection before c
   await expect(page.getByRole('button', { name: '连接平台', exact: true })).toBeEnabled();
   expect(runs).toBe(0); expect(asks).toBe(0);
   await page.getByRole('button', { name: '连接平台', exact: true }).click();
-  await expect(page.getByTestId('chatbi-dataset')).toHaveValue('production');
+  await expectReferenceValue(page, '分析数据集', 'production');
   expect(runs).toBe(1); expect(asks).toBe(0);
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(page);
   await expect(page.getByTestId('chatbi-app')).toHaveAttribute('data-theme', 'dark');
 });

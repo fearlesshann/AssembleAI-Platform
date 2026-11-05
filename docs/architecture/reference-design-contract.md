@@ -1,14 +1,33 @@
 # 用户示例设计合同
 
-2026-11-05用户明确：正式前端必须与示例抽象的底层设计风格严格一致，业务内容按实际功能组织。此合同将要求落实到可测的样式；来源是仓库保留的示例运行时HTML/CSS，不从“Linear风格”一词或预览宣传图推断。
+2026-11-05用户再次明确：任何组件先查示例，已有实现必须复用其结构、样式和交互，业务内容按实际功能组织。此前仅对齐token、保留另一套登录入口 / 表格 / 控件的实现不满足要求；此前“严格一致”验收结论作废。来源是仓库保留的示例运行时HTML / CSS / JS，不从“Linear风格”一词推断。
 
 ## 基准与来源
 
 - 原始快照：[references/ui-v1](../../references/ui-v1/README.md)，来源提交`f99202e32269ffcb411b36077ed329ea3b9d6f7e`；保持原快照不改。
 - 样式：[app.css](../../references/ui-v1/app.css)。`:root`/dark在20行起、light在3178行起；外壳318–660、列表1040–1290、表单1490–1538、实际管理数据表2787–3120。
 - 结构：[index.html](../../references/ui-v1/index.html)的sidebar/surface、应用中心和管理中心；正式参考路由`/reference-ui/`保留其真实DOM与脚本。
-- `preview-shots/login-shot-*.png`是示例登录展示素材，不等同于当前`app.css`真实布局，不能用其较粗字号或密度覆盖运行时规则。
-- 参考页面的模拟认证、业务假数据和按钮反馈不进入正式流程；正式OIDC、授权、路由、持久化、失败恢复仍执行SPEC。此合同对齐视觉语言，不迁移模拟业务。
+- `preview-shots/login-shot-*.png`是原登录左侧三张静态叠放展示图，必须保留在完整双栏登录页；它们不是管理表格运行时的替代样式来源。
+- 参考页面的模拟认证、业务假数据不进入正式流程；正式OIDC、授权、路由、持久化、失败恢复仍执行SPEC。复用控件的实际交互，包括选择、滚轮、分页、抽屉和确认。
+
+## 组件来源与接入
+
+| 用户可见部分 | 必须复用的原实现 | 接入点 |
+| --- | --- | --- |
+| 登录整页 | index.html的login-screen双栏、48px字段、remember / forgot、Specular按钮、三张截图、波纹与背景效果 | tools/sync-reference-login.mjs生成Keycloak登录主题和隔离预览模板；原生表单POST到身份服务，不在Portal持有密码 |
+| 门户外壳 / 用户菜单 | page / frame / sidebar / surface / topbar / user-menu与折叠结构 | Portal.vue；tools/sync-reference-shell.mjs保留源声明，仅加reference-ui作用域 |
+| 应用列表 | list-toolbar / list-search / filter-row / app-list / app-row / props | Portal.vue接授权目录、筛选和详情 |
+| 管理表格 | data-grid / toolbar / body / table / foot / pager完整结构 | Registry / Identity / Resource / Audit Workspace；只替换业务列与真实分页数据 |
+| 输入 / 按钮 | ui-input / subwindow-field / pill-btn / icon-btn / link-btn / switch | reference组件及原类名；移除原先覆盖规则 |
+| 自定义下拉 | ui-select及listbox选项DOM，app.js原打开、键盘和选中逻辑 | ReferenceSelect与reference-runtime.js；不使用原生select模拟 |
+| 日期时间 | ui-datetime / dtp-pop；日期 / 月 / 年面板及小时分钟3D滚轮 | ReferenceDateTime；真实筛选值保持UTC接口边界 |
+| 分页 | data-grid__pager及每页条数原下拉 | ReferencePagination；接真实有界集合或服务端游标，不能假翻页 |
+| 抽屉 / 确认 | overlay / drawer.subwindow / subwindow-foot与dialog | ReferenceDrawer / ReferenceConfirm；native dialog仅提供焦点限制，视觉仍原结构 |
+| AI用例控件 | 同上表格 / 输入 / 下拉 / 按钮及composer | ChatBI、知识库共享组件；业务流程与API保持原合同 |
+
+原快照不可修改。生成文件应可从源码重复生成；适配仅限Vue生命周期、作用域、语义标签、真实数据和必要响应式布局，不能改源组件的圆角、尺寸、颜色、字体或展开层外观。新增组件须先检索原HTML / CSS / JS并记录无对应实现的理由。
+
+登录主题位于`deploy/keycloak/themes/assembleai`。Keycloak实际验证账号密码；其他OIDC提供方需在其身份页面应用同一主题，不通过把密码交给Portal解决视觉问题。门户401和退出后导航到`/bff/login?...&prompt=login`，请求身份服务重新验证；退出依然是撤销平台本地会话，不宣称注销其他系统的SSO。隔离本地预览的测试身份服务也使用同一登录模板，测试账号只属于该环境。
 
 ## 字体与层次
 
@@ -77,16 +96,16 @@
 
 选中通过背景差异表达，无侧边品牌色条。hover由对应nav/control/table token表达。焦点保持可辨识，错误/停用/空态/加载使用同一字体与层次；不得只校准默认截图。
 
-示例motion-instant100ms、fast160ms，`ease-out-soft:cubic-bezier(.2,.8,.2,1)`。正式界面保留SPEC的100–160ms颜色/透明度约束和prefers-reduced-motion，不复制示例缩放、220ms页面过场或模拟登录动画。这些是业务可达性与已确认行为约束，不能作为另起视觉体系的理由。
+示例motion-instant100ms、fast160ms、正常220ms，`ease-out-soft:cubic-bezier(.2,.8,.2,1)`；复用对应组件的缩放、弹层和滚轮交互，登录保留原背景效果，遵循prefers-reduced-motion。不能以旧的100–160ms约束为由删掉用户明确要求的既有交互；不另加装饰。
 
-## 本轮校准前的差异
+## 历史偏差与本次纠正
 
 2026-11-05 / `c2cc530`正式门户：侧栏220px、导航约40px、topbar64px、主区35px/32px内边距、页面标题26px/650、品牌19px/650、系统字体。主面板缺少示例8px外缩进/边框/radius；暗色主背景误用`#08090a`而不是surface `#141516`，浅色侧栏与文本也采用另一组token。应用列表为多行大留白行而不是示例40px单行，按钮/表单圆角及高度未使用示例规格。这些都属于风格漂移，不能以“同为Linear风格”视作一致。
 
-校准要求：共享示例token与字体；统一外壳、导航、工具区、应用列表、输入、按钮、管理表格；每个新页面按语义组件复用。身份、应用、模型、数据源和统一审计的业务信息不必相同，但外观基础不可各自另定。
+随后`65c926c`虽通过部分token / 尺寸对照，仍遗漏完整登录与原组件交互，也保留了另一套表格结构。用户再次指出的这些问题按SPEC B100纠正；该轮结果不能当作完整复用验收。现行要求是直接复用已有结构、CSS与交互，覆盖整页和展开状态；身份、应用、模型、数据源和审计只替换真实业务内容。
 
 ## 验收
 
-`tests/frontend/e2e/reference-design.spec.ts`将运行保留示例与正式页面，对比实际computed styles和关键矩形尺寸；对照light/dark、选中/hover和必要焦点。测试样例使用明确协议夹具，不用模拟认证替代正式BFF验证。正式页面字体请求应来自本地，参考远程字体在测试内映射至同版本本地文件，保证离线可重复。
+`tests/frontend/e2e/reference-design.spec.ts`与`reference-controls.spec.ts`运行原示例和正式页面，对照完整组件实际computed styles、几何及交互；覆盖light / dark、选中 / hover / 焦点、展开下拉、日期时间面板、抽屉与确认框，保存双方截图。`reference-lifecycle.spec.ts`验证真实qiankun卸载重挂与独立发布字体。`tools/verify-reference-login.mjs`对照原登录整页在两主题与1440 / 1366 / 390视口的26个区域、焦点、复选框及真实表单POST；固定测试噪声种子后，三个canvas必须已绘制且像素逐字节一致。Keycloak原生验收独立验证实际身份服务。协议夹具不代替Keycloak。正式字体本地自托管或内联至独立发布物，参考远程字体仅在测试内映射同版本本地文件。
 
 最终截图仍需目视检查层次、密度与窄屏；CSS变量数值相同不能代替真实布局验收。旧[复用评估](ui-reuse-audit.md)记载的是2026-11-02按当时SPEC重新映射的决定；本次用户更严格的要求以此合同及更新后的SPEC为准。

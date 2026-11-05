@@ -1,3 +1,4 @@
+import { chooseReferenceOption, closeReferenceDrawer, expectReferenceValue, fulfillFixtureLogin, logoutFromUserMenu, toggleReferenceTheme } from '../reference-controls-helpers.mjs';
 import { expect, test, type Page } from '@playwright/test';
 const tenant = '11111111-1111-4111-8111-111111111111';
 const user = '33333333-3333-4333-8333-333333333333';
@@ -16,6 +17,7 @@ async function fixture(page: Page, administrator = true) {
       audit: { items: [] as any[], hasMore: false } } };
   await page.route('**/bff/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/bff/login') return fulfillFixtureLogin(route);
     if (path === '/bff/session') return route.fulfill({ status: state.signedIn ? 200 : 401, json: { iss: 'https://identity.fixture', sub: 'admin', name: '管理用户' } });
     if (path === '/bff/csrf') return route.fulfill({ json: { headerName: 'X-CSRF-TOKEN', requestToken: 'fresh' } });
     if (path === '/bff/logout') { state.signedIn = false; return route.fulfill({ status: 204 }); }
@@ -52,8 +54,9 @@ test('T13: global administrator manages users and tenants without a membership s
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('heading', { name: '更新后的管理用户', exact: true })).toBeVisible();
   expect(state.writes[0].body.expectedRevision).toBe(1);
+  await closeReferenceDrawer(page);
   await page.getByRole('link', { name: '租户管理', exact: true }).click();
-  await page.getByRole('link', { name: '华东制造 已启用', exact: true }).click();
+  await page.getByRole('link', { name: '华东制造', exact: true }).click();
   await page.getByRole('link', { name: '管理租户成员', exact: true }).click();
   await expect(page.getByRole('heading', { name: '租户成员', exact: true })).toBeVisible();
   expect(state.selected).toBeNull();
@@ -69,26 +72,28 @@ test('T13: tenant administrator edits role resource scopes and member assignment
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
   await expect(page.getByRole('heading', { name: '本厂生产查看', exact: true })).toBeVisible();
   await expect(page.getByText('角色 · 保存 · 成功', { exact: true })).toBeVisible();
-  await expect(page.locator('.identity-audit-target')).toContainText(roleId);
-  await expect(page.locator('.identity-audit-target')).toContainText('本厂生产查看');
+  await expect(page.getByRole('table', { name: '最近身份操作', exact: true }).locator('td').filter({ hasText: '本厂生产查看' })).toHaveAttribute('title', roleId);
+  await expect(page.getByRole('table', { name: '最近身份操作', exact: true }).locator('td').filter({ hasText: '本厂生产查看' })).toContainText('本厂生产查看');
   await page.screenshot({ path: '.artifacts/t13-identity-ui/role-light.png', fullPage: true });
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(page);
   await page.screenshot({ path: '.artifacts/t13-identity-ui/role-dark.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await closeReferenceDrawer(page);
   const navigation = page.getByRole('navigation', { name: '主导航' });
   expect((await navigation.boundingBox())!.height).toBeLessThan(80);
   expect(await navigation.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
+  await page.getByRole('link', { name: '应用中心', exact: true }).focus();
   await page.getByRole('link', { name: '角色权限', exact: true }).focus();
   const focused = await page.getByRole('link', { name: '角色权限', exact: true }).boundingBox();
   expect(focused!.x).toBeGreaterThanOrEqual(0);
-  expect(focused!.x + focused!.width).toBeLessThanOrEqual(390);
+  await expect.poll(async () => { const box = await page.getByRole('link', { name: '角色权限', exact: true }).boundingBox(); return box!.x + box!.width; }).toBeLessThanOrEqual(390);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: '.artifacts/t13-identity-ui/role-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1366, height: 900 });
   expect(state.writes[0].body.grants[0].tenantWide).toBe(false);
   expect(state.writes[0].body.grants[0].organizationIds).toHaveLength(1);
   await page.getByRole('link', { name: '租户成员', exact: true }).click();
-  await page.getByRole('link', { name: '管理用户 已启用', exact: true }).click();
+  await page.getByRole('link', { name: '管理用户', exact: true }).click();
   await page.getByRole('button', { name: '编辑资料', exact: true }).click();
   await expect(page.getByLabel('租户管理员', { exact: true })).toBeDisabled();
 });
@@ -102,7 +107,10 @@ test('T13: conflict preserves edits, blocks repeated saves and confirmed navigat
   await expect(page.getByLabel('显示名称', { exact: true })).toHaveValue('保留我的输入');
   await expect(page.getByRole('button', { name: '保存变更', exact: true })).toBeDisabled();
   expect(state.writes).toHaveLength(1);
-  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '取消编辑', exact: true }).click();
+  await page.getByRole('dialog', { name: '放弃修改？', exact: true }).getByRole('button', { name: '放弃修改', exact: true }).click();
+  await closeReferenceDrawer(page);
+  await closeReferenceDrawer(page);
   await page.getByRole('link', { name: '租户管理', exact: true }).click();
   await expect(page.getByLabel('显示名称', { exact: true })).toHaveCount(0);
 });
@@ -116,9 +124,9 @@ test('T13: organization create/readback, responsive themes and logout clear iden
   expect(state.writes[0].body.expectedRevision).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-  await page.getByRole('button', { name: '切换暗色', exact: true }).click();
+  await toggleReferenceTheme(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await logoutFromUserMenu(page);
   await expect(page.getByText('二号工厂', { exact: true })).toHaveCount(0);
 });
 test('T13: a new grant starts without scope and requires an explicit organization or tenant choice', async ({ page }) => {
@@ -157,7 +165,7 @@ test('T13: successful write with failed readback is never presented as safe to r
 test('T13: empty, unavailable and permission-denied states can recover without stale records', async ({ page }) => {
   const state = await fixture(page, false); state.detail.organizations = [];
   await page.goto('/manage/organizations');
-  await expect(page.getByText('暂无组织。使用新增操作建立第一条记录。')).toBeVisible();
+  await expect(page.getByText('暂无组织', { exact: true })).toBeVisible();
   let status = 503;
   await page.route(`**/identity-management/tenants/${tenant}`, route => status === 200 ? route.fulfill({ json: state.detail }) : route.fulfill({ status, json: {} }));
   await page.getByRole('button', { name: '刷新管理数据', exact: true }).click();
@@ -176,7 +184,7 @@ test('T13: tenant switch clears old identity records and ignores a late response
   state.workspace.tenants.push({ tenantId: second, name: '华南制造', enabled: true, revision: 1 });
   await page.route(`**/identity-management/tenants/${second}`, route => route.fulfill({ json: { ...state.detail, tenant: state.workspace.tenants[1], members: [], organizations: [], roles: [] } }));
   await page.goto(`/manage/tenants/${tenant}/organizations`);
-  await expect(page.getByRole('link', { name: '一号工厂 已启用', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: '一号工厂', exact: true })).toBeVisible();
   let entered!: () => void; let release!: () => void;
   const pending = new Promise<void>(resolve => { entered = resolve; });
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -185,11 +193,11 @@ test('T13: tenant switch clears old identity records and ignores a late response
     try { await route.fulfill({ json: state.detail }); } catch { /* The prior tenant request has been cancelled. */ }
   });
   await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await pending;
-  await page.getByRole('combobox', { name: '当前租户', exact: true }).selectOption(second);
-  await expect(page.getByText('暂无组织。使用新增操作建立第一条记录。')).toBeVisible();
+  await chooseReferenceOption(page, '当前租户', second);
+  await expect(page.getByText('暂无组织', { exact: true })).toBeVisible();
   release();
-  await expect(page.getByRole('link', { name: '一号工厂 已启用', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('combobox', { name: '当前租户', exact: true })).toHaveValue(second);
+  await expect(page.getByRole('link', { name: '一号工厂', exact: true })).toHaveCount(0);
+  await expectReferenceValue(page, '当前租户', second);
 });
 test('T13: an assigned disabled organization can be removed without silently widening scope', async ({ page }) => {
   const state = await fixture(page, false);
@@ -214,8 +222,10 @@ test('T13: capacity includes disabled records and blocks creation while existing
   await page.goto(`/manage/organizations/${state.detail.organizations[0].organizationId}`);
   await expect(page.getByRole('button', { name: '新增组织', exact: true })).toBeDisabled();
   await expect(page.getByText('已达到当前管理容量（500条），现有记录仍可编辑；扩容需调整部署方案。')).toBeVisible();
+  await closeReferenceDrawer(page);
   await page.getByLabel('搜索组织', { exact: true }).fill('工厂 1');
   await expect(page.getByRole('button', { name: '新增组织', exact: true })).toBeDisabled();
+  await page.getByRole('link', { name: '工厂 1', exact: true }).click();
   await page.getByRole('button', { name: '编辑资料', exact: true }).click();
   await page.getByLabel('组织名称', { exact: true }).fill('现有工厂更名');
   await page.getByRole('button', { name: '保存变更', exact: true }).click();
@@ -233,10 +243,10 @@ test('T13: management breadcrumb follows the explicit target without changing th
   await page.goto(`/manage/tenants/${second}/organizations`);
   await expect(page.locator('.portal-breadcrumb')).toContainText('管理租户：华南制造');
   await expect(page.locator('.portal-breadcrumb')).not.toContainText('华东制造');
-  await expect(page.getByRole('combobox', { name: '当前租户', exact: true })).toHaveValue(tenant);
+  await expectReferenceValue(page, '当前租户', tenant);
   await page.getByRole('link', { name: '用户管理', exact: true }).click();
   await expect(page.locator('.portal-breadcrumb')).toContainText('平台管理');
-  await expect(page.getByRole('combobox', { name: '当前租户', exact: true })).toHaveValue(tenant);
+  await expectReferenceValue(page, '当前租户', tenant);
 });
 test('T13: an explicit aggregate-capacity rejection preserves editable input and only retries after a manual save', async ({ page }) => {
   const state = await fixture(page, false); state.status = 409; state.errorCode = 'identity_capacity_reached';
@@ -257,4 +267,17 @@ test('T13: an explicit aggregate-capacity rejection preserves editable input and
   await expect(page.getByRole('heading', { name: '保留完整角色输入', exact: true })).toBeVisible();
   expect(state.writes).toHaveLength(2);
   expect(state.writes[1].body).toMatchObject({ expectedRevision: 1, grants: [] });
+});
+
+
+test('V37: a short desktop viewport keeps the final authorized navigation reachable', async ({ page }) => {
+  await fixture(page, false); await page.setViewportSize({ width: 1366, height: 260 });
+  await page.goto('/manage/organizations'); await expect(page.getByText('一号工厂', { exact: true })).toBeVisible();
+  const sidebar = page.locator('.portal-sidebar .sidebar-scroll');
+  expect(await sidebar.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  const roles = page.getByRole('link', { name: '角色权限', exact: true });
+  await roles.focus(); await roles.click();
+  await expect(page).toHaveURL(new RegExp(`/manage/tenants/${tenant}/roles$`));
+  await expect(page.getByRole('link', { name: '生产查看', exact: true })).toBeVisible();
+  const rect = await roles.boundingBox(); expect(rect!.y).toBeGreaterThanOrEqual(0); expect(rect!.y + rect!.height).toBeLessThanOrEqual(260);
 });
