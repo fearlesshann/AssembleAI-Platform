@@ -26,6 +26,52 @@ SOFTWARE.
  * Source license: references/ui-v1/LICENSE. */
 let installed = false;
 const runtimeKey = Symbol.for('assembleai.referenceControls');
+
+// Keep the source DOM/paint/animation, but render the panel in the browser's
+// top layer. A fixed child inside a transformed/animated ancestor otherwise
+// interprets viewport coordinates in that ancestor's coordinate system.
+function showFloatingPanel(root, panel, trigger, position, close) {
+  root._referenceStopPosition?.();
+  panel.setAttribute('popover', 'manual');
+  Object.assign(panel.style, { margin: '0', right: 'auto', bottom: 'auto', color: 'inherit' });
+  panel.hidden = false;
+  if (!panel.matches(':popover-open')) panel.showPopover();
+  const doc = root.ownerDocument, view = doc.defaultView;
+  let frame = 0, stopped = false, previous = '';
+  function update() {
+    if (stopped) return;
+    if (!root.isConnected || !trigger.getClientRects().length) { close(root); return; }
+    const rect = trigger.getBoundingClientRect();
+    const geometry = [rect.left, rect.top, rect.width, rect.height, panel.offsetWidth, panel.offsetHeight, view.innerWidth, view.innerHeight].join(',');
+    if (geometry === previous) return;
+    previous = geometry;
+    let left = 0, top = 0, right = view.innerWidth, bottom = view.innerHeight;
+    for (let parent = trigger.parentElement; parent; parent = parent.parentElement) {
+      const style = view.getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+      if (/auto|scroll|hidden|clip/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
+      if (/auto|scroll|hidden|clip/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+    }
+    if (rect.right <= left || rect.left >= right || rect.bottom <= top || rect.top >= bottom) { close(root); return; }
+    position();
+  }
+  function tick() { update(); if (!stopped) frame = view.requestAnimationFrame(tick); }
+  const events = [[doc, 'scroll', true], [view, 'resize', false]];
+  if (view.visualViewport) events.push([view.visualViewport, 'resize', false], [view.visualViewport, 'scroll', false]);
+  for (const [target, name, capture] of events) EventTarget.prototype.addEventListener.call(target, name, update, { capture, passive: true });
+  root._referenceStopPosition = () => {
+    stopped = true; view.cancelAnimationFrame(frame);
+    for (const [target, name, capture] of events) EventTarget.prototype.removeEventListener.call(target, name, update, capture);
+    root._referenceStopPosition = null;
+  };
+  // RAF also tracks transforms, content expansion and sidebar width changes,
+  // which do not necessarily dispatch scroll or resize events.
+  update(); if (!stopped) frame = view.requestAnimationFrame(tick);
+  return !stopped;
+}
+function hideFloatingPanel(panel) {
+  if (panel.matches(':popover-open')) panel.hidePopover();
+  panel.hidden = true;
+}
 export function ensureReferenceControls() {
   if (installed) return;
   // qiankun apps bundle their own module copy but share one DOM. Register the
@@ -49,8 +95,7 @@ export function ensureReferenceControls() {
       if (!menu || !trigger) return;
       var rect = trigger.getBoundingClientRect();
       var width = Math.min(rect.width, window.innerWidth - 16);
-      // Preserve the original 4px gap and menu width. Fixed placement keeps the
-      // same menu visible inside scrolling tables and modal drawer top layers.
+      // Preserve the original 4px gap and menu width in viewport coordinates.
       Object.assign(menu.style, { position: 'fixed', right: 'auto', bottom: 'auto', minWidth: '0', width: width + 'px',
         left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px' });
       var above = root.getAttribute('data-placement') === 'top';
@@ -99,6 +144,7 @@ export function ensureReferenceControls() {
 
     function close(root) {
       if (!root) return;
+      root._referenceStopPosition?.();
       var menu = root.querySelector(".ui-select__menu");
       var trigger = root.querySelector(".ui-select__trigger");
       root.classList.remove("is-open");
@@ -107,11 +153,11 @@ export function ensureReferenceControls() {
       if (menu) {
         if (motionOn()) {
           var t = setTimeout(function () {
-            if (!root.classList.contains("is-open")) menu.hidden = true;
+            if (!root.classList.contains("is-open")) hideFloatingPanel(menu);
           }, 160);
           root._uiCloseTimer = t;
         } else {
-          menu.hidden = true;
+          hideFloatingPanel(menu);
         }
       }
       if (openRoot === root) openRoot = null;
@@ -129,16 +175,13 @@ export function ensureReferenceControls() {
       var menu = root.querySelector(".ui-select__menu");
       var trigger = root.querySelector(".ui-select__trigger");
       if (menu) {
-        menu.hidden = false;
-        positionMenu(root);
+        if (!showFloatingPanel(root, menu, trigger, () => positionMenu(root), close)) return;
         void menu.offsetWidth;
       }
       root.classList.add("is-open");
       if (trigger) trigger.setAttribute("aria-expanded", "true");
       openRoot = root;
     }
-    EventTarget.prototype.addEventListener.call(document.defaultView, 'resize', function () { if (openRoot) positionMenu(openRoot); });
-    document.addEventListener('scroll', function () { if (openRoot) positionMenu(openRoot); }, true);
 
     function toggle(root) {
       if (root.classList.contains("is-open")) close(root);
@@ -1086,6 +1129,7 @@ export function ensureReferenceControls() {
 
     function closeDt(root) {
       if (!root) return;
+      root._referenceStopPosition?.();
       var panel = root.querySelector(".ui-datetime__panel");
       var trigger = root.querySelector(".ui-datetime__trigger");
       var state = getDtState(root);
@@ -1097,11 +1141,11 @@ export function ensureReferenceControls() {
       if (panel) {
         if (motionOn()) {
           var t = setTimeout(function () {
-            if (!root.classList.contains("is-open")) panel.hidden = true;
+            if (!root.classList.contains("is-open")) hideFloatingPanel(panel);
           }, 160);
           root._uiDtCloseTimer = t;
         } else {
-          panel.hidden = true;
+          hideFloatingPanel(panel);
         }
       }
       if (openDt === root) openDt = null;
@@ -1121,8 +1165,8 @@ export function ensureReferenceControls() {
       var panel = ensureDtPanel(root);
       var trigger = root.querySelector(".ui-datetime__trigger");
       if (panel) {
-        panel.hidden = false;
         syncDtPanel(root);
+        if (!showFloatingPanel(root, panel, trigger, () => positionPanel(panel, trigger), closeDt)) return;
         void panel.offsetWidth;
         positionPanel(panel, trigger);
       }
@@ -1270,6 +1314,7 @@ export function ensureReferenceControls() {
 
     function closeDr(root) {
       if (!root) return;
+      root._referenceStopPosition?.();
       var panel = root.querySelector(".ui-daterange__panel");
       var trigger = root.querySelector(".ui-daterange__trigger");
       var state = getDrState(root);
@@ -1280,11 +1325,11 @@ export function ensureReferenceControls() {
       if (panel) {
         if (motionOn()) {
           var t = setTimeout(function () {
-            if (!root.classList.contains("is-open")) panel.hidden = true;
+            if (!root.classList.contains("is-open")) hideFloatingPanel(panel);
           }, 160);
           root._uiDrCloseTimer = t;
         } else {
-          panel.hidden = true;
+          hideFloatingPanel(panel);
         }
       }
       if (openDr === root) openDr = null;
@@ -1304,8 +1349,8 @@ export function ensureReferenceControls() {
       var panel = ensureDrPanel(root);
       var trigger = root.querySelector(".ui-daterange__trigger");
       if (panel) {
-        panel.hidden = false;
         syncDrPanel(root);
+        if (!showFloatingPanel(root, panel, trigger, () => positionPanel(panel, trigger), closeDr)) return;
         void panel.offsetWidth;
         positionPanel(panel, trigger);
       }
@@ -1533,19 +1578,6 @@ export function ensureReferenceControls() {
       }
     }, true);
 
-    EventTarget.prototype.addEventListener.call(document.defaultView, "resize", function () {
-      if (openDt) {
-        var p = openDt.querySelector(".ui-datetime__panel");
-        var t = openDt.querySelector(".ui-datetime__trigger");
-        if (p && t) positionPanel(p, t);
-      }
-      if (openDr) {
-        var p2 = openDr.querySelector(".ui-daterange__panel");
-        var t2 = openDr.querySelector(".ui-daterange__trigger");
-        if (p2 && t2) positionPanel(p2, t2);
-      }
-    });
-
     window.__assembleaiReferenceDateTime = {
       get: getDt,
       set: function (root, value, silent) { setDtValue(root, value, !!silent); },
@@ -1576,9 +1608,12 @@ export function closeReferenceControl(root) {
   if (!installed || !root) return;
   if (root.matches('[data-ui-select]')) window.__assembleaiReferenceSelect.close(root);
   if (root.matches('[data-ui-datetime]')) window.__assembleaiReferenceDateTime.close(root);
+  if (root.matches('[data-ui-daterange]')) window.__assembleaiReferenceDateRange.close(root);
 }
 export function releaseReferenceControl(root) {
   closeReferenceControl(root);
+  root._referenceStopPosition?.();
   for (const key of ['_uiCloseTimer', '_uiDtCloseTimer', '_uiDrCloseTimer']) clearTimeout(root[key]);
+  for (const panel of root.querySelectorAll('.ui-select__menu,.ui-datetime__panel,.ui-daterange__panel')) hideFloatingPanel(panel);
   for (const wheel of root.querySelectorAll('[data-wheel-scroll]')) wheel._referenceDispose?.();
 }

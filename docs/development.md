@@ -436,3 +436,15 @@ JSON导出最多1000条，保留truncated与exportedAt；记录仍逐条按查�
 - 4180最终构建真实预览通过，运行`run-9d094a94753e4f5f89ab691e3dbd8fb5`。原登录、显式隔离管理员初始化、10个平台页面通过；随后从真实目录创建“生产分析员 · 交互示例”，授予应用 / 模型入口及Factory A数据集 / 数据源 / 查询工具5项精确授权，检查后保存并回读。OS减少动效条件下仍按默认full实测内容透明度连续帧、鼠标惯性滚轮与固定摘要标题，双主题 / 390px检查，无业务API拦截或浏览器运行错误。日志`.artifacts/role-preview-{bootstrap,verify}.log`，截图`.artifacts/role-workspace-preview/`。
 
 预览地址`http://127.0.0.1:4180/manage/roles`，测试账号`demo` / `AssembleAI-2026!`；选择“ChatBI 制造业测试”后进入示例角色。隔离展示实例保留至2026-11-05约22:24（上海），测试身份与制造业数据 / 固定查询规划，不调用真实模型；该示例角色未自动绑定成员。T13仍进行中。
+
+## 2026-11-05 下拉与日期时间面板定位修复
+
+用户反馈两类弹层漂移。浏览器先复现：弹层使用视口坐标但仍受祖先transform建立的fixed包含块影响，产生216px偏移；日期面板缺少外层滚动跟踪，滚动65px后留在原处。失败证据保留在`.artifacts/reference-position-red.log`，没有通过关闭动效规避问题。
+
+共享控件运行时改用manual popover顶层定位，保留原DOM归属、继承样式、事件委托、原生抽屉焦点边界及原进出动效。打开期间跟踪滚动、布局、祖先动画 / 缩放与视口，几何未变时跳过重复定位；触发控件离开可见区域时关闭，关闭 / 卸载释放定位RAF和监听。下拉、日期时间与日期范围共用同一机制，保留原4px间距、翻转与8px视口避让。补齐浏览器popover默认文字色的继承修正，未改原始示例快照。现代浏览器Popover API要求与标准依据记入控件README；SPEC V37 / B122–B124记录根因、颜色回归及窄屏验收公式纠正。
+
+验证结果：
+
+- 新增6项定位浏览器回归全部通过，覆盖实际Vue组件、祖先位移 / 缩放 / 滚动、原生抽屉入场连续帧、弹层点击与日期滚轮键盘、Escape、窄屏、离屏关闭和卸载清理；日志`.artifacts/reference-position-green.log`。完整前端**108项通过，exit 0**，`.artifacts/reference-position-frontend.log`；已有原示例外观、动效、角色工作区及微应用卸载重挂回归均通过。
+- **70项Node通过**，Vue类型检查及portal / sample / ChatBI / knowledge四个构建通过；日志`.artifacts/reference-position-node.log`、`reference-position-types.log`和`reference-position-build-*.log`。保留既有Vite体积提示。本轮未改后端、身份或数据库合同，未重复无关模型和后端验收。
+- 现有4180展示实例就地更新门户静态文件，保留数据库、角色、会话与旧版本哈希资源，没有重置演示数据或覆盖固定版本ChatBI发布物。真实登录后验证角色范围下拉随配置区域滚动、审计日期面板在桌面 / 390px视口及页面滚动中的定位，遵循原示例空间不足时的翻转 / 贴边规则；真实BFF / API，无业务拦截或浏览器错误。日志`.artifacts/reference-position-preview.log`，最终截图`.artifacts/reference-position-preview/role-select.png`、`audit-date.png`、`audit-date-mobile.png`，已检查。实例仍按原运行期限清理。
